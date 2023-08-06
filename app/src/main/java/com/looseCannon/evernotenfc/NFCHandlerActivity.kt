@@ -32,7 +32,6 @@ class NFCHandlerActivity : Activity() {
                 val uniqueId = intent?.getStringExtra("uniqueId")
                 Log.d("onCreate", "uniqueId = $uniqueId")
 
-
                 nfcAdapter = NfcAdapter.getDefaultAdapter(this)
                 if (nfcAdapter == null) {
                         Toast.makeText(this, "NFC is not available", Toast.LENGTH_LONG).show()
@@ -44,10 +43,7 @@ class NFCHandlerActivity : Activity() {
                         addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         putExtra("uniqueId", uniqueId)
                 }
-
-
                 pendingIntent = PendingIntent.getActivity(this, 0, intentForPendingIntent, FLAG_MUTABLE)
-
         }
 
         private fun isNFCIntent(intent: Intent?): Boolean {
@@ -112,7 +108,6 @@ class NFCHandlerActivity : Activity() {
                 return
         }
 
-
         private fun writeLinkToTag(link: String, intent: Intent?): Boolean {
                 Log.d("writeLinkToTag", "writeLinkToTag called")
                 val tag: Tag? = intent?.extras?.getParcelable(NfcAdapter.EXTRA_TAG)
@@ -122,7 +117,6 @@ class NFCHandlerActivity : Activity() {
                 val type = "uuid8_link" // Replace with your specific type name.
                 val ndefRecord =  NdefRecord.createExternal(domain, type, payload)
                 val ndefMessage = NdefMessage(arrayOf(ndefRecord))
-
 
                 try {
                         val ndef = Ndef.get(tag)
