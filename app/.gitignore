@@ -1,0 +1,8 @@
+/build
+.idea/
+gradle/
+gradlew*
+settings.gradle.kts
+src/test/
+/src/main/res/xml/data_extraction_rules.xml
+/src/main/res/xml/nfc_tech_list.xml
