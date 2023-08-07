@@ -28,6 +28,7 @@ class MainActivity : Activity() {
         val nfcIntent = Intent(this, NFCHandlerActivity::class.java)
         nfcIntent.putExtra("uniqueId", uniqueId)
         startActivity(nfcIntent)
+        finish()
     }
 
     fun transformLink(link: String): String? {

@@ -105,7 +105,6 @@ class NFCHandlerActivity : Activity() {
                         Toast.makeText(this, "No link received", Toast.LENGTH_LONG).show()
                 }
                 finish()
-                return
         }
 
         private fun writeLinkToTag(link: String, intent: Intent?): Boolean {
