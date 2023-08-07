@@ -8,7 +8,6 @@ import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.widget.Toast
-import java.net.URL
 
 class LaunchEvernoteNFCLinkActivity : Activity() {
 
