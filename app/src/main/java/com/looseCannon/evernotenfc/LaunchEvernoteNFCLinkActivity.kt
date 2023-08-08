@@ -7,6 +7,7 @@ import android.net.Uri
 import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 
 class LaunchEvernoteNFCLinkActivity : Activity() {
@@ -19,7 +20,7 @@ class LaunchEvernoteNFCLinkActivity : Activity() {
                 val messages: List<NdefMessage> = rawMessages.map { it as NdefMessage }
                 val customData = String(messages[0].records[0].payload)
                 val noteGuid = lookupEvernoteUrl(customData)
-
+                Log.d("launchingEvernoteLink", "noteGuid = $noteGuid")
                 if (noteGuid != null) {
                     val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(noteGuid))
                     startActivity(browserIntent)

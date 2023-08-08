@@ -19,6 +19,7 @@ import java.io.IOException
 class NFCHandlerActivity : Activity() {
         private var nfcAdapter: NfcAdapter? = null
         private var pendingIntent: PendingIntent? = null
+        private var currentUniqueId: String? = null
 
         override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
@@ -29,8 +30,8 @@ class NFCHandlerActivity : Activity() {
                 }
 
                 // Extract the Evernote link from the shared variable
-                val uniqueId = intent?.getStringExtra("uniqueId")
-                Log.d("onCreate", "uniqueId = $uniqueId")
+                currentUniqueId = intent?.getStringExtra("uniqueId")
+                Log.d("onCreate", "uniqueId = $currentUniqueId")
 
                 nfcAdapter = NfcAdapter.getDefaultAdapter(this)
                 if (nfcAdapter == null) {
@@ -41,8 +42,8 @@ class NFCHandlerActivity : Activity() {
 
                 val intentForPendingIntent = Intent(this, javaClass).apply {
                         addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        putExtra("uniqueId", uniqueId)
                 }
+
                 pendingIntent = PendingIntent.getActivity(this, 0, intentForPendingIntent, FLAG_MUTABLE)
         }
 
@@ -86,12 +87,9 @@ class NFCHandlerActivity : Activity() {
         }
 
         private fun handleNFCIntent(intent: Intent?) {
-                // Write the link to the NFC tag
-                // get the evernoteLink from the intent extras
-                val uniqueId = intent?.getStringExtra("uniqueId")
-                Log.d("handleNFCIntent", "uniqueId = $uniqueId")
-                if (uniqueId != null) {
-                        if (writeLinkToTag(uniqueId, intent)) {
+                Log.d("handleNFCIntent", "handleNFCIntent called")
+                if (currentUniqueId != null) {
+                        if (writeLinkToTag(intent)) {
                                 Toast.makeText(this, "Link written to NFC tag", Toast.LENGTH_LONG)
                                         .show()
                         } else {
@@ -107,11 +105,11 @@ class NFCHandlerActivity : Activity() {
                 finish()
         }
 
-        private fun writeLinkToTag(link: String, intent: Intent?): Boolean {
-                Log.d("writeLinkToTag", "writeLinkToTag called")
+        private fun writeLinkToTag(intent: Intent?): Boolean {
+                Log.d("writeLinkToTag", "writeLinkToTag called: currentUniqueId = $currentUniqueId")
                 val tag: Tag? = intent?.extras?.getParcelable(NfcAdapter.EXTRA_TAG)
                 // val ndefRecord = NdefRecord.createUri(link)
-                val payload = link.toByteArray(Charsets.UTF_8)
+                val payload = currentUniqueId?.toByteArray(Charsets.UTF_8)
                 val domain ="com.loosecannon.evernotenfc" // Replace with your app's domain/package name.
                 val type = "md5_short" // Replace with your specific type name.
                 val ndefRecord =  NdefRecord.createExternal(domain, type, payload)

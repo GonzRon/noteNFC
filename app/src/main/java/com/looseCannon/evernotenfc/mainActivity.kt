@@ -5,14 +5,19 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
-import java.util.UUID
 import java.security.MessageDigest
 
 class MainActivity : Activity() {
-
+    private var userId: String? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        val sharedPreferences = getSharedPreferences("EvernoteURLs", Context.MODE_PRIVATE)
+        if (!sharedPreferences.contains("EvernoteUserID")) {
+            val getUIDIntent = Intent(this, GetUIDActivity::class.java)
+            startActivity(getUIDIntent)
+        }
+        userId = sharedPreferences.getString("EvernoteUserID", null)
 
         // Extracting the link from the intent
         val evernoteLink = intent?.getStringExtra(Intent.EXTRA_TEXT)?.let { transformLink(it) }
@@ -22,8 +27,8 @@ class MainActivity : Activity() {
             Toast.makeText(this, "No link received", Toast.LENGTH_LONG).show()
             return
         }
+
         val uniqueId = getShortHash(evernoteLink)
-        val sharedPreferences = getSharedPreferences("EvernoteURLs", Context.MODE_PRIVATE)
         sharedPreferences.edit().putString(uniqueId, evernoteLink).apply()
 
         val nfcIntent = Intent(this, NFCHandlerActivity::class.java)
@@ -45,8 +50,7 @@ class MainActivity : Activity() {
             val match = pattern.find(link)
             match?.let {
                 val (shardId, userId, noteGuid) = it.destructured
-                return "evernote:///$noteGuid"
-
+                return "evernote:///view/$userId/$shardId/$noteGuid"
             }
         }
         else if (link.contains("/sh/")) {
@@ -54,7 +58,7 @@ class MainActivity : Activity() {
             val match = pattern.find(link)
             match?.let {
                 val (shardId, noteGuid, shareKey) = it.destructured
-                return "evernote://$noteGuid"
+                return "evernote:///view/$userId/$shardId/$noteGuid"
             }
         }
         return null
