@@ -113,7 +113,7 @@ class NFCHandlerActivity : Activity() {
                 // val ndefRecord = NdefRecord.createUri(link)
                 val payload = link.toByteArray(Charsets.UTF_8)
                 val domain ="com.loosecannon.evernotenfc" // Replace with your app's domain/package name.
-                val type = "uuid8_link" // Replace with your specific type name.
+                val type = "md5_short" // Replace with your specific type name.
                 val ndefRecord =  NdefRecord.createExternal(domain, type, payload)
                 val ndefMessage = NdefMessage(arrayOf(ndefRecord))
 

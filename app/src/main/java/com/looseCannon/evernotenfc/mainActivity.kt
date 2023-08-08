@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import java.util.UUID
+import java.security.MessageDigest
 
 class MainActivity : Activity() {
 
@@ -21,7 +22,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, "No link received", Toast.LENGTH_LONG).show()
             return
         }
-        val uniqueId = UUID.randomUUID().toString().substring(0, 8)
+        val uniqueId = getShortHash(evernoteLink)
         val sharedPreferences = getSharedPreferences("EvernoteURLs", Context.MODE_PRIVATE)
         sharedPreferences.edit().putString(uniqueId, evernoteLink).apply()
 
@@ -29,6 +30,12 @@ class MainActivity : Activity() {
         nfcIntent.putExtra("uniqueId", uniqueId)
         startActivity(nfcIntent)
         finish()
+    }
+
+    private fun getShortHash(input: String): String {
+        val md = MessageDigest.getInstance("MD5")
+        val digest = md.digest(input.toByteArray())
+        return digest.fold("") { str, it -> str + "%02x".format(it) }.substring(0, 8)
     }
 
     fun transformLink(link: String): String? {
