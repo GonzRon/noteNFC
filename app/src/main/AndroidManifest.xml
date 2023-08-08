@@ -32,21 +32,7 @@
         <!-- NFCHandlerActivity handles the NFC intents -->
         <activity
             android:name=".NFCHandlerActivity"
-            android:exported="true"
             android:launchMode="singleTask">
-
-            <intent-filter>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data
-                    android:host="www.evernote.com"
-                    android:scheme="https" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.nfc.action.TAG_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-
         </activity>
 
         <activity android:name=".LaunchEvernoteNFCLinkActivity"
@@ -58,7 +44,8 @@
             </intent-filter>
         </activity>
 
-        <!-- Add other activities, services, receivers, etc. if any -->
+        <activity android:name=".GetUIDActivity">
+        </activity>
 
     </application>
 </manifest>
