@@ -45,7 +45,9 @@ class MainActivity : Activity() {
             val match = pattern.find(link)
             match?.let {
                 val (shardId, userId, noteGuid) = it.destructured
-                return noteGuid
+                // TODO: This needs to be fixed !!!!
+                return "evernote:///$noteGuid"
+
             }
         }
         else if (link.contains("/sh/")) {
@@ -53,7 +55,8 @@ class MainActivity : Activity() {
             val match = pattern.find(link)
             match?.let {
                 val (shardId, noteGuid, shareKey) = it.destructured
-                return "evernote://share-note-via-link/$noteGuid/$shareKey/$shardId/"
+                return "evernote://$noteGuid"
+//                return "evernote://share-note-via-link/$noteGuid/$shareKey/$shardId/"
             }
         }
         return null
