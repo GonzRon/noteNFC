@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">evernoteNFC</string>
-    <string name="share_a_note_in_evernote_to_this_app">Share a Note in Evernote to this app.</string>
-    <string name="scan_an_nfc_tag_to_link_it_to_your_evernote_document">Scan an NFC Tag to link it to your evernote document.</string>
+    <string name="app_name">noteNFC</string>
+    <string name="share_a_note_in_evernote_to_this_app">Share a Note to this app.</string>
+    <string name="scan_an_nfc_tag_to_link_it_to_your_document">Scan an NFC Tag to link it to your document.</string>
 </resources>

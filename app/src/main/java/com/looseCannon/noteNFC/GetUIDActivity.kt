@@ -1,4 +1,4 @@
-package com.looseCannon.evernotenfc
+package com.looseCannon.noteNFC
 
 import android.app.Activity
 import android.content.SharedPreferences
@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 
 class GetUIDActivity : Activity() {
 
@@ -14,7 +13,7 @@ class GetUIDActivity : Activity() {
     private lateinit var confirmButton: Button
 
     private val sharedPreferences: SharedPreferences by lazy {
-        getSharedPreferences("EvernotePrefs", MODE_PRIVATE)
+        getSharedPreferences("noteNFCPrefs", MODE_PRIVATE)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.looseCannon.evernotenfc"
+    namespace = "com.looseCannon.noteNFC"
     compileSdk = 33
 
     defaultConfig {
-        applicationId = "com.looseCannon.evernotenfc"
+        applicationId = "com.looseCannon.noteNFC"
         minSdk = 26
         targetSdk = 33
         versionCode = 1

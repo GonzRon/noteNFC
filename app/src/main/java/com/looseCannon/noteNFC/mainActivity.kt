@@ -1,4 +1,4 @@
-package com.looseCannon.evernotenfc
+package com.looseCannon.noteNFC
 
 import android.app.Activity
 import android.content.Context
@@ -12,7 +12,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        val sharedPreferences = getSharedPreferences("EvernoteURLs", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences("noteNFCURLs", Context.MODE_PRIVATE)
         if (!sharedPreferences.contains("EvernoteUserID")) {
             val getUIDIntent = Intent(this, GetUIDActivity::class.java)
             startActivity(getUIDIntent)
@@ -20,16 +20,16 @@ class MainActivity : Activity() {
         userId = sharedPreferences.getString("EvernoteUserID", null)
 
         // Extracting the link from the intent
-        val evernoteLink = intent?.getStringExtra(Intent.EXTRA_TEXT)?.let { transformLink(it) }
+        val noteLink = intent?.getStringExtra(Intent.EXTRA_TEXT)?.let { transformLink(it) }
 
         // Check if the link is present
-        if (evernoteLink == null) {
+        if (noteLink == null) {
             Toast.makeText(this, "No link received", Toast.LENGTH_LONG).show()
             return
         }
 
-        val uniqueId = getShortHash(evernoteLink)
-        sharedPreferences.edit().putString(uniqueId, evernoteLink).apply()
+        val uniqueId = getShortHash(noteLink)
+        sharedPreferences.edit().putString(uniqueId, noteLink).apply()
 
         val nfcIntent = Intent(this, NFCHandlerActivity::class.java)
         nfcIntent.putExtra("uniqueId", uniqueId)
@@ -43,7 +43,7 @@ class MainActivity : Activity() {
         return digest.fold("") { str, it -> str + "%02x".format(it) }.substring(0, 8)
     }
 
-    fun transformLink(link: String): String? {
+    private fun transformLink(link: String): String? {
         // If the link contains /nl/
         if (link.contains("/nl/")) {
             val pattern = """.*/shard/(\w+)/nl/(\w+[_-].*)/(\w+[-_].*)""".toRegex()

@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.looseCannon.evernotenfc">
+    package="com.looseCannon.noteNFC">
 
     <!-- Necessary NFC permission -->
     <uses-permission android:name="android.permission.NFC" />
@@ -12,7 +12,7 @@
 
         <!-- MainActivity which acts as a launcher and passes link to NFCHandlerActivity -->
         <activity
-            android:name=".MainActivity"
+            android:name="com.looseCannon.noteNFC.MainActivity"
             android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
@@ -35,12 +35,12 @@
             android:launchMode="singleTask">
         </activity>
 
-        <activity android:name=".LaunchEvernoteNFCLinkActivity"
+        <activity android:name=".LaunchNoteNFCLinkActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="vnd.android.nfc" android:host="ext" android:pathPrefix="/com.loosecannon.evernotenfc:md5_short" />
+                <data android:scheme="vnd.android.nfc" android:host="ext" android:pathPrefix="/com.loosecannon.noteNFC:md5_short" />
             </intent-filter>
         </activity>
 

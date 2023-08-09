@@ -9,7 +9,7 @@
         android:id="@+id/instructionText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/scan_an_nfc_tag_to_link_it_to_your_evernote_document"
+        android:text="@string/scan_an_nfc_tag_to_link_it_to_your_document"
         android:textSize="18sp"/>
 
 </LinearLayout>

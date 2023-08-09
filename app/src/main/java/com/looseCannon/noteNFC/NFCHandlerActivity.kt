@@ -1,4 +1,4 @@
-package com.looseCannon.evernotenfc
+package com.looseCannon.noteNFC
 
 import android.app.Activity
 import android.app.PendingIntent
@@ -110,7 +110,7 @@ class NFCHandlerActivity : Activity() {
                 val tag: Tag? = intent?.extras?.getParcelable(NfcAdapter.EXTRA_TAG)
                 // val ndefRecord = NdefRecord.createUri(link)
                 val payload = currentUniqueId?.toByteArray(Charsets.UTF_8)
-                val domain ="com.loosecannon.evernotenfc" // Replace with your app's domain/package name.
+                val domain ="com.looseCannon.noteNFC" // Replace with your app's domain/package name.
                 val type = "md5_short" // Replace with your specific type name.
                 val ndefRecord =  NdefRecord.createExternal(domain, type, payload)
                 val ndefMessage = NdefMessage(arrayOf(ndefRecord))
