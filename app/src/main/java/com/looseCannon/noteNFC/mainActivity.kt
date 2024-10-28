@@ -8,16 +8,10 @@ import android.widget.Toast
 import java.security.MessageDigest
 
 class MainActivity : Activity() {
-    private var userId: String? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         val sharedPreferences = getSharedPreferences("noteNFCURLs", Context.MODE_PRIVATE)
-        if (!sharedPreferences.contains("EvernoteUserID")) {
-            val getUIDIntent = Intent(this, GetUIDActivity::class.java)
-            startActivity(getUIDIntent)
-        }
-        userId = sharedPreferences.getString("EvernoteUserID", null)
 
         // Extracting the link from the intent
         val noteLink = intent?.getStringExtra(Intent.EXTRA_TEXT)?.let { transformLink(it) }
@@ -44,22 +38,8 @@ class MainActivity : Activity() {
     }
 
     private fun transformLink(link: String): String? {
-        // If the link contains /nl/
-        if (link.contains("/nl/")) {
-            val pattern = """.*/shard/(\w+)/nl/(\w+[_-].*)/(\w+[-_].*)""".toRegex()
-            val match = pattern.find(link)
-            match?.let {
-                val (shardId, userId, noteGuid) = it.destructured
-                return "evernote:///view/$userId/$shardId/$noteGuid"
-            }
-        }
-        else if (link.contains("/sh/")) {
-            val pattern = """.*/shard/(\w+)/sh/(\w+[_-].*)/(\w+[-_].*)""".toRegex()
-            val match = pattern.find(link)
-            match?.let {
-                val (shardId, noteGuid, shareKey) = it.destructured
-                return "evernote:///view/$userId/$shardId/$noteGuid"
-            }
+        if (link.contains("joplin")) {
+            return link
         }
         return null
     }

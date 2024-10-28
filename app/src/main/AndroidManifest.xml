@@ -40,12 +40,21 @@
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="vnd.android.nfc" android:host="ext" android:pathPrefix="/com.loosecannon.noteNFC:md5_short" />
+                <data android:scheme="vnd.android.nfc" android:host="ext" android:pathPrefix="/com.loosecannon.notenfc:md5_short" />
             </intent-filter>
+            <intent-filter>
+                <!-- Handle TECH_DISCOVERED action for any NFC technology -->
+                <action android:name="android.nfc.action.TECH_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.action.TECH_DISCOVERED"
+                android:resource="@xml/nfc_tech_filter" />
+
         </activity>
 
-        <activity android:name=".GetUIDActivity">
-        </activity>
+<!--        <activity android:name=".GetUIDActivity">-->
+<!--        </activity>-->
 
     </application>
 </manifest>

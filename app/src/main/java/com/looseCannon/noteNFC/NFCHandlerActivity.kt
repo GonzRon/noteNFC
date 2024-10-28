@@ -11,6 +11,7 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.Ndef
 import android.nfc.tech.NdefFormatable
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -29,7 +30,6 @@ class NFCHandlerActivity : Activity() {
                         handleNFCIntent(intent)
                 }
 
-                // Extract the Evernote link from the shared variable
                 currentUniqueId = intent?.getStringExtra("uniqueId")
                 Log.d("onCreate", "uniqueId = $currentUniqueId")
 
@@ -76,7 +76,7 @@ class NFCHandlerActivity : Activity() {
                 val extras = intent?.extras
                 if (extras != null) {
                         for (key in extras.keySet()) {
-                                val value = extras.get(key)
+                                val value = extras.getString(key)
                                 Log.d("IntentDebug", "Key: $key Value: $value")
                         }
                 }
@@ -107,11 +107,16 @@ class NFCHandlerActivity : Activity() {
 
         private fun writeLinkToTag(intent: Intent?): Boolean {
                 Log.d("writeLinkToTag", "writeLinkToTag called: currentUniqueId = $currentUniqueId")
-                val tag: Tag? = intent?.extras?.getParcelable(NfcAdapter.EXTRA_TAG)
+                val tag: Tag? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent?.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+                } else {
+                        @Suppress("DEPRECATION")
+                        intent?.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+                }
                 // val ndefRecord = NdefRecord.createUri(link)
                 val payload = currentUniqueId?.toByteArray(Charsets.UTF_8)
-                val domain ="com.looseCannon.noteNFC" // Replace with your app's domain/package name.
-                val type = "md5_short" // Replace with your specific type name.
+                val domain ="com.looseCannon.noteNFC"
+                val type = "md5_short"
                 val ndefRecord =  NdefRecord.createExternal(domain, type, payload)
                 val ndefMessage = NdefMessage(arrayOf(ndefRecord))
 
