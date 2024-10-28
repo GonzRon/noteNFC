@@ -9,7 +9,7 @@
         android:id="@+id/instructionText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/share_a_note_in_evernote_to_this_app"
+        android:text="@string/share_a_note_in_joplin_to_this_app"
         android:textSize="18sp"/>
 
 </LinearLayout>
