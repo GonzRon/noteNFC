@@ -11,8 +11,8 @@ Write NFC Tag:
 - context menu for note, select copy external link
 - share link with noteNFC app
 - noteNFC app presents write dialog to user
-- user moves NFC phone close to NFC tag
-- phone writes NFC Tag with evernote link
+- user scans NFC tag with phone
+- phone writes NFC Tag with joplin note link
 
 Read NFC Tag:
 - user scans NFC tag with phone
