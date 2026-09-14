@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import com.loosecannon.notenfc.core.nfc.NdefCodec
 import java.io.IOException
 
 class NFCHandlerActivity : Activity() {
@@ -114,10 +115,8 @@ class NFCHandlerActivity : Activity() {
                         intent?.getParcelableExtra(NfcAdapter.EXTRA_TAG)
                 }
                 // val ndefRecord = NdefRecord.createUri(link)
-                val payload = currentUniqueId?.toByteArray(Charsets.UTF_8)
-                val domain ="com.looseCannon.noteNFC"
-                val type = "md5_short"
-                val ndefRecord =  NdefRecord.createExternal(domain, type, payload)
+                val legacy = NdefCodec.encodeLegacy(currentUniqueId ?: return false)
+                val ndefRecord = NdefRecord.createExternal(NdefCodec.LEGACY_DOMAIN, NdefCodec.LEGACY_TYPE_NAME, legacy.payload)
                 val ndefMessage = NdefMessage(arrayOf(ndefRecord))
 
                 try {

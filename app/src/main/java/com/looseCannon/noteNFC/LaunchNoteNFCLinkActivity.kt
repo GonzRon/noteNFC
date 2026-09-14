@@ -10,6 +10,9 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import com.loosecannon.notenfc.core.nfc.NdefCodec
+import com.loosecannon.notenfc.core.nfc.NdefRecordData
+import com.loosecannon.notenfc.core.nfc.TagPayload
 
 class LaunchNoteNFCLinkActivity : Activity() {
 
@@ -28,8 +31,11 @@ class LaunchNoteNFCLinkActivity : Activity() {
 
             rawMessages?.also { messagesArray ->
                 val messages: List<NdefMessage> = messagesArray.map { it as NdefMessage }
-                val customData = String(messages[0].records[0].payload)
-                val noteGuid = lookupNoteUrl(customData)
+                val records = messages.firstOrNull()?.records.orEmpty().map { NdefRecordData(it.tnf.toInt(), it.type, it.payload) }
+                val noteGuid = when (val payload = NdefCodec.decode(records)) {
+                    is TagPayload.LegacyMd5 -> lookupNoteUrl(payload.key)
+                    else -> null
+                }
                 Log.d("launchingJoplinNoteLink", "noteGuid = $noteGuid")
                 if (noteGuid != null) {
                     val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(noteGuid))
