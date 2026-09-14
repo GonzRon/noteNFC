@@ -1,58 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Necessary NFC permission -->
     <uses-permission android:name="android.permission.NFC" />
-    <!-- Indicate that the app uses NFC -->
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
     <application
         android:name="com.loosecannon.notenfc.NoteNfcApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
-
-        <!-- MainActivity which acts as a launcher and passes link to NFCHandlerActivity -->
-        <activity
-            android:name="com.loosecannon.notenfc.legacy.MainActivity"
-            android:launchMode="singleTop"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <!-- Intent filter to handle shared data -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-
-        </activity>
-
-        <!-- NFCHandlerActivity handles the NFC intents -->
-        <activity
-            android:name="com.loosecannon.notenfc.legacy.NFCHandlerActivity"
-            android:launchMode="singleTask"
-            android:exported="false">
-        </activity>
-
-        <activity android:name="com.loosecannon.notenfc.legacy.LaunchNoteNFCLinkActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="vnd.android.nfc" android:host="ext" android:pathPrefix="/com.loosecannon.notenfc:md5_short" />
-            </intent-filter>
-            <intent-filter>
-                <!-- Handle TECH_DISCOVERED action for any NFC technology -->
-                <action android:name="android.nfc.action.TECH_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <meta-data
-                android:name="android.nfc.action.TECH_DISCOVERED"
-                android:resource="@xml/nfc_tech_filter" />
-
-        </activity>
-
     </application>
 </manifest>

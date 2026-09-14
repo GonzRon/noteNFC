@@ -16,9 +16,13 @@ sealed interface TagPayload {
 
 object NdefCodec {
     const val TNF_EXTERNAL_TYPE: Int = 0x04
-    const val LEGACY_DOMAIN: String = "com.loosecannon.notenfc"
+
+    /** The NFC Forum external-type domain for every noteNFC record; lower-case on the wire. */
+    const val DOMAIN: String = "com.loosecannon.notenfc"
+
+    /** The 2024 record type. Read-only, best-effort recognition (D13 §2); never written again. */
     const val LEGACY_TYPE_NAME: String = "md5_short"
-    const val LEGACY_TYPE: String = "$LEGACY_DOMAIN:$LEGACY_TYPE_NAME"
+    const val LEGACY_TYPE: String = "$DOMAIN:$LEGACY_TYPE_NAME"
 
     private val legacyKeyPattern = Regex("^[0-9a-f]{8}$")
 
@@ -34,14 +38,5 @@ object NdefCodec {
             return TagPayload.Malformed("legacy payload is not 8 lowercase hex chars: '$key'")
         }
         return TagPayload.LegacyMd5(key)
-    }
-
-    fun encodeLegacy(key: String): NdefRecordData {
-        require(legacyKeyPattern.matches(key)) { "not a legacy key: '$key'" }
-        return NdefRecordData(
-            tnf = TNF_EXTERNAL_TYPE,
-            type = LEGACY_TYPE.toByteArray(Charsets.US_ASCII),
-            payload = key.toByteArray(Charsets.US_ASCII),
-        )
     }
 }
