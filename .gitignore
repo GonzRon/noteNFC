@@ -10,6 +10,11 @@ build/
 .DS_Store
 local.properties
 
+# signing material never belongs in the repo (it lives in ~/.config/notenfc)
+keystore.properties
+*.jks
+*.keystore
+
 # gradle local state (the wrapper, settings and version catalog ARE tracked)
 .gradle/
 .kotlin/

@@ -1,10 +1,11 @@
-package com.looseCannon.noteNFC
+package com.loosecannon.notenfc.legacy
 
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
+import com.loosecannon.notenfc.R
 import com.loosecannon.notenfc.core.links.LegacyLinkPolicy
 import com.loosecannon.notenfc.core.nfc.LegacyKey
 

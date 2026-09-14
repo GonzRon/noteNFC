@@ -1,4 +1,4 @@
-package com.looseCannon.noteNFC
+package com.loosecannon.notenfc.legacy
 
 import android.app.Activity
 import android.app.PendingIntent
@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import com.loosecannon.notenfc.R
 import com.loosecannon.notenfc.core.nfc.NdefCodec
 import java.io.IOException
 

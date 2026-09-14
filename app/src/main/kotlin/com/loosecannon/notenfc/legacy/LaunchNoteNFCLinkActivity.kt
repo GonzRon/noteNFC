@@ -1,4 +1,4 @@
-package com.looseCannon.noteNFC
+package com.loosecannon.notenfc.legacy
 
 import android.app.Activity
 import android.content.Context

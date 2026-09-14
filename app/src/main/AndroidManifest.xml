@@ -6,12 +6,13 @@
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
     <application
+        android:name="com.loosecannon.notenfc.NoteNfcApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
 
         <!-- MainActivity which acts as a launcher and passes link to NFCHandlerActivity -->
         <activity
-            android:name="com.looseCannon.noteNFC.MainActivity"
+            android:name="com.loosecannon.notenfc.legacy.MainActivity"
             android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
@@ -30,12 +31,12 @@
 
         <!-- NFCHandlerActivity handles the NFC intents -->
         <activity
-            android:name=".NFCHandlerActivity"
+            android:name="com.loosecannon.notenfc.legacy.NFCHandlerActivity"
             android:launchMode="singleTask"
             android:exported="false">
         </activity>
 
-        <activity android:name=".LaunchNoteNFCLinkActivity"
+        <activity android:name="com.loosecannon.notenfc.legacy.LaunchNoteNFCLinkActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
