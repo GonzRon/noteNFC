@@ -12,6 +12,16 @@ Branch `phase-0-foundation`, HEAD `0cd2184` at the time this evidence was gather
 | 3 | `git status` clean after `assembleDebug` | Clone-check tree: `git status --short` empty apart from the ignored `local.properties`. | **Pass** |
 | 4 | The keystore investigation result is recorded in D8 R-1 | R-1 investigation below. | **Pass** (investigation complete; conclusion is "situation B must be assumed") |
 
+## CI status
+
+The CI workflow (`.github/workflows/ci.yml`) has never actually executed — the plan forbade
+pushing during this phase. It's committed and validated locally, running the identical Gradle
+command line (`./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain`,
+see the clone-build proof below), but it is **unverified on a GitHub runner until the first
+push** — watch the first run. Its two external dependencies are the foojay JDK provisioning
+(JetBrains JDK 25 daemon from `gradle/gradle-daemon-jvm.properties`, JDK 17 toolchain for `:core`)
+and Android SDK component downloads via `android-actions/setup-android`.
+
 ## Clone-build proof
 
 ```
@@ -225,6 +235,11 @@ in-memory test databases must use `Room.inMemoryDatabaseBuilder<T>()`, not
   non-`void`/non-`Unit` `@Test` method — an expression-bodied test that returns a value is treated
   as not returning `Unit` and is skipped rather than run, with no failure reported. This is recorded
   here as a standing rule for the testing strategy going forward, not just a one-off fix.
+- **CI follow-ups raised by the final reviewer, for Phase 1A:** (a) the daemon-JVM pin to
+  JetBrains 25 is the likeliest CI flake, consider `toolchainVersion=17` with no vendor once the
+  JDK-25 dev-box rationale is written down; (b) `on: push` + `pull_request` runs CI twice per PR
+  branch push — restrict `push` to `master` later; (c) targetSdk 36 brings edge-to-edge
+  enforcement to the two plain layouts — include them in the pending on-device check.
 
 ## Ready for Phase 1A: yes
 
