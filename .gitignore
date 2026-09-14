@@ -1,24 +1,18 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
+# build output
+build/
 /captures
 .externalNativeBuild
 .cxx
-local.properties
+
+# IDE and local machine
 .idea/
-gradle/
-gradlew*
-settings.gradle.kts
-app/src/test/
-app/src/androidTest/
-```
-/app/src/main/res/xml/backup_rules.xml
-/gradle.properties
+*.iml
+.DS_Store
+local.properties
+
+# gradle local state (the wrapper, settings and version catalog ARE tracked)
+.gradle/
+.kotlin/
+
+# superpowers scratch
+.superpowers/
