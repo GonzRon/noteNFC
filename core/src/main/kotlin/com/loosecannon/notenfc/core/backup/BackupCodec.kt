@@ -96,7 +96,50 @@ object BackupCodec {
         data.externalLinks.forEach { it.toDomain() }
         data.nfcTags.forEach { it.toDomain() }
 
+        // And the graph has to hold together. A replace-mode import deletes everything and then
+        // replays the three insert loops in one transaction: a duplicate id or a reference to a
+        // row that is not in the file would only fail down there, on the foreign keys, with the
+        // user's data already gone.
+        validateGraph(data)
+
         return Backup(manifest, data)
+    }
+
+    /** Ids unique within each table, and every non-null reference resolvable inside the file. */
+    private fun validateGraph(data: BackupData) {
+        val assetIds = uniqueIds("assets", data.assets.map { it.id })
+        val linkIds = uniqueIds("externalLinks", data.externalLinks.map { it.id })
+        uniqueIds("nfcTags", data.nfcTags.map { it.id })
+
+        data.externalLinks.forEach { link ->
+            if (link.assetId != null && link.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "externalLinks: link ${link.id} points at asset ${link.assetId}, " +
+                        "which is not in assets",
+                )
+            }
+        }
+        data.nfcTags.forEach { tag ->
+            if (tag.assetId != null && tag.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "nfcTags: tag ${tag.id} points at asset ${tag.assetId}, which is not in assets",
+                )
+            }
+            if (tag.linkId != null && tag.linkId !in linkIds) {
+                throw BackupCorrupt(
+                    "nfcTags: tag ${tag.id} points at link ${tag.linkId}, " +
+                        "which is not in externalLinks",
+                )
+            }
+        }
+    }
+
+    private fun uniqueIds(table: String, ids: List<String>): Set<String> {
+        val seen = LinkedHashSet<String>(ids.size)
+        ids.forEach { id ->
+            if (!seen.add(id)) throw BackupCorrupt("$table: duplicate id $id")
+        }
+        return seen
     }
 
     private fun ZipOutputStream.writeEntry(name: String, payload: ByteArray, time: Long) {

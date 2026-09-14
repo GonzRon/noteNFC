@@ -213,6 +213,76 @@ class BackupCodecTest {
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(resealed(encoded(), data.toByteArray(Charsets.UTF_8))) }
     }
 
+    // --- referential integrity and id uniqueness -----------------------------------------------
+    // encode() writes whatever it is handed, so a broken fixture is sealed into a well-formed
+    // archive: the hash matches and every enum is nameable. Only decode() is under test here.
+
+    @Test
+    fun `the fixture graph is referentially whole`() {
+        val decoded = BackupCodec.decode(encoded())
+        assertEquals(fixture(), decoded.data)
+    }
+
+    @Test
+    fun `a link pointing at a missing asset is corrupt`() {
+        val f = fixture()
+        val orphan = ExternalLinkDto("l4", "a404", "WEB", "Orphan", "https://example.invalid/x", 110L, null, 210L)
+        val e = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(f.copy(externalLinks = f.externalLinks + orphan)))
+        }
+        assertTrue(e.message!!.contains("l4") && e.message!!.contains("a404"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun `a tag pointing at a missing asset is corrupt`() {
+        val f = fixture()
+        val orphan = NfcTagDto("t5", "V1", "key-t5", "a404", null, "ACTIVE", null, null, null, null, 110L, 210L)
+        val e = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(f.copy(nfcTags = f.nfcTags + orphan)))
+        }
+        assertTrue(e.message!!.contains("t5") && e.message!!.contains("a404"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun `a tag pointing at a missing link is corrupt`() {
+        val f = fixture()
+        val orphan = NfcTagDto("t5", "V1", "key-t5", null, "l404", "ACTIVE", null, null, null, null, 110L, 210L)
+        val e = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(f.copy(nfcTags = f.nfcTags + orphan)))
+        }
+        assertTrue(e.message!!.contains("t5") && e.message!!.contains("l404"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun `a duplicate asset id is corrupt`() {
+        val f = fixture()
+        val twin = f.assets.first { it.id == "a1" }.copy(name = "Furnace again")
+        val e = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(f.copy(assets = f.assets + twin)))
+        }
+        assertTrue(e.message!!.contains("assets") && e.message!!.contains("a1"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun `a duplicate tag id is corrupt`() {
+        val f = fixture()
+        val twin = f.nfcTags.first { it.id == "t3" }.copy(payloadKey = "key-t3-again")
+        val e = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(f.copy(nfcTags = f.nfcTags + twin)))
+        }
+        assertTrue(e.message!!.contains("nfcTags") && e.message!!.contains("t3"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun `a duplicate link id is corrupt`() {
+        val f = fixture()
+        val twin = f.externalLinks.first { it.id == "l3" }.copy(label = "Loose note again")
+        val e = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(f.copy(externalLinks = f.externalLinks + twin)))
+        }
+        assertTrue(e.message!!.contains("externalLinks") && e.message!!.contains("l3"), "unhelpful: ${e.message}")
+    }
+
     @Test
     fun `decode of encode is identity over fifty random fixtures`() {
         val rng = Random(42)
