@@ -11,16 +11,24 @@ import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.ports.UuidGenerator
+import com.loosecannon.notenfc.core.usecase.BindTag
+import com.loosecannon.notenfc.core.usecase.CreateAsset
 import com.loosecannon.notenfc.core.usecase.ExportBackup
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
+import com.loosecannon.notenfc.core.usecase.OpenLink
+import com.loosecannon.notenfc.core.usecase.ProvisionTag
+import com.loosecannon.notenfc.core.usecase.ResolveTag
+import com.loosecannon.notenfc.core.usecase.SaveLink
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
-/** Hand-rolled composition root. No DI framework in Phase 1A (D3 §5). */
+/** Hand-rolled composition root. No DI framework in Phase 1 (D3 §5). */
 class AppGraph(context: Context) {
     val db: AppDatabase = Room
         .databaseBuilder<AppDatabase>(
@@ -44,6 +52,17 @@ class AppGraph(context: Context) {
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(assets, tags, links, uow)
+
+    /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
+    val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // Phase 1B — NFC identity
+    val resolveTag: ResolveTag = ResolveTag(tags, assets, links, uow, clock)
+    val bindTag: BindTag = BindTag(tags, assets, links, uow, ids, clock)
+    val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
+    val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock)
+    val saveLink: SaveLink = SaveLink(links, uow, ids, clock)
+    val openLink: OpenLink = OpenLink(links, uow, clock)
 
     private companion object {
         const val DB_NAME = "notenfc.db"
