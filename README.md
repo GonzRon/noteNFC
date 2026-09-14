@@ -1,24 +1,50 @@
 # noteNFC
-** evernote support removed
 
-similar to the previously available touchanote app (no relation)
-written from scratch, accomplishes the basic functionality of allowing you to share a note with this app,
-a link to which is then written to an NFC tag.  You can then scan the NFC tag and immediately have the note
-popup in joplin.
+An open-source, local-first Android app that turns NFC tags into durable handles for the
+physical things you look after — the hot tub, the generator, the well pump, the bike — and for
+the notes that describe them.
 
-Write NFC Tag:
-- inside of joplin, select note
-- context menu for note, select copy external link
-- share link with noteNFC app
-- noteNFC app presents write dialog to user
-- user scans NFC tag with phone
-- phone writes NFC Tag with joplin note link
+Stick a tag on the thing. Scan it and the phone opens the right place: a note in Joplin,
+Obsidian or Logseq, a web page, or (from Phase 2 on) the asset's own record with its service
+history, measurements and upcoming maintenance. The tag carries only a random identifier;
+everything it means lives in a small SQLite database on the phone that you can back up and
+restore with identities intact, so a tag keeps working across phone replacement, reinstall and
+restore.
 
-Read NFC Tag:
-- user scans NFC tag with phone
-- tag is recognized as an Joplin Note Link
-- android OS launches joplin app with deep link for document, opening note directly
+No accounts, no backend, no telemetry. Reminders are local first; Todoist is an optional,
+later projection that never becomes the source of truth.
 
+## What it does today
+
+The original one-tap flow still works and is the spine of the app:
+
+- **Write a tag** — share a note's external link (Joplin *Copy external link*, an Obsidian or
+  Logseq URI, or any `https://` page) to noteNFC, hold a blank tag to the phone, done. The
+  writer reads the tag first, asks before overwriting anything, checks capacity, and reads the
+  tag back to verify it.
+- **Scan a tag** — with the app closed, tap the tag: a link tag opens the note directly, an
+  asset tag opens the asset. Unknown or foreign tags are recognised as such and offered a bind
+  or a rewrite, never an error.
+- **Back up and restore** — one ZIP holds every asset, tag binding and link with its original
+  id, so a restored phone resolves the same tags.
+
+Tags written by the pre-2.0 app (`md5_short` records) are still recognised as legacy tags and
+can be bound as-is or rewritten in the current payload format; there is no dependency on the
+old app or its data.
+
+## Where it is going
+
+The design package under [`docs/design/`](docs/design/README.md) lays out the whole system and
+the phase sequence: assets with a journal of events and typed measurements (Phase 2),
+provider-neutral maintenance schedules with local reminders and a health screen (Phase 3),
+attachments on a pluggable, cloud-agnostic store (Phase 4), an optional Todoist projection
+(Phase 5), supplies and parts (Phase 6). Phases 0–1A are merged; Phase 1B (the NFC payload
+format, resolver and safe writer) is in progress. Progress is tracked in the GitHub issues,
+one milestone per phase.
+
+Code shape: `:core` is pure Kotlin (domain model, NDEF codec, scheduling engine, backup format,
+policies, ports) and is tested on the JVM; `:app` is the Android shell (Room 3, NFC reader
+mode, later Compose/Material 3). No DI framework, no plugin system.
 
 ## Building
 
