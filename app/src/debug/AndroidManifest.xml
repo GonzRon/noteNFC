@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Debug-only source set. Everything declared here is merged into the debug APK and into no
+      other, so the release build has no backup screen, no extra launcher icon and no exported
+      activity that can wipe the database.
+    -->
+    <application>
+        <activity
+            android:name="com.loosecannon.notenfc.debug.DebugBackupActivity"
+            android:exported="true"
+            android:label="noteNFC Backup (debug)">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

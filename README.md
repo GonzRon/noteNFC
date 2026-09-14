@@ -33,6 +33,15 @@ KSP, Room 3 — comes down through the wrapper and the version catalog.
 
 Unit tests: `./gradlew :core:test :app:testDebugUnitTest`.
 
+## Debug backup screen
+
+Debug builds only, from `app/src/debug/`: a second launcher icon, **noteNFC Backup (debug)**,
+with four buttons — Seed sample, Export, Import (replace), Wipe — and a live `assets / tags /
+links` count. Export writes a `notenfc-backup-<yyyyMMdd-HHmm>.zip` through the Storage Access
+Framework; Import replaces everything in the database with the contents of the file you pick.
+It is a harness for the Phase 1A restore proof, not product UI, and the release APK contains
+neither the activity nor its manifest entry (see `docs/design/phase-1a-evidence.md` §7).
+
 ## Signing
 
 Release builds pick up `~/.config/notenfc/keystore.properties` if it exists; when it is
