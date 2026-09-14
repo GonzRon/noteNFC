@@ -18,6 +18,28 @@ interface Rollbackable {
     fun snapshot(): () -> Unit
 }
 
+/**
+ * Bookkeeping shared by a [FakeUnitOfWork] and the stores it covers, so a test can ask which
+ * transaction — if any — a table read happened in.
+ */
+class TransactionWitness {
+    var inRead = false
+    var inWrite = false
+
+    /** Table reads that ran in no transaction at all, i.e. outside any snapshot. */
+    var readsOutsideSnapshot = 0
+        private set
+
+    fun observeAll() {
+        if (!inRead && !inWrite) readsOutsideSnapshot += 1
+    }
+}
+
+/** A fake store that reports its `all()` calls to the witness a [FakeUnitOfWork] hands it. */
+interface Witnessed {
+    var witness: TransactionWitness?
+}
+
 /** Thrown by a rigged fake repository so tests can force a mid-transaction failure. */
 class RiggedFailure(message: String) : RuntimeException(message)
 
@@ -31,8 +53,9 @@ private class UpsertRig(private val label: String) {
     }
 }
 
-class InMemoryAssetRepository : AssetRepository, Rollbackable {
+class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, Asset>()
+    override var witness: TransactionWitness? = null
     private val rig = UpsertRig("asset")
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
@@ -50,15 +73,19 @@ class InMemoryAssetRepository : AssetRepository, Rollbackable {
 
     override suspend fun get(id: AssetId): Asset? = rows[id.value]
 
-    override suspend fun all(): List<Asset> = rows.values.toList()
+    override suspend fun all(): List<Asset> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
 
     override suspend fun delete(id: AssetId) { rows.remove(id.value) }
 
     override suspend fun deleteAll() { rows.clear() }
 }
 
-class InMemoryTagRepository : TagRepository, Rollbackable {
+class InMemoryTagRepository : TagRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, TagBinding>()
+    override var witness: TransactionWitness? = null
     private val rig = UpsertRig("tag")
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
@@ -85,15 +112,19 @@ class InMemoryTagRepository : TagRepository, Rollbackable {
     override suspend fun forLink(linkId: LinkId): List<TagBinding> =
         rows.values.filter { (it.target as? TagTarget.LinkTarget)?.linkId == linkId }
 
-    override suspend fun all(): List<TagBinding> = rows.values.toList()
+    override suspend fun all(): List<TagBinding> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
 
     override suspend fun delete(id: TagId) { rows.remove(id.value) }
 
     override suspend fun deleteAll() { rows.clear() }
 }
 
-class InMemoryLinkRepository : LinkRepository, Rollbackable {
+class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, ExternalLink>()
+    override var witness: TransactionWitness? = null
     private val rig = UpsertRig("link")
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
@@ -116,7 +147,10 @@ class InMemoryLinkRepository : LinkRepository, Rollbackable {
 
     override suspend fun standalone(): List<ExternalLink> = rows.values.filter { it.assetId == null }
 
-    override suspend fun all(): List<ExternalLink> = rows.values.toList()
+    override suspend fun all(): List<ExternalLink> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
 
     override suspend fun delete(id: LinkId) { rows.remove(id.value) }
 
@@ -128,13 +162,27 @@ class InMemoryLinkRepository : LinkRepository, Rollbackable {
  * so rollback is observable in tests without a real database.
  */
 class FakeUnitOfWork(private vararg val stores: Rollbackable) : UnitOfWork {
+    private val witness = TransactionWitness()
+
+    init {
+        stores.filterIsInstance<Witnessed>().forEach { it.witness = witness }
+    }
+
     var commits = 0
         private set
     var rollbacks = 0
         private set
 
+    /** How many read transactions have been opened. */
+    var reads = 0
+        private set
+
+    /** Table reads the covered stores served outside any transaction. */
+    val readsOutsideSnapshot: Int get() = witness.readsOutsideSnapshot
+
     override suspend fun <T> write(block: suspend () -> T): T {
         val restores = stores.map { it.snapshot() }
+        witness.inWrite = true
         return try {
             val result = block()
             commits += 1
@@ -143,6 +191,18 @@ class FakeUnitOfWork(private vararg val stores: Rollbackable) : UnitOfWork {
             restores.forEach { it() }
             rollbacks += 1
             throw t
+        } finally {
+            witness.inWrite = false
+        }
+    }
+
+    override suspend fun <T> read(block: suspend () -> T): T {
+        reads += 1
+        witness.inRead = true
+        return try {
+            block()
+        } finally {
+            witness.inRead = false
         }
     }
 }

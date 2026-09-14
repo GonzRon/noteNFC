@@ -155,7 +155,7 @@ gain); SQLDelight (equally capable, but Room brings schema export, migration tes
 (sunset); SharedPreferences/DataStore for structured data (no relations, no queries — the current
 failure mode).
 
-Transactions: one use case = one `withTransaction {}`. All cross-aggregate effects of a write
+Transactions: one use case = one transaction — Room 3 spells them `withWriteTransaction {}` and `withReadTransaction {}` (there is no bare `withTransaction {}`). All cross-aggregate effects of a write
 (event saved → `rebuild` → outbox op queued) happen inside it. DAOs are internal to `data/room`;
 repositories return `:core` models.
 

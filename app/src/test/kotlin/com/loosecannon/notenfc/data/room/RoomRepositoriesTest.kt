@@ -14,6 +14,7 @@ import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -207,6 +208,42 @@ class RoomRepositoriesTest {
             }
             assertNull(assets.get(AssetId("a1")))
             assertEquals(emptyList<Asset>(), assets.all())
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun readTransactionRejectsWrites() = runTest {
+        val file = java.io.File.createTempFile("read-tx", ".db").also { it.delete() }
+        val db = fileBackedDb(file)
+        try {
+            val assets = RoomAssetRepository(db.assetDao())
+            val uow = RoomUnitOfWork(db)
+            val refusal = try {
+                uow.read { assets.upsert(asset("a1")) }
+                null
+            } catch (expected: Exception) {
+                expected
+            }
+            assertNotNull("expected a write inside a read transaction to be refused", refusal)
+            assertNull(assets.get(AssetId("a1")))
+            assertEquals(emptyList<Asset>(), assets.all())
+        } finally {
+            db.close()
+            file.parentFile?.listFiles { f -> f.name.startsWith(file.name) }?.forEach { it.delete() }
+        }
+    }
+
+    @Test
+    fun readTransactionAllowsReads() = runTest {
+        val db = inMemoryDb()
+        try {
+            val assets = RoomAssetRepository(db.assetDao())
+            val uow = RoomUnitOfWork(db)
+            val seeded = listOf(asset("a1"), asset("a2"))
+            seeded.forEach { assets.upsert(it) }
+            assertEquals(seeded, uow.read { assets.all() })
         } finally {
             db.close()
         }

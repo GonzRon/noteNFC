@@ -1,5 +1,6 @@
 package com.loosecannon.notenfc.data.room
 
+import androidx.room3.withReadTransaction
 import androidx.room3.withWriteTransaction
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
@@ -69,4 +70,5 @@ class RoomLinkRepository(private val dao: ExternalLinkDao) : LinkRepository {
 
 class RoomUnitOfWork(private val db: AppDatabase) : UnitOfWork {
     override suspend fun <T> write(block: suspend () -> T): T = db.withWriteTransaction { block() }
+    override suspend fun <T> read(block: suspend () -> T): T = db.withReadTransaction { block() }
 }

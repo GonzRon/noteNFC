@@ -82,7 +82,7 @@ class BackupUseCasesTest {
     }
 
     private fun exportOf(f: Fakes, now: Long = 1_726_000_000_000L): ByteArray = runBlocking {
-        ExportBackup(f.assets, f.tags, f.links, Clock { now }, appVersion = "2.0", schemaVersion = 1).run()
+        ExportBackup(f.assets, f.tags, f.links, f.uow, Clock { now }, appVersion = "2.0", schemaVersion = 1).run()
     }
 
     private fun importInto(f: Fakes, bytes: ByteArray): ImportReport = runBlocking {
@@ -129,6 +129,17 @@ class BackupUseCasesTest {
         val manifest = BackupCodec.decode(exportOf(f, now = 777_000L)).manifest
         assertEquals(777_000L, manifest.createdAt)
         assertEquals("2.0", manifest.appVersion)
+    }
+
+    @Test
+    fun exportReadsAllTablesInsideOneReadSnapshot() {
+        val f = Fakes()
+        runBlocking { populate(f) }
+
+        exportOf(f)
+
+        assertEquals(1, f.uow.reads)
+        assertEquals(0, f.uow.readsOutsideSnapshot)
     }
 
     @Test

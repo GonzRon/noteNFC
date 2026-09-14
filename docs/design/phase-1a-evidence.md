@@ -226,7 +226,7 @@ so the release variant never compiles it.
 
 ## 8. Final review fixes
 
-Three Important findings from the Phase 1A final review, all inside the authorised scope.
+Three Important findings from the Phase 1A final review, plus the owner's export-snapshot ruling (8.4) — all inside the authorised scope.
 
 ### 8.1 The bundled SQLite natives are gone from the shipped APK
 
@@ -313,7 +313,7 @@ ExternalLinkDaoTest > upsertOfAnExistingLinkKeepsItsTagsBound FAILED
 
 Only the two new tests notice — which is exactly why they were missing.
 
-### Verification after all three
+### Verification after 8.1–8.3
 
 ```
 $ ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --console=plain -q
@@ -321,6 +321,59 @@ $ ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRe
 ```
 
 `:core` 43 → **50**, `:app` 26 → **28**, **78 total**, 0 failures, 0 errors, 0 skipped.
+
+### 8.4 Export snapshot
+
+`ExportBackup` read the three tables with three separate, unsynchronised calls. A write landing
+between them would have been sealed into the archive as an inconsistent state — a tag whose asset
+is not in the file, a link whose owner is not. The owner's ruling: a backup is one point in time.
+
+- `UnitOfWork` gains `suspend fun <T> read(block: suspend () -> T): T` beside `write`. Contract:
+  every repository read inside `block` observes one snapshot; writing inside it is illegal.
+- `RoomUnitOfWork.read` = `db.withReadTransaction { block() }` (Room 3; §D3 §5 wording fixed to
+  name both `withWriteTransaction {}` and `withReadTransaction {}`, there is no bare
+  `withTransaction {}`).
+- `ExportBackup` takes a `UnitOfWork` and builds its `BackupData` inside one `uow.read { ... }`.
+  `AppGraph` and the two test call sites pass it.
+
+Tests:
+
+- `BackupUseCasesTest.exportReadsAllTablesInsideOneReadSnapshot` — the in-memory fakes now carry a
+  `TransactionWitness`: `FakeUnitOfWork` counts `reads` and every `all()` served in no transaction
+  bumps `readsOutsideSnapshot`. The test exports from populated fakes and asserts exactly one read
+  transaction and zero reads outside it.
+- `RoomRepositoriesTest.readTransactionRejectsWrites` — an `upsert` inside `uow.read { }` throws
+  and the row is absent afterwards.
+- `RoomRepositoriesTest.readTransactionAllowsReads` — `read { assets.all() }` returns the seeded
+  rows.
+
+**RED first.** With the fakes and the test in place but `ExportBackup` still reading outside a
+transaction:
+
+```
+> Task :core:test FAILED
+BackupUseCasesTest > exportReadsAllTablesInsideOneReadSnapshot() FAILED
+    org.opentest4j.AssertionFailedError: expected: <1> but was: <0>
+8 tests completed, 1 failed
+```
+
+**One thing the ruling did not get for free.** `readTransactionRejectsWrites` runs against a
+file-backed database (`TestDb.fileBackedDb`), not `inMemoryDb()`. An in-memory Room database is a
+single connection, so it has no read-only reader pool and `withReadTransaction` there is a
+`BEGIN DEFERRED` that happily accepts writes — probed directly: the `upsert` succeeded and the row
+was present. On a file database, which is what the app actually ships (`AppGraph` builds Room over
+`getDatabasePath(...)`), the same write is refused by the read-only reader connection and the row
+is absent. So the *refusal* is a property of the shipped configuration and the test has to sit on
+a file to observe it. The snapshot guarantee `ExportBackup` depends on holds in both.
+
+### Verification after 8.4
+
+```
+$ ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain -q
+(no output, exit 0)
+```
+
+`:core` 50 → **51**, `:app` 28 → **30**, **81 total**, 0 failures, 0 errors, 0 skipped.
 
 ## Cutover note
 

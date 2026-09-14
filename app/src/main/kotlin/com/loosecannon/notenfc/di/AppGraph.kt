@@ -40,7 +40,7 @@ class AppGraph(context: Context) {
 
     /** Produces the bytes of a v1 backup; where they go is the caller's choice (a SAF document). */
     val exportBackup: ExportBackup =
-        ExportBackup(assets, tags, links, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION)
+        ExportBackup(assets, tags, links, uow, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION)
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(assets, tags, links, uow)

@@ -43,7 +43,7 @@ class RestoreProofTest {
         val tags = RoomTagRepository(db.nfcTagDao())
         val links = RoomLinkRepository(db.externalLinkDao())
         val uow = RoomUnitOfWork(db)
-        val export = ExportBackup(assets, tags, links, Clock { FIXED_NOW }, "test", SCHEMA_VERSION)
+        val export = ExportBackup(assets, tags, links, uow, Clock { FIXED_NOW }, "test", SCHEMA_VERSION)
         val import = ImportBackupReplace(assets, tags, links, uow)
     }
 
