@@ -38,7 +38,7 @@ Each row is at least one test; the D5 worked examples are encoded verbatim as te
 
 - `NdefCodecTest`: v1 encode/decode round-trip, exact byte layout, unknown version, wrong length,
   non-zero flags, legacy valid/invalid keys, foreign records, empty message, extra records.
-- `LegacyKeyTest`: known vectors including non-ASCII input.
+- Legacy codec decode tests in `NdefCodecTest` (kept, best-effort recognition); `LegacyKeyTest` is retired with `LegacyKey` in Phase 1B (vectors remain documented in D1/D6).
 - `LinkLaunchPolicyTest`: kind detection, blocked schemes, URI extraction from share text with a
   title, malformed URIs.
 - `BackupCodecTest`: round-trip, ID preservation, unknown tables tolerated, newer format refused,
@@ -60,8 +60,7 @@ Each row is at least one test; the D5 worked examples are encoded verbatim as te
   series ordering, dashboard sort by `effective_due_on`, unique constraints raise as expected).
   With Room 3.0 and the bundled SQLite driver these run as plain JVM tests without Robolectric
   (spike S1 confirms); Robolectric remains for tests that need Android framework classes.
-- `LegacyPrefsMigrationTest` with XML fixtures (title-prefixed value, non-URI value, bad key).
-- `ResolveTagTest` for every resolution outcome.
+- `ResolveTagTest` for every resolution outcome, including unknown legacy tag → "Legacy tag" screen (no migration/re-link tests: dropped by D13).
 - Reminders: alarm armed after `BOOT_COMPLETED`/`TIME_SET`/`TIMEZONE_CHANGED`; digest content for a
   fixture DB; quick-action receiver creates exactly one event; nonce check rejects a forged
   broadcast; health detectors each produce their finding under the simulated condition.

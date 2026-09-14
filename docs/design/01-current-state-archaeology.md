@@ -209,6 +209,11 @@ HISTORICAL-VERIFIED (commit contents), intent INFERRED from messages and diffs.
 
 ## 9. Compatibility constraints the new design must honour
 
+> **Relaxed by D13 (2026-09-14).** Items 1, 3, 4 and 5 below no longer bind: the application id
+> is normalised to `com.loosecannon.notenfc` (D13 §4), the legacy key function is not needed
+> beyond documentation, the share entry point is redesigned freely, and Auto Backup of the old
+> app is irrelevant. Item 2 survives only as best-effort legacy-tag recognition.
+
 1. `applicationId` stays `com.looseCannon.noteNFC` (mixed case is legal and irrelevant to the DNS-style NFC domain, which is lower-cased on the wire).
 2. The `NDEF_DISCOVERED` filter for `vnd.android.nfc://ext/com.loosecannon.notenfc:md5_short` must remain, and its payload must be resolved through a legacy alias table.
 3. The legacy key function (`MD5(text)` → hex → `[0:8]`) must be preserved verbatim in the new code, behind a test that pins a known vector, so re-shared links reproduce old keys.

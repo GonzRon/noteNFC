@@ -145,7 +145,9 @@ NDEF message
   record 1: Android Application Record for com.looseCannon.noteNFC
 ```
 
-- Legacy tags keep record type `com.loosecannon.notenfc:md5_short` and are read-only aliases.
+- Legacy tags keep record type `com.loosecannon.notenfc:md5_short` and are read-only aliases,
+  recognised best-effort (D13): a `LEGACY_MD5` row exists only if the user binds an old tag as-is;
+  otherwise the scan offers a rewrite in payload format v1.
 - Unknown version byte (> 0x01) → "written by a newer noteNFC; update the app"; never parsed.
 - Version 0x00, wrong length, non-zero flags → rejected as malformed.
 - Size: ~44 bytes for record 0 + ~43 for the AAR + TLV overhead ≈ 95 bytes; fits NTAG213 (144 B).

@@ -1,5 +1,7 @@
 # Phase 0 exit-criteria evidence
 
+> D13 (2026-09-14, after Phase 0): the on-device old-APK tag check is now an optional sanity check, not a gate; R-1 is closed as historical.
+
 Branch `phase-0-foundation`, HEAD `0cd2184` at the time this evidence was gathered
 (2026-09-14). Exit criteria are D7's Phase 0 table (`docs/design/07-implementation-sequence.md`).
 

@@ -1,6 +1,10 @@
 # D6 — Legacy compatibility plan
 
-Status: design-phase document, 2026-09-14. Moves the app from
+Status: design-phase document, 2026-09-14. **Partly superseded by D13** (compatibility policy
+change after Phase 0): §3 automatic migration, §5 re-link / bulk recovery, §6 collision
+handling, and §9 timeline are **dropped**; §1, §4 (resolver, reduced to "recognise and offer
+rewrite/bind"), and §7 (rewrite) are retained as best-effort behaviour; §2 situation A is closed.
+Kept for the record of what was analysed. Original text follows. Moves the app from
 
 ```
 8-hex key on tag  ──▶  SharedPreferences("noteNFCURLs")[key]  ──▶  Joplin URI  ──▶  ACTION_VIEW

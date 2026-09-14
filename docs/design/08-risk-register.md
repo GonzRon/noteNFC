@@ -38,7 +38,9 @@ verified after every completion.
 
 | Id | Ruling | Consequence in the design |
 |---|---|---|
-| R-1 | Plan for no signing key; perform a non-destructive signature/keystore investigation before Phase 1 and identify the installed APK/certificate; in-place migration is a bonus | Added to Phase 0 prerequisites and exit criteria (D7); D6 unchanged (both situations handled) |
+| R-1 | Plan for no signing key; perform a non-destructive signature/keystore investigation before Phase 1 and identify the installed APK/certificate; in-place migration is a bonus | Investigation done in Phase 0 (`phase-0-evidence.md`): no key on this machine. **Closed by R-14/R-15**: in-place update is no longer a goal |
+| R-14 (2026-09-14, post-Phase 0) | Legacy compatibility is best-effort, non-blocking; the old app is not a behavioural contract; existing tags will be re-provisioned | D13; D6 partly superseded; D7 Phase 1 criteria rewritten; issues #2/#30/#31 updated, #29 closed |
+| R-15 (2026-09-14) | Normalise application id / package root to `com.loosecannon.notenfc` before the first Room schema | D13 §4; first commit of Phase 1A; new keystore; version restart 1 / "2.0" |
 | R-2 | Tag identity + binding table approved | A3 stands |
 | R-3 | Personal Todoist API token first; keep auth abstracted | D3 §8 auth row; `integration_account.auth_kind` |
 | R-4 | Design for verified HTTPS App Links and PKCE later; not a Phase 0–5 blocker; revisit before Phase 5 | A17 note; Phase 5 prerequisites; Phase 7 optional item |
@@ -56,7 +58,7 @@ verified after every completion.
 
 | # | Risk | L | I | Mitigation | Owner phase |
 |---|---|---|---|---|---|
-| 1 | **Signing key absent → reinstall wipes prefs; legacy tags orphaned** | High | High | Deterministic re-link (D6 §5); bulk "Recover legacy tags"; backup prominence; R-1 investigation before Phase 1 | 0–1 |
+| 1 | **Legacy install/tags lost at cutover** — *downgraded to historical information by R-14* | High | Low | Accepted: clean install of the new package; old tags re-provisioned in format v1; best-effort legacy recognition only | — |
 | 2 | **Recurrence correctness** (early/late/skip, month-end, leap, season re-entry) | Med | High | Pure engine, exhaustive deterministic suite, worked examples as tests, `rebuild` as the only writer | 3 |
 | 3 | **Android background delivery** (OEM battery killers, Doze, force-stop, Android 17 stopped-state NFC) | High | Med | Inexact alarm + WorkManager backstop + boot receivers; health screen explains and repairs; S4 | 3 |
 | 4 | **Toolchain churn** (AGP 9 built-in Kotlin, Room 3.0 is new, Navigation 3 1.2 pending) | Med | Med | S1 first; pin versions in the catalog; fallbacks named (Room 2.8.5 only on evidence) | 0 |
@@ -76,7 +78,8 @@ verified after every completion.
 
 ## 5. Facts that would change the plan
 
-- R-1 investigation finds the key → risk 1 drops to low; nothing else changes.
+- R-1 is closed (R-14/R-15); finding the key would change nothing.
+- If a real user base appears before Phase 1A ships, R-14/R-15 must be revisited (A21).
 - R-4 domain becomes available → App Links and PKCE OAuth join Phase 5/7 and risks 6 and 16 drop.
 - S1 fails on Room 3.0 specifically → Room 2.8.5 with the same schema; the domain is unaffected.
 - S8 passes → FIXED rules become eligible for `NATIVE_RECURRING`; A13's eligibility list widens.

@@ -40,45 +40,48 @@ only.
 | **Schema** | none |
 | **Tests** | `LegacyKeyTest` (known vectors), `NdefCodecTest` (legacy decode), a Robolectric test that `MainActivity` stores `MD5[0:8] → text` (characterisation), CI green. |
 | **User-visible** | nothing; version 1.1 (versionCode 2). |
-| **Exit criteria** | (1) `git clone && ./gradlew :core:test :app:testDebugUnitTest` passes on a machine without Android Studio; (2) a tag written by the shipped 1.0 APK resolves on a 1.1 build in situation A (if the key was found) or the legacy decode test proves the same bytes decode identically; (3) `git status` clean after `assembleDebug`; (4) the keystore investigation result is recorded in D8 R-1. |
+| **Exit criteria** | (1) `git clone && ./gradlew :core:test :app:testDebugUnitTest` passes on a machine without Android Studio; (2) the legacy decode tests prove the old on-tag bytes decode to the same key (the on-device old-APK check is an optional sanity check under D13, not a gate); (3) `git status` clean after `assembleDebug`; (4) the keystore investigation result is recorded in D8 R-1 (closed by D13). **Met 2026-09-14; see `phase-0-evidence.md`.** |
 | **Rollback / compat** | No data change. If the AGP 9 toolchain fights back, fall back to AGP 8.13 + KGP 2.x for this phase only. |
 
 ## Phase 1 — Tag survival (Milestone M1, the smallest useful end-to-end slice)
 
-Goal for the whole milestone: prove the new architecture end to end — Room store with stable IDs,
-versioned NDEF payload, resolver for both formats, legacy migration and re-link, Compose shell,
-and backup/restore that preserves every tag relationship. After this phase a phone can die and
-every tag still works after a restore. Implemented as three internal slices with their own
-falsification points; the milestone is done when 1C's criteria hold.
+Goal for the whole milestone (revised by D13): prove the new architecture end to end — Room
+store with stable IDs, payload format v1, tag resolver (legacy `md5_short` recognised
+best-effort), Compose shell, and backup/restore that preserves every *newly provisioned* tag
+relationship. After this phase a phone can die and every new tag still works after a restore.
+**Prelude (first commit of 1A):** normalise `applicationId`/`namespace`/Kotlin package root to
+`com.loosecannon.notenfc`, reset `versionCode 1` / `versionName "2.0"`, create and document a
+new release keystore outside the repo (D13 §4). Implemented as three internal slices with their
+own falsification points; the milestone is done when 1C's criteria hold.
 
 ### 1A — Persistence, legacy migration, backup/restore
 
 | | |
 |---|---|
 | **Prerequisites** | Phase 0; S1 outcome (Room 3.0.x confirmed or 2.8.5 fallback chosen); S7 (Auto Backup rules). |
-| **Source areas** | `data/room` (AppDatabase v1: `asset` minimal fields, `nfc_tag`, `external_link`), `LegacyPrefsMigration`, `backup/*` (ZIP codec, SAF export/import Replace only, auto snapshots), a minimal debug-only screen or CLI-style instrumentation to trigger export/import. |
+| **Source areas** | package-identity prelude (above); `data/room` (AppDatabase v1: `asset` minimal fields, `nfc_tag`, `external_link`), `backup/*` (ZIP codec, SAF export/import Replace only, auto snapshots), a minimal debug-only screen or CLI-style instrumentation to trigger export/import. No SharedPreferences migration (D13). |
 | **Schema** | Room v1 with exported schema. |
-| **Tests** | `BackupCodecTest` (round-trip with ID preservation, refuse newer format), `LegacyPrefsMigrationTest` (XML fixtures: title-prefixed value, non-URI value, bad key; prefs untouched), DAO tests as plain JVM tests via the bundled driver, `BackupRestoreTest` (export → wipe → import → identical rows). |
-| **Exit criteria** | (1) importing a backup produced by this build into an empty install yields identical `nfc_tag`/`asset`/`external_link` rows (byte-equal `data.json` after canonical ordering); (2) a fixture prefs file migrates into rows whose `payload_key` equals the fixture keys and the file is untouched; (3) the schema JSON is committed and a no-op migration test passes. |
+| **Tests** | `BackupCodecTest` (round-trip with ID preservation, refuse newer format), DAO tests as plain JVM tests via the bundled driver, `BackupRestoreTest` (export → wipe → import → identical rows). |
+| **Exit criteria** | (1) importing a backup produced by this build into an empty install yields identical `nfc_tag`/`asset`/`external_link` rows (byte-equal `data.json` after canonical ordering); (2) `./gradlew :app:assembleDebug` produces an APK whose package is `com.loosecannon.notenfc` and it installs beside the old app; (3) the schema JSON is committed and a no-op migration test passes. |
 
 ### 1B — Tag payload format v1, legacy resolver, real-device NFC proof
 
 | | |
 |---|---|
 | **Prerequisites** | 1A; spike S2 (reader-mode write/read-back on the user's phone). |
-| **Source areas** | `:core/nfc` (payload format v1 codec, `TagPayload`), `nfc/*` (reader mode session, writer with confirm + read-back + AAR, `NfcDispatchActivity` with both `NDEF_DISCOVERED` filters, `TECH_DISCOVERED` removed), `ResolveTag`/`BindTag` use cases, `links/LinkLaunchPolicy` + `<queries>`, unknown-tag and re-link flows (D6 §5), `notenfc://tag` deep link. Delete the three legacy activities. |
-| **Tests** | payload format v1 round-trip, exact byte layout, unknown version, malformed; `ResolveTagTest` (every row of D6 §4); `RelinkTest` (share text with/without title; collision path); `LinkLaunchPolicyTest`. |
-| **Exit criteria** | (1) an old-APK tag resolves in situation A and, after a deliberate data wipe, in situation B via re-link, on the device; (2) an NTAG213 holds the v1 message and reads back byte-identical; (3) a tag holding foreign NDEF content triggers the overwrite confirmation and is not written without it; (4) scanning with the app closed opens it through `NfcDispatchActivity`. |
+| **Source areas** | `:core/nfc` (payload format v1 codec, `TagPayload`), `nfc/*` (reader mode session, writer with confirm + read-back + AAR, `NfcDispatchActivity` with both `NDEF_DISCOVERED` filters, `TECH_DISCOVERED` removed), `ResolveTag`/`BindTag` use cases, `links/LinkLaunchPolicy` + `<queries>`, unknown-tag and legacy-tag flows (D13 §3: recognise, offer rewrite or bind), `notenfc://tag` deep link. Delete the three legacy activities; remove `LegacyKey` and `LegacyLinkPolicy` from `:core` (superseded). |
+| **Tests** | payload format v1 round-trip, exact byte layout, unknown version, malformed; `ResolveTagTest` (every resolution incl. unknown legacy → "Legacy tag" screen); `LinkLaunchPolicyTest`. |
+| **Exit criteria** | (1) an NTAG213 holds the v1 message and reads back byte-identical; (2) a tag holding foreign NDEF content (including an old `md5_short` tag) triggers the confirmation and is not written without it, and a legacy tag is recognised as such; (3) scanning with the app closed opens it through `NfcDispatchActivity`; (4) optional sanity check: an old-APK tag is recognised as legacy on the device. |
 
 ### 1C — Compose shell, asset/link UX, full restore proof
 
 | | |
 |---|---|
 | **Prerequisites** | 1A, 1B; S1's Navigation 3 confirmation; **gate G1** (D8 §2): representative-screen review of asset detail, dashboard, water-test entry, and NFC scan/write against D12 before the theme is written. |
-| **Source areas** | `ui/theme` (D12: M3 light/dark schemes, `NoteNfcSemanticColors`, typography, shapes, appearance setting with optional dynamic colour that never recolours the semantic layer); `ui`: Home (assets + links), Asset create/edit (name, category, notes) with the Asset Identity Plate skeleton, Scan/Write tag with the D12 §11 NFC states, Links, Unknown-tag/re-link, Backup, Settings shell; `notenfc://asset|link` deep links; share-sheet card (D6 §8); "no backup yet" nudge; migration report. |
+| **Source areas** | `ui/theme` (D12: M3 light/dark schemes, `NoteNfcSemanticColors`, typography, shapes, appearance setting with optional dynamic colour that never recolours the semantic layer); `ui`: Home (assets + links), Asset create/edit (name, category, notes) with the Asset Identity Plate skeleton, Scan/Write tag with the D12 §11 NFC states, Links, Unknown/legacy-tag, Backup, Settings shell; `notenfc://asset|link` deep links; share-sheet card (D6 §8); "no backup yet" nudge; migration report. |
 | **Tests** | Compose smoke tests for Home, Scan, Backup; deep-link routing tests; share-sheet intent test. |
-| **Exit criteria (milestone M1)** | (1) a new tag written on phone X resolves on phone Y after restoring X's backup, entirely through the UI; (2) the original share → write → scan → launch flow works with Joplin end to end and returns to Joplin after the write; (3) Home shows the "no backup yet" nudge until the first export succeeds, and the legacy migration report appears exactly once; (4) all 1A/1B criteria still hold. |
-| **Rollback / compat** | Prefs file untouched; the 1.0 APK can be reinstalled (with its key) and still reads prefs. Room v1 → nothing to roll back. |
+| **Exit criteria (milestone M1)** | (1) a new tag written on phone X resolves on phone Y after restoring X's backup, entirely through the UI; (2) the original share → write → scan → launch flow works with Joplin end to end and returns to Joplin after the write; (3) Home shows the "no backup yet" nudge until the first export succeeds; (4) all 1A/1B criteria still hold. |
+| **Rollback / compat** | The old app is a separate package and keeps working until uninstalled; Room v1 → nothing to roll back. |
 
 ## Phase 2 — Asset core, journal, profiles
 

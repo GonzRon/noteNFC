@@ -18,6 +18,7 @@ outside `docs/design/` was changed; no GitHub issue was edited; nothing is commi
 | [10-testing-strategy.md](10-testing-strategy.md) | testing pyramid and the deterministic scheduling suite |
 | [11-review-1-changes.md](11-review-1-changes.md) | change log from review 1, with verification of the reviewer's factual claims |
 | [12-visual-design-apollo-service-binder.md](12-visual-design-apollo-service-binder.md) | approved visual-design direction (theme, semantic status colours, signature devices); implemented from Phase 1C, never in Phase 0 |
+| [13-compatibility-policy.md](13-compatibility-policy.md) | **post-Phase-0 ruling**: legacy compatibility is best-effort and non-blocking; package identity normalised to `com.loosecannon.notenfc`; what was dropped and what stays |
 
 Terminology: the new NFC payload is **noteNFC tag payload format v1** (version byte `0x01`, record type `com.loosecannon.notenfc:tag`), the new-generation replacement for the legacy `md5_short` record. "v1" always refers to that payload version byte, never to an application generation.
 
@@ -38,8 +39,8 @@ verifies Todoist's due date against its own after every completion. A health scr
 when a reminder path is broken and repairs the unambiguous cases. Backups are a ZIP with every
 canonical table and managed attachments, IDs preserved, so tags outlive phones. Attachments are
 metadata in the database and bytes in a pluggable store (app-private or a user-chosen document
-tree, cloud-backed or not). The old `md5_short` tags keep working forever; because the old key is
-a deterministic hash of the Joplin link, a wiped mapping can be rebuilt by re-sharing the note.
+tree, cloud-backed or not). Old `md5_short` tags are recognised best-effort and offered a rewrite; nothing about the
+redesign is constrained by them (D13).
 
 Code shape: two Gradle modules — `:core` (pure Kotlin: model, scheduling engine, NDEF codec,
 backup format, link policy, ports) and `:app` (Room 3, Compose + Material 3 + Navigation 3, NFC

@@ -411,16 +411,16 @@ Scheme `notenfc://`, navigation-only, validated, versioned by path shape:
   domain and a hosted `assetlinks.json` — the same prerequisite as Todoist OAuth (ruling in D8).
 - External-link launch behaviour (§10) is a separate outbound path and is unaffected.
 
-## 14. Compatibility and migration strategy (overview; D6 has the detail)
+## 14. Compatibility and package identity (revised by D13)
 
-1. Keep the `md5_short` intent filter and resolve legacy payloads through `nfc_tag` rows with
-   `payload_format = LEGACY_MD5`.
-2. On first launch of the new app, if `noteNFCURLs` exists: import every entry as a standalone
-   `external_link` + a `LEGACY_MD5` tag row; keep the prefs file untouched for two releases.
-3. If the prefs file is absent (reinstall because of the signing-key change): unknown legacy tags
-   offer "re-link by sharing the note"; because the key is `MD5(text)[0:8]`, sharing the same
-   Joplin link recreates the mapping exactly.
-4. New tags use the `:tag` record; legacy tags are never rewritten unless the user asks.
+1. Legacy compatibility is **best-effort, non-blocking** (D13 §1). The `md5_short` intent filter
+   and the ~20-line legacy decode stay; a scanned legacy tag is recognised and offered "rewrite
+   in payload format v1" or "bind as-is". No data migration, no re-link, no recovery screens.
+2. The application id and Kotlin package root are normalised to `com.loosecannon.notenfc` as the
+   first commit of Phase 1A (D13 §4). The new app installs beside the old one; cutover is
+   install-new / uninstall-old. A new signing keystore is created and kept outside the repo.
+3. New tags use the `:tag` record with an AAR for the new package. The production requirement is
+   that newly provisioned tags survive phone replacement, reinstall, and backup/restore.
 
 ## 15. Build and toolchain targets (Phase 0)
 
@@ -428,6 +428,7 @@ Scheme `notenfc://`, navigation-only, validated, versioned by path shape:
 |---|---|
 | AGP / Gradle / Kotlin | AGP 9.4.x (already in the user's cache), Gradle 9.7.1 wrapper committed, Kotlin 2.4.x via AGP built-in Kotlin, KSP 2 for Room |
 | JDK | 17 for `compileOptions`/`jvmTarget` (JDK 25 as the Gradle daemon is fine) |
+| applicationId / namespace | `com.loosecannon.notenfc` from Phase 1A (D13 §4); Phase 0 still built the old id |
 | minSdk / targetSdk / compileSdk | 26 / 36 / 37 (platform 37 is what the local SDK has installed; raise targetSdk to 37 when the `DISPATCH_NFC_MESSAGE` permission work lands in Phase 7) |
 | Version catalog | `gradle/libs.versions.toml` |
 | Dependencies | Compose BOM 2026.08.00, Material3 1.4.x, Navigation 3 1.1.x (1.1.7 stable, 2026-08-26; 1.2.0-rc01 pending), Room 3.0.x (`androidx.room3`, 3.0.3) + KSP 2 + `androidx.sqlite` bundled driver for JVM tests, WorkManager 2.11.x, DataStore, kotlinx-serialization (backup JSON), kotlinx-coroutines, OkHttp (Phase 5), JUnit 5 + Robolectric + Room testing |
@@ -457,4 +458,5 @@ Scheme `notenfc://`, navigation-only, validated, versioned by path shape:
 | A17 | `notenfc://` custom scheme, navigation-only | App Links (need domain) | owning a domain (ruling R-4: design for it, do not block on it) |
 | A18 (revised in review 1) | Room 3.0.x (`androidx.room3`) from the first schema; 2.8.5 only as the S1 fallback | Room 2.8 now with a package migration later (maintenance-mode line; the premise that 3.0 was still alpha was out of date — 3.0.0…3.0.3 are stable) | S1 showing a concrete Room 3 tooling or migration-test deficiency |
 | A19 (added in review 1) | Providers per schedule are a set (`schedule_provider` rows; one projection per provider); the MVP UI is single-choice | a single `reminder_provider` enum column (would encode "exactly one provider" as a schema invariant and need a migration to relax) | none |
+| A21 (added by D13) | Normalise the application id / package root to `com.loosecannon.notenfc` before the first Room schema; legacy compatibility demoted to best-effort recognition + rewrite | keep `com.looseCannon.noteNFC` for in-place update (worthless without the signing key); elaborate migration/re-link machinery (constrains Phase 1 for data nobody needs) | a production user base appearing before Phase 1A ships |
 | A20 (added in review 1) | The Todoist representation is chosen per schedule from rule capabilities and re-evaluated on edit; verification of the remote due date after each completion is mandatory in both representations | trusting Todoist's post-completion date; a global per-account setting | none |
