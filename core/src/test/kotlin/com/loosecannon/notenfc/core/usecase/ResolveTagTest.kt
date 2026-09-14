@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class ResolveTagTest {
     private val assets = InMemoryAssetRepository()
@@ -74,7 +75,7 @@ class ResolveTagTest {
     @Test fun unknownV1AndLegacyAreDistinct() = runTest {
         assertEquals(Resolution.UnknownV1(v1Id), resolve.run(TagPayload.V1(v1Id)))
         assertEquals(Resolution.UnknownLegacy("63b37acf"), resolve.run(TagPayload.LegacyMd5("63b37acf")))
-        assertEquals(0, uow.commits)
+        assertTrue(tags.rows.isEmpty())
     }
     @Test fun lookupIsByFormatAndKeyNotById() = runTest {
         // a LEGACY row whose payload key happens to equal a v1 id string must not resolve a v1 scan

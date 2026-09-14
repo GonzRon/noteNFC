@@ -41,19 +41,17 @@ class ResolveTag(
     }
 
     /** Lookup is by (format, key) — never by row id (D4 §3). A hit records the scan. */
-    private suspend fun known(format: PayloadFormat, key: String): Resolution? {
-        val row = tags.findByPayload(format, key) ?: return null
-        return uow.write {
-            val tag = row.copy(lastScannedAt = clock.nowMillis())
-            tags.upsert(tag)
-            when {
-                tag.status == TagStatus.LOST || tag.status == TagStatus.RETIRED -> Resolution.Revoked(tag)
-                tag.status == TagStatus.UNBOUND -> Resolution.Unbound(tag)
-                else -> when (val t = tag.target) {
-                    is TagTarget.AssetTarget -> assets.get(t.assetId)?.let { Resolution.OpenAsset(tag, it) } ?: Resolution.Unbound(tag)
-                    is TagTarget.LinkTarget -> links.get(t.linkId)?.let { Resolution.LaunchLink(tag, it) } ?: Resolution.Unbound(tag)
-                    TagTarget.None -> Resolution.Unbound(tag)
-                }
+    private suspend fun known(format: PayloadFormat, key: String): Resolution? = uow.write {
+        val row = tags.findByPayload(format, key) ?: return@write null
+        val tag = row.copy(lastScannedAt = clock.nowMillis())
+        tags.upsert(tag)
+        when {
+            tag.status == TagStatus.LOST || tag.status == TagStatus.RETIRED -> Resolution.Revoked(tag)
+            tag.status == TagStatus.UNBOUND -> Resolution.Unbound(tag)
+            else -> when (val t = tag.target) {
+                is TagTarget.AssetTarget -> assets.get(t.assetId)?.let { Resolution.OpenAsset(tag, it) } ?: Resolution.Unbound(tag)
+                is TagTarget.LinkTarget -> links.get(t.linkId)?.let { Resolution.LaunchLink(tag, it) } ?: Resolution.Unbound(tag)
+                TagTarget.None -> Resolution.Unbound(tag)
             }
         }
     }
