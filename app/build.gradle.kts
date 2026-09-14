@@ -68,7 +68,10 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.room3.runtime)
     ksp(libs.room3.compiler)
-    implementation(libs.sqlite.bundled)
+    // No sqlite-bundled on the production classpath: AndroidSQLiteDriver comes from
+    // androidx.sqlite:sqlite-framework, which room3-runtime-android already pulls in, and the
+    // platform ships SQLite anyway. Bundling it only added four .so files the app never calls.
+    // The JVM tests are the exception and take sqlite-bundled-jvm below.
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit4)
