@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.data.room
 
 import com.loosecannon.notenfc.data.room.entities.AssetEntity
 import com.loosecannon.notenfc.data.room.entities.ExternalLinkEntity
+import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -27,6 +28,30 @@ class ExternalLinkDaoTest {
             val l = link("l1", "Manual")
             db.externalLinkDao().upsert(l)
             assertEquals(l, db.externalLinkDao().byId("l1"))
+        } finally {
+            db.close()
+        }
+    }
+
+    /** Same upsert ruling as [AssetDaoTest]: updating a link must not unbind the tags on it. */
+    @Test
+    fun upsertOfAnExistingLinkKeepsItsTagsBound() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.externalLinkDao().upsert(link("l1", "Manual"))
+            db.nfcTagDao().upsert(
+                NfcTagEntity(
+                    id = "t1", payloadFormat = "V1", payloadKey = "key-t1", assetId = null,
+                    linkId = "l1", status = "ACTIVE", label = null, physicalUid = null,
+                    writtenAt = null, lastScannedAt = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+
+            db.externalLinkDao().upsert(link("l1", "Manual").copy(label = "Service manual", updatedAt = 9_000L))
+
+            assertEquals("Service manual", db.externalLinkDao().byId("l1")!!.label)
+            assertEquals("l1", db.nfcTagDao().byId("t1")!!.linkId)
+            assertEquals(listOf("t1"), db.nfcTagDao().forLink("l1").map { it.id })
         } finally {
             db.close()
         }

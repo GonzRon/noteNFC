@@ -1,6 +1,8 @@
 package com.loosecannon.notenfc.data.room
 
 import com.loosecannon.notenfc.data.room.entities.AssetEntity
+import com.loosecannon.notenfc.data.room.entities.ExternalLinkEntity
+import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -42,6 +44,44 @@ class AssetDaoTest {
             dao.upsert(updated)
             assertEquals(updated, dao.byId("a1"))
             assertEquals(1, dao.all().size)
+        } finally {
+            db.close()
+        }
+    }
+
+    /**
+     * The upsert ruling: an update of an existing row must not delete and re-insert it. A REPLACE
+     * would, and the delete would fire `external_link` CASCADE and `nfc_tag` SET NULL, quietly
+     * unbinding every child. This is the test that would fail if anyone "simplified" the DAO back
+     * to `@Upsert` or `INSERT OR REPLACE`.
+     */
+    @Test
+    fun upsertOfAnExistingAssetKeepsItsChildrenBound() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1", "Hot tub"))
+            db.externalLinkDao().upsert(
+                ExternalLinkEntity(
+                    id = "l1", assetId = "a1", kind = "WEB", label = "Manual",
+                    uri = "https://example.invalid/l1", createdAt = 1L, lastOpenedAt = null,
+                    updatedAt = 1L,
+                ),
+            )
+            db.nfcTagDao().upsert(
+                NfcTagEntity(
+                    id = "t1", payloadFormat = "V1", payloadKey = "key-t1", assetId = "a1",
+                    linkId = null, status = "ACTIVE", label = null, physicalUid = null,
+                    writtenAt = null, lastScannedAt = null, createdAt = 1L, updatedAt = 1L,
+                ),
+            )
+
+            db.assetDao().upsert(asset("a1", "Hot tub").copy(name = "Spa", updatedAt = 9_000L))
+
+            assertEquals("Spa", db.assetDao().byId("a1")!!.name)
+            assertEquals("a1", db.nfcTagDao().byId("t1")!!.assetId)
+            assertEquals("a1", db.externalLinkDao().byId("l1")!!.assetId)
+            assertEquals(listOf("t1"), db.nfcTagDao().forAsset("a1").map { it.id })
+            assertEquals(listOf("l1"), db.externalLinkDao().forAsset("a1").map { it.id })
         } finally {
             db.close()
         }

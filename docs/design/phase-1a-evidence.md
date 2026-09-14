@@ -13,10 +13,10 @@ demonstrated, 7–9 are the things that must **not** have been built.
 |---|---|---|---|
 | 1 | Package identity normalised | `aapt dump badging` on both APKs: `package: name='com.loosecannon.notenfc' versionCode='1' versionName='2.0'` (§1) | **Pass** |
 | 2 | Room 3 schema v1 for Asset / NfcTag / ExternalLink, exported `1.json` committed | `app/schemas/com.loosecannon.notenfc.data.room.AppDatabase/1.json`, tracked by git; version 1, tables `asset`, `nfc_tag`, `external_link`, identityHash `ec9cee7c4071ec5303cf7975868fea93` (§2) | **Pass** |
-| 3 | Durable IDs + repository layer with JVM tests | UUID-v4 string PKs generated in `:core` (`UuidGenerator`), never by SQLite; `RoomAssetRepository` / `RoomTagRepository` / `RoomLinkRepository` / `RoomUnitOfWork` over pure domain models; 26 JVM tests in `:app` (§3, §6) | **Pass** |
+| 3 | Durable IDs + repository layer with JVM tests | UUID-v4 string PKs generated in `:core` (`UuidGenerator`), never by SQLite; `RoomAssetRepository` / `RoomTagRepository` / `RoomLinkRepository` / `RoomUnitOfWork` over pure domain models; 28 JVM tests in `:app` (§3, §6) | **Pass** |
 | 4 | Replace-mode backup export/import | `BackupCodec` (ZIP of `manifest.json` + `data.json`, SHA-256 over the data entry), `ExportBackup`, `ImportBackupReplace` in one write transaction; `SafBackupIO` binds it to a user-picked SAF document; wired into `AppGraph` as `exportBackup` / `importBackupReplace` (§4) | **Pass** |
 | 5 | The proof: create → export → wipe/reinstall-equivalent → restore → same IDs and relationships | `RestoreProofTest.forgetEverythingAndRebuildTheSameGraph` (JVM, bundled SQLite driver). Assertions quoted in §5. | **Pass** |
-| 6 | JVM DAO / schema / backup tests | `:core` 43 tests, `:app` 26 tests, **69 total**, 0 failures, 0 errors, 0 skipped (§6) | **Pass** |
+| 6 | JVM DAO / schema / backup tests | `:core` 50 tests, `:app` 28 tests, **78 total**, 0 failures, 0 errors, 0 skipped (§6) | **Pass** |
 | 7 | No NFC-writing UX added | The three legacy activities are byte-for-byte the pre-1A code, moved packages only. No new NFC write path, no tag-binding screen. The only new screen is debug-build-only (§7). | **Pass (nothing built)** |
 | 8 | No maintenance model | No schedule, interval, due-date, event or reminder table, entity or use case exists. Schema v1 is exactly three tables. | **Pass (nothing built)** |
 | 9 | No Apollo UI | No Compose dependency, no design system, no theme, no navigation. The debug screen is plain `android.app.Activity` + `android.widget` on an XML `LinearLayout` — deliberately ugly so it cannot be mistaken for product UI. | **Pass (nothing built)** |
@@ -85,12 +85,12 @@ owns it.
 
 | Class | tests |
 |---|---|
-| `AssetDaoTest` | 4 |
+| `AssetDaoTest` | 5 |
 | `NfcTagDaoTest` | 7 |
-| `ExternalLinkDaoTest` | 4 |
+| `ExternalLinkDaoTest` | 5 |
 | `RoomRepositoriesTest` | 9 |
 | `RestoreProofTest` | 2 |
-| **total** | **26** |
+| **total** | **28** |
 
 ## 4. Replace-mode backup
 
@@ -99,8 +99,11 @@ owns it.
   SHA-256 of the `data.json` bytes. Lists are sorted by id and entry times are fixed, so the same
   input always encodes to the same bytes.
 - A newer `formatVersion` raises `BackupNewerFormat`; a hash mismatch, a missing entry,
-  unparsable JSON, or an enum value this build cannot name raises `BackupCorrupt`. Both happen
-  **before** the transaction opens, so a refused import cannot have touched anything.
+  unparsable JSON, or an enum value this build cannot name raises `BackupCorrupt`. So does a
+  broken graph: `decode()` also checks that ids are unique within each of the three lists and that
+  every non-null `externalLinks[].assetId`, `nfcTags[].assetId` and `nfcTags[].linkId` resolves
+  inside the file (§8). All of it happens **before** the transaction opens, so a refused import
+  cannot have touched anything.
 - `ImportBackupReplace` runs `deleteAll` ×3 then the three insert loops inside one
   `withWriteTransaction`; inserts go assets → links → tags so foreign keys hold at every step.
 - `SafBackupIO(resolver, uri)` implements the `BackupIO` port over a user-picked document,
@@ -118,8 +121,9 @@ LEGACY_MD5, link-bound V1, unbound spare, all inside one `uow.write`), **Export*
 `ExportBackup.run()` → `SafBackupIO.write`), **Import (replace)** (`ACTION_OPEN_DOCUMENT` →
 `SafBackupIO.read` → `ImportBackupReplace.run` → the `ImportReport` on screen), **Wipe**
 (`deleteAll` ×3 in one transaction). Counts (`assets / tags / links`) refresh after every action;
-failures surface as a `Toast` plus a line under the counts. Coroutines come from a `MainScope()`
-cancelled in `onDestroy`.
+**every** outcome — success, failure and a cancelled picker alike — goes through the same
+`report()`, which raises a `Toast` and writes the same line under the counts. Coroutines come
+from a `MainScope()` cancelled in `onDestroy`.
 
 ## 5. The proof
 
@@ -193,19 +197,19 @@ Counts read from the JUnit XML (`core/build/test-results/test/`,
 
 | Module | Class | tests | failures | errors | skipped |
 |---|---|---|---|---|---|
-| `:core` | `BackupCodecTest` | 16 | 0 | 0 | 0 |
+| `:core` | `BackupCodecTest` | 23 | 0 | 0 | 0 |
 | `:core` | `BackupUseCasesTest` | 7 | 0 | 0 | 0 |
 | `:core` | `NdefCodecTest` | 9 | 0 | 0 | 0 |
 | `:core` | `LegacyKeyTest` | 6 | 0 | 0 | 0 |
 | `:core` | `LegacyLinkPolicyTest` | 5 | 0 | 0 | 0 |
-| `:core` | **total** | **43** | **0** | **0** | **0** |
-| `:app` | `AssetDaoTest` | 4 | 0 | 0 | 0 |
+| `:core` | **total** | **50** | **0** | **0** | **0** |
+| `:app` | `AssetDaoTest` | 5 | 0 | 0 | 0 |
 | `:app` | `NfcTagDaoTest` | 7 | 0 | 0 | 0 |
-| `:app` | `ExternalLinkDaoTest` | 4 | 0 | 0 | 0 |
+| `:app` | `ExternalLinkDaoTest` | 5 | 0 | 0 | 0 |
 | `:app` | `RoomRepositoriesTest` | 9 | 0 | 0 | 0 |
 | `:app` | `RestoreProofTest` | 2 | 0 | 0 | 0 |
-| `:app` | **total** | **26** | **0** | **0** | **0** |
-| | **Phase 1A total** | **69** | **0** | **0** | **0** |
+| `:app` | **total** | **28** | **0** | **0** | **0** |
+| | **Phase 1A total** | **78** | **0** | **0** | **0** |
 
 ## 7. The debug screen is not in the release build
 
@@ -219,6 +223,104 @@ $ aapt dump xmltree app/build/outputs/apk/release/app-release.apk AndroidManifes
 And in the bytecode, not only the manifest — searching every `classes*.dex` in each APK for the
 class name: debug 12 occurrences, release **0**. The screen lives entirely under `app/src/debug/`,
 so the release variant never compiles it.
+
+## 8. Final review fixes
+
+Three Important findings from the Phase 1A final review, all inside the authorised scope.
+
+### 8.1 The bundled SQLite natives are gone from the shipped APK
+
+`implementation(libs.sqlite.bundled)` was in `app/build.gradle.kts` — a plan defect, not a coding
+slip. `AndroidSQLiteDriver` (the only driver the app itself uses, in `AppGraph`) comes from
+`androidx.sqlite:sqlite-framework`, which `room3-runtime-android` already depends on, so the
+bundled native build was pure payload: four `lib/*/libsqlite3*.so` slices the app never calls.
+The line is deleted; `testImplementation(libs.sqlite.bundled.jvm)` stays, because the JVM tests
+genuinely need it (`TestDb.inMemoryDb()` builds Room over `BundledSQLiteDriver`). Nothing had to
+be added to replace it — `sqlite-framework` arrives transitively and the build resolves clean.
+
+```
+$ unzip -l app/build/outputs/apk/release/app-release.apk | grep -c 'lib/'
+0
+$ unzip -l app/build/outputs/apk/debug/app-debug.apk   | grep -c 'lib/'
+0
+```
+
+| APK | before | after | delta |
+|---|---|---|---|
+| release | 7,323,927 B (6.98 MiB), 4 `lib/` entries | 2,424,909 B (2.31 MiB), 0 | **−4.90 MB, −66.9%** |
+| debug | 10,787,122 B (10.29 MiB), 4 `lib/` entries | 7,870,130 B (7.51 MiB), 0 | **−2.92 MB, −27.0%** |
+
+### 8.2 `BackupCodec.decode()` validates the graph, not just the rows
+
+The DTO→domain pass proved every row was *nameable*; it did not prove the rows *fit together*. A
+file whose `nfcTags[].linkId` pointed at a link that is not in the archive would have passed
+`decode()` and then failed inside `ImportBackupReplace`'s single write transaction — after
+`deleteAll` ×3, with the user's real data already gone. `decode()` now runs `validateGraph(data)`
+after the DTO pass and before returning:
+
+- ids unique within `assets`, within `nfcTags`, within `externalLinks`;
+- every non-null `externalLinks[].assetId` present in `assets`;
+- every non-null `nfcTags[].assetId` present in `assets`;
+- every non-null `nfcTags[].linkId` present in `externalLinks`.
+
+Each violation throws `BackupCorrupt` naming the table, the offending id, and the dangling or
+duplicated reference, e.g. `nfcTags: tag t5 points at link l404, which is not in externalLinks`
+and `assets: duplicate id a1`.
+
+Seven tests added to `BackupCodecTest` (16 → 23): dangling link→asset, dangling tag→asset,
+dangling tag→link, duplicate asset id, duplicate tag id, duplicate link id, and one asserting the
+valid fixture still decodes whole. `encode()` deliberately does not validate, so a broken fixture
+seals into a well-formed archive — matching hash, nameable enums — and only `decode()` is on
+trial.
+
+**Mutation check.** With `validateGraph(data)` commented out:
+
+```
+> Task :core:test FAILED
+BackupCodecTest > a duplicate asset id is corrupt() FAILED
+BackupCodecTest > a tag pointing at a missing asset is corrupt() FAILED
+BackupCodecTest > a duplicate tag id is corrupt() FAILED
+BackupCodecTest > a link pointing at a missing asset is corrupt() FAILED
+BackupCodecTest > a tag pointing at a missing link is corrupt() FAILED
+BackupCodecTest > a duplicate link id is corrupt() FAILED
+50 tests completed, 6 failed
+```
+
+The seventh (`the fixture graph is referentially whole`) stays green either way, as it should.
+
+### 8.3 The upsert ruling now has tests
+
+Deviation 1 says `@Upsert` and `INSERT OR REPLACE` were both rejected because a REPLACE deletes
+the old row first, firing `external_link` CASCADE and `nfc_tag` SET NULL and silently unbinding
+every child. That was an argument with nothing holding it in place. Two tests now do:
+
+- `AssetDaoTest.upsertOfAnExistingAssetKeepsItsChildrenBound` — seed asset `a1` with one bound tag
+  and one bound link, upsert `a1` with a changed name, assert `nfc_tag.asset_id` and
+  `external_link.asset_id` are both still `a1` (and still reachable via `forAsset`) while the name
+  did change.
+- `ExternalLinkDaoTest.upsertOfAnExistingLinkKeepsItsTagsBound` — seed link `l1` with one bound
+  tag, upsert `l1` with a changed label, assert `nfc_tag.link_id` is still `l1`.
+
+**Mutation check.** With both `upsert` bodies changed from `if (update(e) == 0) insert(e)` to
+`delete(e.id); insert(e)` — i.e. REPLACE semantics:
+
+```
+> Task :app:testDebugUnitTest FAILED
+AssetDaoTest > upsertOfAnExistingAssetKeepsItsChildrenBound FAILED
+ExternalLinkDaoTest > upsertOfAnExistingLinkKeepsItsTagsBound FAILED
+28 tests completed, 2 failed
+```
+
+Only the two new tests notice — which is exactly why they were missing.
+
+### Verification after all three
+
+```
+$ ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --console=plain -q
+(no output, exit 0)
+```
+
+`:core` 43 → **50**, `:app` 26 → **28**, **78 total**, 0 failures, 0 errors, 0 skipped.
 
 ## Cutover note
 
