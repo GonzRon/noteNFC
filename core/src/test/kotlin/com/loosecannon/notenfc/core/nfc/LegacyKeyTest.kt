@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.core.nfc
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class LegacyKeyTest {
     // Vectors computed with `printf '%s' "<text>" | md5sum | cut -c1-8`; they pin the legacy behaviour verbatim.
@@ -15,6 +16,6 @@ class LegacyKeyTest {
     @Test fun alwaysEightLowercaseHexChars() {
         val k = LegacyKey.compute("anything at all")
         assertEquals(8, k.length)
-        assert(k.all { it in '0'..'9' || it in 'a'..'f' }) { "not lowercase hex: $k" }
+        assertTrue(k.all { it in '0'..'9' || it in 'a'..'f' }, "not lowercase hex: $k")
     }
 }
