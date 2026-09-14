@@ -53,6 +53,7 @@ This replaces the original single "MVP" list. Tiers and phases are D2 §1 and D7
 - #8 backup / export / import (re-tiered to MVP-1)
 - `new-deeplink-contract` — the `notenfc://` contract
 - `new-untrusted-input-policy` — tag payloads, deep links, stored URIs
+- `new-design-system-foundation` — the Compose design system foundation (Apollo Service Binder) ships in slice 1C behind gate G1's representative-screen review; every later phase consumes its semantic tokens rather than inventing its own colour conventions
 
 **Phase 2 — Journal + profiles**
 
@@ -89,3 +90,4 @@ Cloud service / mandatory login; live IoT telemetry; predictive maintenance / AI
 - D2 §1 row 1 (tier: Epic, keep open, no code), D2 §5 ("rewrite as epic").
 - `docs/design/README.md` — architecture summary, phase sequence, the twelve consequential decisions.
 - D7 — the phase-by-phase sequence with falsifiable exit criteria.
+- D12 (Apollo Service Binder) — "Scope rule" (Phase 0 stays behaviour-preserving; Phase 1C builds the design system; Phases 2 and 3 refine the signature devices and the attention hierarchy), "Signature devices", "Non-negotiables".
