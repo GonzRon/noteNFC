@@ -35,9 +35,18 @@ sealed interface WriteResult {
  * Read-first, write, read-back (D3 §9). Every function blocks on tag I/O: call from a worker
  * thread, never the main thread. Decisions (overwrite? which target?) are made by the caller
  * between [inspect] and [write], while the tag stays in the field.
+ *
+ * The two halves report failure differently on purpose: [write] never throws for tag I/O and
+ * folds every such failure into [WriteResult.Failed], while [inspect] lets it propagate.
  */
 object TagWriter {
 
+    /**
+     * What is on the tag right now, or null when it is neither `Ndef` nor `NdefFormatable`.
+     *
+     * @throws java.io.IOException (including `android.nfc.TagLostException`) when the tag leaves
+     * the field or I/O fails mid-read; callers run this off the main thread inside a try/catch.
+     */
     fun inspect(tag: Tag): TagInspection? {
         val uid = tag.id.toHexOrNull()
         Ndef.get(tag)?.let { ndef ->

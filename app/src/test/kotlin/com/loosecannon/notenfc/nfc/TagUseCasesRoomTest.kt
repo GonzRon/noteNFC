@@ -35,9 +35,9 @@ class TagUseCasesRoomTest {
             val tags = RoomTagRepository(db.nfcTagDao())
             val links = RoomLinkRepository(db.externalLinkDao())
             val uow = RoomUnitOfWork(db)
-            val clock = Clock { 42L }
-            val provision = ProvisionTag(tags, assets, links, uow, UuidGenerator, clock)
-            val resolve = ResolveTag(tags, assets, links, uow, clock)
+            // two clocks, so `lastScannedAt` cannot pass by coinciding with the write time
+            val provision = ProvisionTag(tags, assets, links, uow, UuidGenerator, Clock { 42L })
+            val resolve = ResolveTag(tags, assets, links, uow, Clock { 43L })
 
             uow.write { assets.upsert(Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)) }
             val row = provision.begin(TagTarget.AssetTarget(AssetId("a1")), "lid")
@@ -48,7 +48,8 @@ class TagUseCasesRoomTest {
             assertTrue(r.toString(), r is Resolution.OpenAsset)
             r as Resolution.OpenAsset
             assertEquals("Hot tub", r.asset.name)
-            assertEquals(42L, r.tag.lastScannedAt)
+            assertEquals(42L, r.tag.writtenAt)
+            assertEquals(43L, r.tag.lastScannedAt)
             assertEquals("04aabbcc", r.tag.physicalUid)
         } finally {
             db.close()
@@ -83,9 +84,8 @@ class TagUseCasesRoomTest {
             val tags = RoomTagRepository(db.nfcTagDao())
             val links = RoomLinkRepository(db.externalLinkDao())
             val uow = RoomUnitOfWork(db)
-            val clock = Clock { 3L }
-            val bind = BindTag(tags, assets, links, uow, UuidGenerator, clock)
-            val resolve = ResolveTag(tags, assets, links, uow, clock)
+            val bind = BindTag(tags, assets, links, uow, UuidGenerator, Clock { 42L })
+            val resolve = ResolveTag(tags, assets, links, uow, Clock { 43L })
             uow.write { assets.upsert(Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)) }
 
             assertEquals(Resolution.UnknownLegacy("63b37acf"), resolve.run(TagPayload.LegacyMd5("63b37acf")))
@@ -93,6 +93,8 @@ class TagUseCasesRoomTest {
             assertEquals(TagStatus.ACTIVE, row.status)
             val r = resolve.run(TagPayload.LegacyMd5("63b37acf"))
             assertTrue(r.toString(), r is Resolution.OpenAsset)
+            r as Resolution.OpenAsset
+            assertEquals(43L, r.tag.lastScannedAt)
             // binding again retargets the same row: still exactly one row for this payload
             bind.run(PayloadFormat.LEGACY_MD5, "63b37acf", TagTarget.AssetTarget(AssetId("a1")), label = "old sticker")
             assertEquals(1, tags.all().size)
