@@ -2,8 +2,12 @@ package com.loosecannon.notenfc.ui.journal
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.notenfc.core.journal.Derived
+import com.loosecannon.notenfc.core.journal.Reading
+import com.loosecannon.notenfc.core.journal.classify
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.ports.AssetRepository
@@ -32,6 +36,12 @@ data class EventDetailState(
     val event: AssetEvent,
     val definitions: Map<DefinitionId, MeasurementDefinition>,
     val assetName: String,
+    /**
+     * What the asset derives from this entry's own readings (spec §5), computed on every emission
+     * and stored nowhere. Empty when the asset has no unarchived DERIVED definition, or when the
+     * entry carried no readings at all; a row that cannot be computed is present and reads "—".
+     */
+    val derived: List<Reading> = emptyList(),
 )
 
 /**
@@ -55,10 +65,12 @@ class EventDetailViewModel(
     val state: StateFlow<EventDetailState?> = row
         .map { event ->
             event?.let {
+                val byId = definitions.forAsset(it.assetId).associateBy(MeasurementDefinition::id)
                 EventDetailState(
                     event = it,
-                    definitions = definitions.forAsset(it.assetId).associateBy(MeasurementDefinition::id),
+                    definitions = byId,
                     assetName = assets.get(it.assetId)?.name.orEmpty(),
+                    derived = derivedFor(it, byId),
                 )
             }
         }
@@ -82,4 +94,30 @@ class EventDetailViewModel(
             _deleted.tryEmit(Unit)
         }
     }
+}
+
+/**
+ * The asset's unarchived DERIVED definitions against this one event, same-event semantics and all
+ * (spec §5). An entry that recorded no readings gets none of them: a row that could never have a
+ * value on an entry with nothing to derive from is noise, not information.
+ */
+private fun derivedFor(
+    event: AssetEvent,
+    definitions: Map<DefinitionId, MeasurementDefinition>,
+): List<Reading> {
+    if (event.measurements.isEmpty()) return emptyList()
+    return definitions.values
+        .filter { it.kind == DefinitionKind.DERIVED && it.archivedAt == null }
+        .sortedBy { it.sortOrder }
+        .map { definition ->
+            val value = Derived.compute(definition, event, definitions)
+            Reading(
+                definition = definition,
+                measurement = null,
+                occurredOn = event.occurredOn,
+                occurredTime = event.occurredTime,
+                state = value?.let { classify(it, definition.rangeLow, definition.rangeHigh) },
+                derivedValue = value,
+            )
+        }
 }

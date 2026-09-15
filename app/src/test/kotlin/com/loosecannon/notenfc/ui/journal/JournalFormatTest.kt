@@ -1,9 +1,13 @@
 package com.loosecannon.notenfc.ui.journal
 
+import com.loosecannon.notenfc.core.journal.Reading
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.ConsumableUsage
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.DerivedFormula
+import com.loosecannon.notenfc.core.model.DerivedSpec
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
@@ -31,6 +35,8 @@ class JournalFormatTest {
         decimals: Int = 1,
         low: Double? = null,
         high: Double? = null,
+        kind: DefinitionKind = DefinitionKind.ENTERED,
+        derived: DerivedSpec? = null,
     ) = MeasurementDefinition(
         id = DefinitionId("d-$key"),
         assetId = AssetId("a"),
@@ -46,6 +52,8 @@ class JournalFormatTest {
         archivedAt = null,
         createdAt = 1L,
         updatedAt = 1L,
+        kind = kind,
+        derived = derived,
     )
 
     private fun number(def: MeasurementDefinition, value: Double, sortOrder: Int = 0) = Measurement(
@@ -154,6 +162,40 @@ class JournalFormatTest {
 
         assertEquals("Swapped the filter", eventDetailLine(event(notes = "Swapped the filter\nsecond line"), defs))
         assertEquals("", eventDetailLine(event(), defs))
+    }
+
+    /** The one number formatter of §10: a quantity with only the decimals it needs, nothing else. */
+    @Test fun numbersKeepOnlyTheDecimalsTheyNeed() {
+        assertEquals("1", formatNumber(1.0))
+        assertEquals("0.5", formatNumber(0.5))
+        assertEquals("110", formatNumber(110.0))
+        assertEquals("-2.25", formatNumber(-2.25))
+        assertEquals("0", formatNumber(0.0))
+    }
+
+    /**
+     * A derived reading carries no measurement (spec §5), so it is formatted from `derivedValue` at
+     * the derived definition's own precision — and reads as nothing at all when this event could
+     * not produce one, which the row draws as an em dash.
+     */
+    @Test fun aDerivedReadingFormatsAtItsOwnPrecision() {
+        val rejection = definition(
+            key = "rejection_percent",
+            label = "Rejection",
+            unit = "%",
+            decimals = 1,
+            kind = DefinitionKind.DERIVED,
+            derived = DerivedSpec(DerivedFormula.PERCENT_DROP, DefinitionId("d-a"), DefinitionId("d-b")),
+        )
+        val computed = Reading(rejection, null, "2026-09-15", null, null, derivedValue = 94.19354838709677)
+        assertEquals("94.2", formatValue(computed))
+
+        val nothing = Reading(rejection, null, null, null, null, derivedValue = null)
+        assertNull(formatValue(nothing))
+
+        // An entered reading still comes off its measurement, through the same one-argument call.
+        val ph = definition("ph", "pH", decimals = 1, low = 7.2, high = 7.8)
+        assertEquals("7.4", formatValue(Reading(ph, number(ph, 7.4), "2026-09-15", null, null)))
     }
 
     @Test fun theStateWordsAreExactlyTheOnesTheSpecNames() {

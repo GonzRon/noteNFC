@@ -14,6 +14,15 @@ sealed interface Route : NavKey {
     @Serializable data class AssetDetail(val id: String) : Route
     @Serializable data class AssetEdit(val id: String?) : Route
 
+    /** What this asset measures and what can be logged against it — the editors of spec §9. */
+    @Serializable data class AssetSetup(val assetId: String) : Route
+
+    /** New when [definitionId] is null, otherwise that reading of [assetId]. */
+    @Serializable data class DefinitionEdit(val assetId: String, val definitionId: String?) : Route
+
+    /** New when [profileId] is null, otherwise that action of [assetId]. */
+    @Serializable data class ProfileEdit(val assetId: String, val profileId: String?) : Route
+
     /** New when [eventId] is null; [profileId] null is a free-form entry with no profile behind it. */
     @Serializable data class EventEntry(val assetId: String, val profileId: String?, val eventId: String?) : Route
     @Serializable data class EventDetail(val id: String) : Route

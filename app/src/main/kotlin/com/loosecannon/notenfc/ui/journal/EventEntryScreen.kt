@@ -3,15 +3,14 @@ package com.loosecannon.notenfc.ui.journal
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
@@ -44,10 +43,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.notenfc.core.journal.Reading
 import com.loosecannon.notenfc.core.model.ProfileConsumable
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.ui.components.InstrumentEntryHeader
 import com.loosecannon.notenfc.ui.components.InstrumentEntryRow
+import com.loosecannon.notenfc.ui.components.InstrumentList
+import com.loosecannon.notenfc.ui.components.InstrumentRow
 import com.loosecannon.notenfc.ui.components.SectionHeader
 import com.loosecannon.notenfc.ui.theme.BadgeShape
 import com.loosecannon.notenfc.ui.theme.ControlShape
@@ -58,7 +60,8 @@ import com.loosecannon.notenfc.ui.theme.MonoText
  * The field test sheet of G1 §1.3: app bar with ✕, the eyebrow and Save; the date it is logged
  * against; one row per profile field under a READING / VALUE / TARGET header; the materials that
  * went in, kept deliberately apart from the readings (D12 §9 — measurement ≠ intervention); a
- * note; and Save again at the bottom so it stays reachable with the keyboard open.
+ * note; and Save again at the bottom so it stays reachable with the keyboard open. Anything the
+ * asset derives from those inputs reads back live under them, never as a field (spec §5).
  *
  * The form knows nothing about what kind of asset this is: the rows come from the profile and the
  * control in each row comes from its definition's value type.
@@ -114,35 +117,37 @@ fun EventEntryScreen(
             )
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.padding(padding).padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 24.dp),
+        // A `Column` and not a `LazyColumn`: a lazy list disposes the row the keyboard is over as
+        // soon as it scrolls out, which on a long profile took the focus and the IME with it
+        // (spec §9, the 2A fix). Every row is composed, so `ImeAction.Next` reaches all of them.
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
         ) {
-            item("logged") {
-                LoggedBlock(
-                    occurredOn = state.occurredOn,
-                    occurredTime = state.occurredTime,
-                    onDate = model::onDate,
-                    onTime = model::onTime,
-                )
-            }
+            LoggedBlock(
+                occurredOn = state.occurredOn,
+                occurredTime = state.occurredTime,
+                onDate = model::onDate,
+                onTime = model::onTime,
+            )
             // With a profile behind it the title is the profile's and the bar already says it;
             // without one there is nothing else to name the entry, so the field appears.
             if (state.profileName.isBlank()) {
-                item("title") {
-                    OutlinedTextField(
-                        value = state.title,
-                        onValueChange = model::onTitle,
-                        label = { Text("Entry") },
-                        singleLine = true,
-                        shape = ControlShape,
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    )
-                }
+                OutlinedTextField(
+                    value = state.title,
+                    onValueChange = model::onTitle,
+                    label = { Text("Entry") },
+                    singleLine = true,
+                    shape = ControlShape,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                )
             }
             if (state.fields.isNotEmpty()) {
-                item("header") { InstrumentEntryHeader() }
-                itemsIndexed(state.fields, key = { _, row -> row.definition.id.value }) { index, row ->
+                InstrumentEntryHeader()
+                state.fields.forEachIndexed { index, row ->
                     if (index > 0) {
                         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }
@@ -161,37 +166,56 @@ fun EventEntryScreen(
                     )
                 }
             }
-            item("materials") {
-                MaterialsBlock(
-                    suggestions = state.suggestions,
-                    rows = state.consumables,
-                    onSuggested = model::addSuggested,
-                    onAdd = model::addBlankConsumable,
-                    onChange = model::onConsumable,
-                    onRemove = model::removeConsumable,
-                )
-            }
-            item("notes") {
-                OutlinedTextField(
-                    value = state.notes,
-                    onValueChange = model::onNotes,
-                    label = { Text("Notes") },
-                    minLines = 3,
-                    shape = ControlShape,
-                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-                )
-            }
-            item("save") {
-                Button(
-                    onClick = model::save,
-                    enabled = state.loaded && !state.saving,
-                    shape = ControlShape,
-                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-                ) {
-                    Text(if (state.editing) "Save entry" else "Record entry")
-                }
+            DerivedBlock(rows = state.derivedRows, underInputs = state.fields.isNotEmpty())
+            MaterialsBlock(
+                suggestions = state.suggestions,
+                rows = state.consumables,
+                onSuggested = model::addSuggested,
+                onAdd = model::addBlankConsumable,
+                onChange = model::onConsumable,
+                onRemove = model::removeConsumable,
+            )
+            OutlinedTextField(
+                value = state.notes,
+                onValueChange = model::onNotes,
+                label = { Text("Notes") },
+                minLines = 3,
+                shape = ControlShape,
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+            )
+            Button(
+                onClick = model::save,
+                enabled = state.loaded && !state.saving,
+                shape = ControlShape,
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+            ) {
+                Text(if (state.editing) "Save entry" else "Record entry")
             }
         }
+    }
+}
+
+/**
+ * The derived readings of spec §5, live from what has been typed: the same [InstrumentRow] the
+ * asset screen draws, under the inputs and marked DERIVED, with an em dash until this entry's own
+ * values can produce a number. Read-only by construction — there is no control here to type into.
+ */
+@Composable
+private fun DerivedBlock(rows: List<Reading>, underInputs: Boolean) {
+    if (rows.isEmpty()) return
+    if (underInputs) {
+        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    }
+    InstrumentList(count = rows.size) { index ->
+        val reading = rows[index]
+        InstrumentRow(
+            eyebrow = "Derived",
+            label = reading.definition.label,
+            target = formatTarget(reading.definition),
+            value = formatValue(reading),
+            unit = reading.definition.unit,
+            state = reading.state,
+        )
     }
 }
 

@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.notenfc.core.journal.Reading
 import com.loosecannon.notenfc.core.journal.classify
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.DefinitionId
@@ -143,7 +144,7 @@ fun EventDetailScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 2.dp),
             )
-            ReadingsSection(current.event, current.definitions)
+            ReadingsSection(current.event, current.definitions, current.derived)
             MaterialsSection(current.event)
             NotesSection(current.event.notes)
             Spacer(Modifier.height(24.dp))
@@ -160,13 +161,33 @@ private fun loggedLine(event: AssetEvent): String {
 
 private val LOGGED_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM uuuu")
 
-/** The readings the entry actually carries, in the order it stored them (§4). */
+/**
+ * The readings the entry actually carries, in the order it stored them (§4) — including a value for
+ * a definition archived since, because history is what happened — then whatever this entry's own
+ * numbers derive (spec §5), marked DERIVED and reading "—" where they do not compute.
+ */
 @Composable
-private fun ReadingsSection(event: AssetEvent, definitions: Map<DefinitionId, MeasurementDefinition>) {
+private fun ReadingsSection(
+    event: AssetEvent,
+    definitions: Map<DefinitionId, MeasurementDefinition>,
+    derived: List<Reading>,
+) {
     val rows = event.measurements.sortedBy { it.sortOrder }
     if (rows.isEmpty()) return
     SectionHeader(title = "Readings")
-    InstrumentList(count = rows.size) { index ->
+    InstrumentList(count = rows.size + derived.size) { index ->
+        if (index >= rows.size) {
+            val reading = derived[index - rows.size]
+            InstrumentRow(
+                eyebrow = "Derived",
+                label = reading.definition.label,
+                target = formatTarget(reading.definition),
+                value = formatValue(reading),
+                unit = reading.definition.unit,
+                state = reading.state,
+            )
+            return@InstrumentList
+        }
         val measurement = rows[index]
         val definition = definitions[measurement.definitionId]
         InstrumentRow(
@@ -206,7 +227,11 @@ private fun MaterialsSection(event: AssetEvent) {
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
-                Text(text = quantity(used.quantity), style = MonoText, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    text = formatNumber(used.quantity),
+                    style = MonoText,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 if (used.unit.isNotBlank()) {
                     Text(
                         text = used.unit,
@@ -255,10 +280,4 @@ private fun DeleteDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
-}
-
-/** A quantity with only the decimals it needs, so "1 oz" is not shown as "1.0 oz". */
-private fun quantity(value: Double): String {
-    val whole = value.toLong()
-    return if (value == whole.toDouble()) whole.toString() else value.toString()
 }

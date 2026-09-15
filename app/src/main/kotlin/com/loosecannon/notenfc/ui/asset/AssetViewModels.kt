@@ -89,6 +89,12 @@ data class AssetDetailState(
     val events: List<AssetEvent> = emptyList(),
     /** Derived from [definitions] and [events] on every emission, never stored (§4.2). */
     val readings: List<Reading> = emptyList(),
+    /**
+     * True only while the asset has nothing at all to log against — no definition and no profile,
+     * archived ones included (spec §9). It gates "Set up from template", and archive is not delete
+     * (R-9): a retired reading is still a reading the asset has, and the template would be refused.
+     */
+    val bare: Boolean = false,
 )
 
 /**
@@ -138,6 +144,8 @@ class AssetDetailViewModel(
                     profiles = j.profiles.filter { p -> p.archivedAt == null },
                     events = j.events,
                     readings = LatestReadings.of(j.definitions, j.events),
+                    // Both lists unfiltered on purpose: archived rows count as rows the asset has.
+                    bare = j.definitions.isEmpty() && j.profiles.isEmpty(),
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)

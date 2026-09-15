@@ -2,14 +2,18 @@ package com.loosecannon.notenfc.ui.journal
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.notenfc.core.journal.Derived
 import com.loosecannon.notenfc.core.journal.RangeState
+import com.loosecannon.notenfc.core.journal.Reading
 import com.loosecannon.notenfc.core.journal.classify
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
+import com.loosecannon.notenfc.core.model.EventSource
 import com.loosecannon.notenfc.core.model.Measurement
 import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.ProfileConsumable
@@ -78,6 +82,12 @@ data class EventEntryState(
     val occurredOn: String,
     val occurredTime: String?,
     val fields: List<FieldRow> = emptyList(),
+    /**
+     * The asset's DERIVED readings, recomputed from [fields] on every keystroke (spec §5). Read-only
+     * rows under the inputs: never entered, never stored, and "—" until this entry's own values can
+     * produce them.
+     */
+    val derivedRows: List<Reading> = emptyList(),
     val suggestions: List<ProfileConsumable> = emptyList(),
     val consumables: List<ConsumableRow> = emptyList(),
     val notes: String = "",
@@ -124,6 +134,15 @@ class EventEntryViewModel(
     /** The profile the save names, which in edit mode is the event's own, not the route's. */
     private var commandProfileId: ProfileId? = profileId
 
+    /**
+     * Every definition of the asset, keyed by id: the `sources` argument [Derived.compute] resolves
+     * A and B against. Loaded once, because a definition edit does not run behind an open form.
+     */
+    private var sources: Map<DefinitionId, MeasurementDefinition> = emptyMap()
+
+    /** The asset's unarchived DERIVED definitions, in `sortOrder` — the read-only rows of §5. */
+    private var derivedDefinitions: List<MeasurementDefinition> = emptyList()
+
     private val _state = MutableStateFlow(
         EventEntryState(
             occurredOn = clock.nowMillis().at(zone).toLocalDate().format(DATE),
@@ -144,6 +163,11 @@ class EventEntryViewModel(
             val profile = (existing?.profileId ?: profileId)?.let { profiles.get(it) }
             commandProfileId = profile?.id
             kind = existing?.kind ?: profile?.eventKind ?: EventKind.NOTE
+            val all = definitions.forAsset(assetId)
+            sources = all.associateBy(MeasurementDefinition::id)
+            derivedDefinitions = all
+                .filter { it.kind == DefinitionKind.DERIVED && it.archivedAt == null }
+                .sortedBy { it.sortOrder }
             val fields = rows(profile, existing)
             _state.update { current ->
                 current.copy(
@@ -153,9 +177,10 @@ class EventEntryViewModel(
                     occurredOn = existing?.occurredOn ?: current.occurredOn,
                     occurredTime = if (existing != null) existing.occurredTime else current.occurredTime,
                     fields = fields,
+                    derivedRows = derivedRows(fields),
                     suggestions = profile?.consumables.orEmpty(),
                     consumables = existing?.consumables.orEmpty().map {
-                        ConsumableRow(it.name, plain(it.quantity), it.unit)
+                        ConsumableRow(it.name, formatNumber(it.quantity), it.unit)
                     },
                     notes = existing?.notes.orEmpty(),
                     loaded = true,
@@ -173,6 +198,10 @@ class EventEntryViewModel(
      * logged. Without that row the value would be invisible on the form and, because [save] submits
      * the rows and nothing else, silently dropped by the edit. An edit must not delete a reading
      * the user never saw.
+     *
+     * Two definitions never become rows at all (spec §9): a DERIVED one, which is computed and not
+     * entered, and an archived one the edited event does not already carry a value for — a profile
+     * that still names a retired reading must not go on asking for it.
      */
     private suspend fun rows(profile: EventProfile?, existing: AssetEvent?): List<FieldRow> {
         val fields: List<Pair<DefinitionId, Boolean>> = profile
@@ -195,8 +224,64 @@ class EventEntryViewModel(
 
         return (fields + carried).mapNotNull { (id, required) ->
             val definition = definitions.get(id) ?: return@mapNotNull null
+            if (definition.kind == DefinitionKind.DERIVED) return@mapNotNull null
             val measurement = existing?.measurements?.firstOrNull { it.definitionId == id }
+            if (definition.archivedAt != null && measurement == null) return@mapNotNull null
             FieldRow(definition, required, measurement.asText(definition), problem = null)
+        }
+    }
+
+    /**
+     * The derived readings of this entry as it stands, from the values typed so far. The rows go to
+     * [Derived.compute] as a throwaway [AssetEvent] carrying one measurement per filled NUMBER row,
+     * because same-event semantics are the whole rule (spec §5): the form must never mix a number
+     * being typed with a stored one from another entry.
+     *
+     * Nothing here is written anywhere and nothing but `measurements` is read off the event, so the
+     * rest of it is filled in as what it is — an entry that does not exist.
+     */
+    private fun derivedRows(fields: List<FieldRow>): List<Reading> {
+        if (derivedDefinitions.isEmpty()) return emptyList()
+        val typed = fields.mapIndexedNotNull { index, row ->
+            if (row.definition.valueType != ValueType.NUMBER) return@mapIndexedNotNull null
+            val value = row.text.trim().toDoubleOrNull()?.takeIf { it.isFinite() }
+                ?: return@mapIndexedNotNull null
+            Measurement(
+                id = "",
+                definitionId = row.definition.id,
+                valueNum = value,
+                valueText = null,
+                unit = row.definition.unit,
+                sortOrder = index,
+            )
+        }
+        val unsaved = AssetEvent(
+            id = EventId(""),
+            assetId = assetId,
+            kind = kind,
+            title = "",
+            profileId = commandProfileId,
+            occurredOn = "",
+            occurredTime = null,
+            tzId = zone.id,
+            notes = "",
+            source = EventSource.MANUAL,
+            sourceRef = null,
+            createdAt = 0L,
+            updatedAt = 0L,
+            measurements = typed,
+            consumables = emptyList(),
+        )
+        return derivedDefinitions.map { definition ->
+            val value = Derived.compute(definition, unsaved, sources)
+            Reading(
+                definition = definition,
+                measurement = null,
+                occurredOn = null,
+                occurredTime = null,
+                state = value?.let { classify(it, definition.rangeLow, definition.rangeHigh) },
+                derivedValue = value,
+            )
         }
     }
 
@@ -208,14 +293,16 @@ class EventEntryViewModel(
 
     fun onNotes(value: String) = _state.update { it.copy(notes = value, firstProblem = null) }
 
-    /** Typing in a row clears that row's mark and the line under the app bar, as 1C's name field does. */
+    /**
+     * Typing in a row clears that row's mark and the line under the app bar, as 1C's name field
+     * does, and recomputes the derived rows — they are a view of what is typed, so they follow the
+     * keystroke rather than the save.
+     */
     fun onValue(definitionId: DefinitionId, value: String) = _state.update { current ->
-        current.copy(
-            fields = current.fields.map { row ->
-                if (row.definition.id == definitionId) row.copy(text = value, problem = null) else row
-            },
-            firstProblem = null,
-        )
+        val fields = current.fields.map { row ->
+            if (row.definition.id == definitionId) row.copy(text = value, problem = null) else row
+        }
+        current.copy(fields = fields, derivedRows = derivedRows(fields), firstProblem = null)
     }
 
     /** A suggestion is a head start, not an entry: it arrives with its unit and an open quantity. */
@@ -223,7 +310,7 @@ class EventEntryViewModel(
         current.copy(
             consumables = current.consumables + ConsumableRow(
                 name = suggestion.name,
-                quantity = suggestion.defaultQuantity?.let(::plain).orEmpty(),
+                quantity = suggestion.defaultQuantity?.let(::formatNumber).orEmpty(),
                 unit = suggestion.unit,
             ),
             firstProblem = null,
@@ -380,13 +467,7 @@ private fun Measurement?.asText(definition: MeasurementDefinition): String {
         ValueType.TEXT -> m.valueText.orEmpty()
         ValueType.BOOLEAN -> if (m.valueNum == 1.0) "1" else "0"
         ValueType.NUMBER -> m.valueNum?.let { value ->
-            if (definition.decimals == 0) plain(value) else value.toString()
+            if (definition.decimals == 0) formatNumber(value) else value.toString()
         }.orEmpty()
     }
-}
-
-/** A quantity with only the decimals it needs: 1.0 typed back as "1", 0.5 as "0.5". */
-private fun plain(value: Double): String {
-    val whole = value.toLong()
-    return if (value == whole.toDouble()) whole.toString() else value.toString()
 }

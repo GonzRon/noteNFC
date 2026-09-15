@@ -50,6 +50,7 @@ import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetStatus
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.MeasurementDefinition
@@ -96,6 +97,7 @@ fun AssetDetailScreen(
     assetId: String,
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
+    onSetup: (String) -> Unit,
     onWriteTag: (String) -> Unit,
     onOpenLinks: () -> Unit,
     onBackup: () -> Unit,
@@ -173,9 +175,10 @@ fun AssetDetailScreen(
                 actions = detailActions(
                     assetId = assetId,
                     profiles = current.profiles,
-                    bare = current.definitions.isEmpty() && current.profiles.isEmpty(),
+                    bare = current.bare,
                     onLogEvent = onLogEvent,
                     onEdit = onEdit,
+                    onSetup = onSetup,
                     onWriteTag = onWriteTag,
                     onOpenLinks = onOpenLinks,
                     onBackup = onBackup,
@@ -205,6 +208,7 @@ private fun detailActions(
     bare: Boolean,
     onLogEvent: (String, String) -> Unit,
     onEdit: (String) -> Unit,
+    onSetup: (String) -> Unit,
     onWriteTag: (String) -> Unit,
     onOpenLinks: () -> Unit,
     onBackup: () -> Unit,
@@ -224,6 +228,8 @@ private fun detailActions(
         }
         add(ActionSpec("Write tag", nfc, outlined = true) { onWriteTag(assetId) })
         add(ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) })
+        // What this asset measures and what can be logged against it, both editable (spec §9).
+        add(ActionSpec("Readings & actions", NoteNfcIcons.Speed, outlined = true) { onSetup(assetId) })
         add(ActionSpec("Links", documents, outlined = false, onClick = onOpenLinks))
         add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
         if (bare) add(ActionSpec("Set up from template", Icons.Outlined.Add, outlined = true, onClick = onSetUp))
@@ -255,17 +261,23 @@ private fun TemplatePicker(onDismiss: () -> Unit, onPick: (String) -> Unit) {
     )
 }
 
-/** Absent, not empty, when the asset has no definitions: there is no instrument panel to show. */
+/**
+ * Absent, not empty, when the asset has no definitions: there is no instrument panel to show.
+ * A DERIVED row sits among the entered ones in `sortOrder`, marked so the number is not mistaken
+ * for something someone wrote down, and reads "—" while no single event can produce it (spec §5).
+ */
 @Composable
 private fun ReadingsSection(readings: List<Reading>) {
     if (readings.isEmpty()) return
     SectionHeader(title = "Current readings")
     InstrumentList(count = readings.size) { index ->
         val reading = readings[index]
+        val derived = reading.definition.kind == DefinitionKind.DERIVED
         InstrumentRow(
+            eyebrow = if (derived) "Derived" else null,
             label = reading.definition.label,
             target = formatTarget(reading.definition),
-            value = formatValue(reading.measurement, reading.definition),
+            value = formatValue(reading),
             // The measurement's unit is a snapshot of the definition's at entry (§4): show what
             // was actually measured in, and fall back to the definition only for an empty row.
             unit = reading.measurement?.unit ?: reading.definition.unit,

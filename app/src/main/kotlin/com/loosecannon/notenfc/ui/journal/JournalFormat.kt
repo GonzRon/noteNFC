@@ -6,8 +6,10 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.loosecannon.notenfc.core.journal.RangeState
+import com.loosecannon.notenfc.core.journal.Reading
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.Measurement
 import com.loosecannon.notenfc.core.model.MeasurementDefinition
@@ -47,6 +49,27 @@ fun formatValue(measurement: Measurement?, definition: MeasurementDefinition): S
         ValueType.TEXT -> m.valueText
         ValueType.NUMBER -> m.valueNum?.let { bound(it, definition) }
     }
+}
+
+/**
+ * A current reading, entered or derived. A DERIVED row has no measurement behind it (spec §5), so
+ * its value comes off [Reading.derivedValue] — at the derived definition's own decimals, like any
+ * other NUMBER. Null when this reading could not be computed, which every row draws as an em dash.
+ */
+fun formatValue(reading: Reading): String? =
+    if (reading.definition.kind == DefinitionKind.DERIVED) {
+        reading.derivedValue?.let { bound(it, reading.definition) }
+    } else {
+        formatValue(reading.measurement, reading.definition)
+    }
+
+/**
+ * A number with only the decimals it needs: 1.0 as "1", 0.5 as "0.5". For the values no definition
+ * bounds — a consumable's quantity, and a stored number typed back into an entry field.
+ */
+fun formatNumber(value: Double): String {
+    val whole = value.toLong()
+    return if (value == whole.toDouble()) whole.toString() else value.toString()
 }
 
 fun stateLabel(state: RangeState): String = when (state) {
@@ -101,7 +124,7 @@ fun eventDetailLine(event: AssetEvent, definitions: Map<DefinitionId, Measuremen
     if (readings.isNotEmpty()) return readings.take(MAX_READINGS_IN_LINE).joinToString(" · ")
 
     event.consumables.minByOrNull { it.sortOrder }?.let { used ->
-        return listOf(used.name, plain(used.quantity), used.unit).filter { it.isNotBlank() }.joinToString(" ")
+        return listOf(used.name, formatNumber(used.quantity), used.unit).filter { it.isNotBlank() }.joinToString(" ")
     }
     return event.notes.lineSequence().firstOrNull()?.trim().orEmpty()
 }
@@ -112,9 +135,3 @@ private const val MAX_READINGS_IN_LINE = 3
 /** Locale-fixed so a comma decimal separator never reaches the mono column (D12 §6). */
 private fun bound(value: Double, definition: MeasurementDefinition): String =
     String.format(Locale.US, "%.${definition.decimals.coerceAtLeast(0)}f", value)
-
-/** A consumable has no definition behind it, so its quantity keeps only the decimals it needs. */
-private fun plain(value: Double): String {
-    val whole = value.toLong()
-    return if (value == whole.toDouble()) whole.toString() else value.toString()
-}

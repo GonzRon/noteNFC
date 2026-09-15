@@ -377,9 +377,10 @@ private fun ledgerDate(date: LocalDate): String =
 // -------------------------------------------------------------------- driving the screens
 
 /**
- * The entry form is one `LazyColumn`, so a row below the fold has to be scrolled to, not just
- * found. A focused `OutlinedTextField` carries `ScrollBy` of its own, so the list is the
- * scrollable that is *not* a text field.
+ * The entry form is one scrolling `Column` (2B-1 §9 — a lazy list disposed the focused row), so a
+ * row below the fold still has to be scrolled to before it can be tapped. A focused
+ * `OutlinedTextField` carries `ScrollBy` of its own, so the form is the scrollable that is *not* a
+ * text field.
  */
 private fun ComposeTestRule.entryList(): SemanticsNodeInteraction =
     onNode(hasScrollAction() and !hasSetTextAction())

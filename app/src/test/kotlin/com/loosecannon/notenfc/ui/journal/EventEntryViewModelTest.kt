@@ -316,6 +316,89 @@ class EventEntryViewModelTest {
         assertEquals(110.0, after.valueNum!!, 1e-9)
     }
 
+    /**
+     * The live derived row of spec §5: the form recomputes it from the values typed so far, on this
+     * event's numbers only, and says nothing at all the moment one of its sources is missing.
+     */
+    @Test fun derivedRowUpdatesLiveFromTypedValues() = runTest {
+        val ro = graph.createAsset.run("RO unit", "Water", templateKey = "ro_water")
+        val defs = graph.definitions.forAsset(ro.id).associateBy(MeasurementDefinition::key)
+        val profile = graph.profiles.forAsset(ro.id).first { it.name == "TDS test" }
+
+        val vm = entryModel(ro.id, profile.id, null)
+        val loaded = vm.state.first { it.loaded }
+
+        // The derived definition is never an input: the three TDS readings are the only rows.
+        assertEquals(
+            listOf("tds_prefilter", "tds_post_membrane", "tds_output"),
+            loaded.fields.map { it.definition.key },
+        )
+        val waiting = loaded.derivedRows.single()
+        assertEquals("Rejection", waiting.definition.label)
+        assertNull(waiting.derivedValue)
+        assertNull(formatValue(waiting))
+
+        vm.onValue(defs.getValue("tds_prefilter").id, "310")
+        vm.onValue(defs.getValue("tds_post_membrane").id, "18")
+
+        val computed = vm.state.value.derivedRows.single()
+        assertEquals(94.19, computed.derivedValue!!, 0.01)
+        assertEquals("94.2", formatValue(computed))
+        // Nothing is stored for it: a derived reading is computed on every read (§5).
+        assertNull(computed.measurement)
+
+        // Clear one source and the row goes back to having nothing to say — the screen's em dash.
+        vm.onValue(defs.getValue("tds_post_membrane").id, "")
+        assertNull(vm.state.value.derivedRows.single().derivedValue)
+        assertNull(formatValue(vm.state.value.derivedRows.single()))
+    }
+
+    /**
+     * The 2A carry rule under archiving (spec §9): an archived definition never produces an input
+     * row, except on an edit of an event that already measured it — dropping that row would delete
+     * a reading the user never saw.
+     */
+    @Test fun archivedDefinitionGetsNoRowUnlessCarried() = runTest {
+        val spa = spa()
+        val alkalinity = spa.def("alkalinity")
+        val logged = graph.logEvent.run(
+            EventCommand(
+                assetId = spa.id,
+                profileId = spa.profile.id,
+                kind = EventKind.MEASUREMENT,
+                title = "Water test",
+                occurredOn = "2026-09-15",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = mapOf(
+                    spa.def("ph").id to "7.4",
+                    spa.def("free_chlorine").id to "2.0",
+                    alkalinity.id to "110",
+                ),
+                consumables = emptyList(),
+            ),
+        )
+        graph.definitions.upsert(alkalinity.copy(archivedAt = 9_000L))
+
+        val fresh = entryModel(spa.id, spa.profile.id, null)
+        assertEquals(
+            listOf("ph", "free_chlorine", "calcium_hardness", "water_temp"),
+            fresh.state.first { it.loaded }.fields.map { it.definition.key },
+        )
+
+        val edit = entryModel(spa.id, null, logged.id)
+        val editing = edit.state.first { it.loaded }
+        assertEquals("110", editing.fields.first { it.definition.key == "alkalinity" }.text)
+
+        edit.save()
+        edit.state.first { !it.saving }
+        // The carried reading survives the edit with its own id, archived definition and all.
+        val reloaded = graph.events.forAsset(spa.id).single()
+        val before = logged.measurements.first { it.definitionId == alkalinity.id }
+        assertEquals(before.id, reloaded.measurements.first { it.definitionId == alkalinity.id }.id)
+    }
+
     @Test fun deleteRemovesAndEmits() = runTest {
         val spa = spa()
         val logged = graph.logEvent.run(
