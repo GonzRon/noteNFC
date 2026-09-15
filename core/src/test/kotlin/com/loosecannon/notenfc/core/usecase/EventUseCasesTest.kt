@@ -39,6 +39,12 @@ class EventUseCasesTest {
         return a.id
     }
 
+    private suspend fun seedRoWater(): AssetId {
+        val a = asset("a3", "RO unit")
+        apply.run(a.id, SeedTemplates.byKey("ro_water")!!)
+        return a.id
+    }
+
     private suspend fun defId(assetId: AssetId, key: String): DefinitionId =
         defs.forAsset(assetId).first { it.key == key }.id
 
@@ -286,5 +292,47 @@ class EventUseCasesTest {
             logEvent.run(cmd(hotTubId, values = mapOf(batteryId to "12.5")))
         }
         assertTrue(events.all().isEmpty())
+    }
+
+    /**
+     * Archiving a required reading takes it off every form, so nothing can satisfy its `required`
+     * flag any more — demanding it would make the quick action unsaveable with no way to fix it.
+     */
+    @Test fun archivedRequiredFieldIsNotRequired() = runTest {
+        val assetId = seedRoWater()
+        val tdsTest = profileId(assetId, "TDS test")
+        val prefilter = defId(assetId, "tds_prefilter")
+        val post = defId(assetId, "tds_post_membrane")
+        val output = defId(assetId, "tds_output")
+        ArchiveDefinition(defs, uow, clock).run(prefilter, archived = true)
+
+        val event = logEvent.run(
+            cmd(assetId, profileId = tdsTest, values = mapOf(post to "12", output to "8")),
+        )
+
+        assertEquals(listOf(post, output), event.measurements.map { it.definitionId })
+        assertEquals(event, events.get(event.id))
+    }
+
+    /** A derived definition is computed, never typed: a value posted for one is simply ignored. */
+    @Test fun derivedDefinitionIsNeverAMeasurement() = runTest {
+        val assetId = seedRoWater()
+        val tdsTest = profileId(assetId, "TDS test")
+        val rejection = defId(assetId, "rejection_percent")
+
+        val event = logEvent.run(
+            cmd(
+                assetId, profileId = tdsTest,
+                values = mapOf(
+                    defId(assetId, "tds_prefilter") to "100",
+                    defId(assetId, "tds_post_membrane") to "20",
+                    defId(assetId, "tds_output") to "8",
+                    rejection to "80",
+                ),
+            ),
+        )
+
+        assertEquals(3, event.measurements.size)
+        assertNull(event.measurements.firstOrNull { it.definitionId == rejection })
     }
 }

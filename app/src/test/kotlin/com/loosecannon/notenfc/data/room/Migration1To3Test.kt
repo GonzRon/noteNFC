@@ -54,9 +54,11 @@ class Migration1To3Test {
                 assertEquals(3, db.definitionDao().all().size)
 
                 // `measurement` still points at `measurement_definition` by name after the rename:
-                // the insert resolves, and the RESTRICT in front of a definition with readings
-                // against it still refuses. Only the type is asserted — under AGP's mockable
-                // android.jar `SQLException.getMessage()` is always null.
+                // the insert resolves, and the delete is refused. Which RESTRICT refused it is not
+                // asserted — `d-before` is both a definition with a reading against it and the
+                // source of a derived row, so either FK could be the one that spoke. Only the type
+                // is asserted — under AGP's mockable android.jar `SQLException.getMessage()` is
+                // always null.
                 db.eventDao().upsert(
                     event("e1"),
                     listOf(
@@ -70,7 +72,8 @@ class Migration1To3Test {
                 assertEquals(1, db.eventDao().countMeasurementsFor("d-before"))
                 val thrown = runCatching { db.definitionDao().delete("d-before") }.exceptionOrNull()
                 assertTrue(
-                    "a definition with readings must still be refused after the recreate, got $thrown",
+                    "deleting a definition with a reading and a derived dependent must still be refused " +
+                        "after the recreate, got $thrown",
                     thrown is SQLException,
                 )
             } finally {

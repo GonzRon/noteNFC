@@ -182,6 +182,8 @@ class EditorsDeviceProofTest {
     /**
      * Archiving a source takes the reading off the entry form and blanks what depends on it,
      * without touching what was already recorded — spec §5's archived-source rule on the phone.
+     * The quick action that offered it must still save afterwards, which is the half of the row
+     * that was missing: proving the field is gone proves nothing if the action is now unsaveable.
      */
     @Test fun archivingASourceEmptiesTheDerivedRowAndLeavesHistoryAlone() {
         val id = newAsset("RO unit", templateKey = "ro_water")
@@ -216,12 +218,29 @@ class EditorsDeviceProofTest {
             rule.onAllNodesWithTag("value-tds_output").assertCountEquals(1)
             rule.onNodeWithContentDescription("Close").performClick()
 
-            // History is what happened: the entry still lists the reading it recorded.
+            // History is what happened: the entry still lists the reading it recorded. Read it
+            // before the second test is filed, while there is only one row to open.
             rule.awaitText("SERVICE RECORD")
             rule.openLedgerEntry("TDS test", LocalDate.now())
             rule.awaitText("READINGS")
             rule.onNodeWithText("Pre-filter TDS").performScrollTo().assertIsDisplayed()
             rule.onNodeWithText("310").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithContentDescription("Back").performClick()
+
+            // And the action still saves. The archived field was `required = true`, so before the
+            // domain learned to stop demanding it, Save did nothing at all and said nothing.
+            rule.awaitText("SERVICE RECORD")
+            rule.onNodeWithText("Log TDS test").performScrollTo().performClick()
+            rule.awaitTag("value-tds_post_membrane")
+            listOf("tds_post_membrane" to "17", "tds_output" to "11").forEach { (key, value) ->
+                rule.entryList().performScrollToNode(hasTestTag("value-$key"))
+                rule.onNodeWithTag("value-$key").performTextReplacement(value)
+            }
+            rule.saveEntry()
+
+            rule.awaitText("SERVICE RECORD")
+            rule.onAllNodesWithText("TDS test").assertCountEquals(2)
+            rule.onNodeWithText("17").performScrollTo().assertIsDisplayed()
         }
     }
 

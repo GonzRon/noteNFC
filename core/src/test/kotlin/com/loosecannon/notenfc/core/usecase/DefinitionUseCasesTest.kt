@@ -320,21 +320,28 @@ class DefinitionUseCasesTest {
         assertTrue(output.isMeter)
     }
 
-    @Test fun archivedProfileDoesNotBlockDerivedChange() = runTest {
+    @Test fun archivedProfileStillBlocksDerivedChange() = runTest {
         seed("ro_water")
         val output = byKey("tds_output")
         val tdsTest = profiles.forAsset(a1).first { it.name == "TDS test" }
         ArchiveProfile(profiles, uow, clock).run(tdsTest.id, archived = true)
-        val saved = save.run(
-            output.id,
-            cmd(
-                "Output TDS", key = "tds_output", unit = "ppm", decimals = 0,
-                kind = DefinitionKind.DERIVED, formula = DerivedFormula.PERCENT_DROP,
-                sourceA = byKey("tds_prefilter").id, sourceB = byKey("tds_post_membrane").id,
-            ),
-        )
-        assertEquals(DefinitionKind.DERIVED, saved.kind)
-        assertEquals(DefinitionKind.DERIVED, defs.get(output.id)!!.kind)
+        val before = LinkedHashMap(defs.rows)
+        val commits = uow.commits
+        // unarchiving is one tap and does not re-validate, so the archived quick action counts
+        val refused = assertFailsWith<DefinitionWouldBreakProfiles> {
+            save.run(
+                output.id,
+                cmd(
+                    "Output TDS", key = "tds_output", unit = "ppm", decimals = 0,
+                    kind = DefinitionKind.DERIVED, formula = DerivedFormula.PERCENT_DROP,
+                    sourceA = byKey("tds_prefilter").id, sourceB = byKey("tds_post_membrane").id,
+                ),
+            )
+        }
+        assertEquals(output.id, refused.id)
+        assertEquals(listOf(tdsTest.id), refused.profileIds)
+        assertEquals(before, defs.rows)
+        assertEquals(commits, uow.commits)
     }
 
     @Test fun sourceUsedByProfileCannotBecomeDerived() = runTest {

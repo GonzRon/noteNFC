@@ -10,9 +10,8 @@ entry, with `PERCENT_DROP` as the one formula that exists. Room goes to v3, the 
 format 3, and the `ro_water` seed gains "Rejection". What 2B-1 deliberately is not is a form
 builder: no conditional fields, no expressions, no chained derivations (spec §2).
 
-**Read the status first (§5).** The JVM suites are green — `:core` 223, `:app` 127 — the
-instrumented suite is **28 tests, 0 failures**, green on two consecutive runs on the owner's
-Android 17 phone, and the v2 → v3 migration is device-proven over a real 2A install with its rows
+**Read the status first (§5).** The JVM suites are green — `:core` 225, `:app` 128 — the
+instrumented suite is **28 tests, 0 failures**, green on every run on the owner's Android 17 phone, and the v2 → v3 migration is device-proven over a real 2A install with its rows
 intact (§4 row 1). Every device row is automated: `EditorsDeviceProofTest` is six tests, one per
 scenario of spec §12, and there are no manual rows in this document. The first full run found one
 defect and it was in a *test*: 2A's `anAssetWithNoTemplateCanBeSetUpLater` still expected the
@@ -23,7 +22,7 @@ defect and it was in a *test*: 2A's `anAssetWithNoTemplateCanBeSetUpLater` still
 | # | Criterion | Evidence | Status |
 |---|---|---|---|
 | 1 | A custom definition and profile created in the editors drive a logged event and a current reading, on device, with no code change | `SaveDefinition` mints the key from the label with `slugify`, collects every `DefinitionProblem` at once, and freezes `key`/`kind`/`valueType` once measurements exist; `SaveProfile` validates each field against an ENTERED definition of the same asset and keeps child ids. `AssetSetupScreen` lists both with per-row Edit / Move / Archive / Delete; `DefinitionEditScreen` and `ProfileEditScreen` are the editors. Nothing in the entry form or the asset screen changes: the quick actions are `profiles.map { quickActionLabel(it) }` and the entry rows are built from `ValueType` alone. JVM: `DefinitionUseCasesTest` (17), `ProfileUseCasesTest` (8), `AssetSetupViewModelTest` (6), `DefinitionEditViewModelTest` (9), `ProfileEditViewModelTest` (11) | **PROVEN** on the phone: §4 row 3 is `EditorsDeviceProofTest.aCustomReadingAndActionDriveALoggedEntry` — a "Pressure" reading (psi, 0 decimals) and a "Pressure check" action requiring it, both typed into the editors on the phone, then logged as 42 through the quick action the new action produced, and read back off CURRENT READINGS and SERVICE RECORD |
-| 2 | RO rejection appears from one TDS test and is never combined across events (test + device) | `Derived.compute` reads both sources off **one** `AssetEvent` and returns null if either is missing, if A is 0, if either source is archived, or if the result is not finite; `LatestReadings` walks the events newest-first and takes the first one that computes, so a newer partial entry is skipped rather than half-used. `SeedTemplates.roWater` carries "Rejection" (`%`, 1 decimal) over `tds_prefilter` and `tds_post_membrane`. JVM: `DerivedTest` (15), `LatestReadingsTest` (6), `SeedTemplatesTest` (7), `EventEntryViewModelTest` (12) | **PROVEN** on the phone: §4 rows 4–5 are `EditorsDeviceProofTest.rejectionComesFromOneTestAndIsNeverCombinedAcrossEvents` — 310 / 18 / 12 logged through the form puts **94.2** on the asset, and a second test carrying only pre-filter 300 makes 300 the current pre-filter reading while Rejection stays **94.2** |
+| 2 | RO rejection appears from one TDS test and is never combined across events (test + device) | `Derived.compute` reads both sources off **one** `AssetEvent` and returns null if either is missing, if A is 0, if either source is archived, or if the result is not finite; `LatestReadings` walks the events newest-first and takes the first one that computes, so a newer partial entry is skipped rather than half-used. `SeedTemplates.roWater` carries "Rejection" (`%`, 1 decimal) over `tds_prefilter` and `tds_post_membrane`. JVM: `DerivedTest` (15), `LatestReadingsTest` (6), `SeedTemplatesTest` (7), `EventEntryViewModelTest` (13) | **PROVEN** on the phone: §4 rows 4–5 are `EditorsDeviceProofTest.rejectionComesFromOneTestAndIsNeverCombinedAcrossEvents` — 310 / 18 / 12 logged through the form puts **94.2** on the asset, and a second test carrying only pre-filter 300 makes 300 the current pre-filter reading while Rejection stays **94.2** |
 | 3 | A v1 database upgrades through v2 to v3 with rows intact (JVM chain) and a real 2A install upgrades on device | `AppDatabase` v3 with `MIGRATION_2_3`, which recreates `measurement_definition` with `kind`, `formula`, `source_a_id`, `source_b_id`, copies every row forward as `kind = 'ENTERED'` with null sources, and adds the two source indexes. JVM: `Migration2To3Test`, `Migration1To3Test` (the whole chain), `Migration1To2Test`, plus `JournalDaoTest` (9) for the new columns and the self-referencing RESTRICT | **PROVEN, both halves.** JVM chain green; **and on the phone** (§4 row 1): the 2A debug build (versionCode 3) seeded by driving its own screens, then the 2B-1 build installed over it and opened from the launcher — `user_version` 2 → **3**, every row count identical, `kind = 'ENTERED'` and null sources on all five definitions, 18 → **20** indexes, no `FATAL EXCEPTION` |
 | 4 | Format 2 backups import into format 3 | `BackupCodec.FORMAT_VERSION` is 3; the manifest names its version and the reader branches on it, so a format-2 file still decodes into a v3 store with `kind = ENTERED` everywhere. The codec validates the DERIVED invariants with the same `derivedProblems` the use cases use, and refuses a measurement written against a DERIVED definition. JVM: `BackupCodecTest` (39, incl. `formatTwoFileStillDecodes` and the format-3 round trip), `BackupUseCasesTest` (13), `:app` `RestoreProofTest` (4) | **PROVEN on the JVM, and the format-3 round trip is proven on the phone** (§4 row 7): export → wipe → import against the device's own Room store, all eight counts equal, "Rejection" back as a DERIVED row pointing at the same two sources, and the asset drawing 94.2 again from the imported rows |
 | 5 | The §9 grep stays clean and no screen branches on a template key | The template-key grep (§9) finds the four keys **only** in `SeedTemplates.kt`, plus the word `"ups"` inside `AssetDetailScreen`'s icon-keyword list, which is a substring match on an asset's free-text category and picks a glyph. Both pickers iterate `SeedTemplates.all`. The editors know nothing about templates at all: they write the same seven tables the seeds write, through the same ports | **PROVEN** — §9 |
@@ -50,11 +49,34 @@ defect and it was in a *test*: 2A's `anAssetWithNoTemplateCanBeSetUpLater` still
   making the entry form a `Column` + `verticalScroll` instead of a `LazyColumn`.
 - `c585a29` — readings & actions screen, definition editor.
 - `e41d308` — profile editor.
-- (this commit) — phase 2b-1 evidence, editors device proof, versionCode 4. `EditorsDeviceProofTest`
-  (six tests, one per spec §12 scenario), this document, the index row, the root README feature
-  line, the two D4 amendments of spec §11, `versionCode` 4 / `versionName` 2.2, and one amended
-  assertion in 2A's `JournalDeviceProofTest` — the `ro_water` template seeds four readings now, not
-  three (§3). Test and document only: no production file changed.
+- `ffe01da` / `c3f4f25` / `83d7e64` — phase 2b-1 evidence, editors device proof, versionCode 4.
+  `EditorsDeviceProofTest` (six tests, one per spec §12 scenario), this document, the index row, the
+  root README feature line, the two D4 amendments of spec §11, `versionCode` 4 / `versionName` 2.2,
+  and one amended assertion in 2A's `JournalDeviceProofTest` — the `ro_water` template seeds four
+  readings now, not three (§3). Test and document only: no production file changed.
+- (this commit) — the fix wave after the final whole-branch review. **Three production files
+  changed**, which is why the whole gate and the device suite were re-run:
+  - `core/.../usecase/EventCommands.kt` — `buildEvent.consider` returns early for a DERIVED
+    definition (never a measurement, never a problem — the domain now owns the rule the entry form
+    was keeping on its own) and stops demanding a blank value for an **archived** definition. The
+    bug: all three `ro_water` TDS fields are `required = true`, so archiving Pre-filter TDS left
+    "Log TDS test" unsaveable — the row was off the form, nothing could satisfy `Required`, and the
+    problem landed on no row, so Save silently did nothing.
+  - `app/.../ui/journal/EventEntryViewModel.kt` — `firstProblemText` returns a non-null line
+    (`"Could not save this entry."`) when a problem belongs to no visible row, so a refusal can
+    never be silent again.
+  - `core/.../usecase/SaveDefinition.kt` — `DefinitionWouldBreakProfiles` no longer exempts archived
+    quick actions; unarchiving is one tap and does not re-validate (spec §6 amended).
+
+  Tests with it: `EventUseCasesTest.archivedRequiredFieldIsNotRequired`,
+  `EventUseCasesTest.derivedDefinitionIsNeverAMeasurement`,
+  `EventEntryViewModelTest.archivedRequiredFieldDoesNotBlockSave`,
+  `DefinitionUseCasesTest.archivedProfileDoesNotBlockDerivedChange` flipped to
+  `archivedProfileStillBlocksDerivedChange`, and device row 6 extended to **save** after the
+  archiving. Riding along: `BackupCodecTest.formatTwoRoundTripsAllSevenTables` renamed to
+  `roundTripsAllSevenTables` (it round-trips the current format, not format 2), and
+  `Migration1To3Test`'s closing comment no longer claims which of the two RESTRICTs refused the
+  delete.
 
 ## 3. Tests
 
@@ -71,7 +93,7 @@ defect and it was in a *test*: 2A's `anAssetWithNoTemplateCanBeSetUpLater` still
 | `:core` | `DeleteLinkTest` | 2 |
 | `:core` | `DerivedTest` | 15 |
 | `:core` | `EventChronologyTest` | 4 |
-| `:core` | `EventUseCasesTest` | 14 |
+| `:core` | `EventUseCasesTest` | 16 |
 | `:core` | `LatestReadingsTest` | 6 |
 | `:core` | `LinkLaunchPolicyTest` | 9 |
 | `:core` | `LinkUseCasesTest` | 9 |
@@ -93,7 +115,7 @@ defect and it was in a *test*: 2A's `anAssetWithNoTemplateCanBeSetUpLater` still
 | `:app` | `ContrastTest` | 6 |
 | `:app` | `DashboardViewModelTest` | 3 |
 | `:app` | `DefinitionEditViewModelTest` | 9 |
-| `:app` | `EventEntryViewModelTest` | 12 |
+| `:app` | `EventEntryViewModelTest` | 13 |
 | `:app` | `ExternalLinkDaoTest` | 5 |
 | `:app` | `JournalDaoTest` | 9 |
 | `:app` | `JournalFormatTest` | 7 |
@@ -108,43 +130,43 @@ defect and it was in a *test*: 2A's `anAssetWithNoTemplateCanBeSetUpLater` still
 | `:app` | `TagUseCasesRoomTest` | 3 |
 | `:app` | `TagWriteControllerTest` | 6 |
 
-Totals from the JUnit XML: **`:core` 223 tests, 0 failures, 0 skipped**; **`:app` 127 tests, 0
-failures, 0 skipped**. 2A finished at `:core` 172 / `:app` 88, so 2B-1 added **51 and 39**.
+Totals from the JUnit XML: **`:core` 225 tests, 0 failures, 0 skipped**; **`:app` 128 tests, 0
+failures, 0 skipped**. 2A finished at `:core` 172 / `:app` 88, so 2B-1 added **53 and 40**.
 
 ### Instrumented (`./gradlew :app:connectedDebugAndroidTest`)
 
-Run on the owner's Android 17 phone, 2026-09-15. **28 tests, 0 failures, 0 skipped**, green twice
-in a row.
+Run on the owner's Android 17 phone, 2026-09-15. **28 tests, 0 failures, 0 skipped**, green on
+every run — twice before the fix wave and once again after it, with device row 6 extended to save.
 
 ```
-ui.AppSmokeTest             bottomBarReachesScanAndShowsReadyToScan                    2.569s  pass
-ui.AppSmokeTest             assetCanBeCreatedFromTheDashboardAndOpens                  2.282s  pass
-ui.AppSmokeTest             secondNewAssetFormStartsBlank                              3.168s  pass
-ui.AppSmokeTest             dashboardShowsTheBackupNudgeOnAFreshInstall                1.131s  pass
-ui.AppSmokeTest             backupScreenRenders                                        1.343s  pass
-ui.DeepLinkSmokeTest        malformedDeepLinkLandsOnDashboard                          1.015s  pass
-ui.EditorsDeviceProofTest   aCustomReadingAndActionDriveALoggedEntry                   8.011s  pass
-ui.EditorsDeviceProofTest   rejectionComesFromOneTestAndIsNeverCombinedAcrossEvents    6.631s  pass
-ui.EditorsDeviceProofTest   archivingASourceEmptiesTheDerivedRowAndLeavesHistoryAlone  5.943s  pass
-ui.EditorsDeviceProofTest   deletingAReadingWithDataAndADependentIsRefusedByName       4.500s  pass
-ui.EditorsDeviceProofTest   formatThreeRoundTripBringsTheDerivedReadingBack            1.576s  pass
-ui.EditorsDeviceProofTest   imeNextWalksFocusDownALongProfile                          4.340s  pass
-ui.JournalDeviceProofTest   hotTubTemplateSeedsReadingsThenAWaterTestFillsThem         9.116s  pass
-ui.JournalDeviceProofTest   editingTheWaterTestCorrectsItInPlace                       5.392s  pass
-ui.JournalDeviceProofTest   aBackdatedTestSitsBelowAndLeavesTheCurrentReadingAlone     5.248s  pass
-ui.JournalDeviceProofTest   upsLoadTestShowsNoTargetsAndPassedYes                      4.038s  pass
-ui.JournalDeviceProofTest   mowerOilChangeRecordsTheMeterAndBothMaterials              4.108s  pass
-ui.JournalDeviceProofTest   anAssetWithNoTemplateCanBeSetUpLater                       1.720s  pass
-ui.JournalDeviceProofTest   backupRoundTripKeepsEveryCountAndTheAssetRendersAgain      4.851s  pass
-ui.JournalDeviceProofTest   deletingTodaysTestFallsBackToTheOlderReading               6.578s  pass
-ui.JournalSmokeTest         hotTubWaterTestShowsInRecordAndReadings                    3.390s  pass
-ui.ShareActivitySmokeTest   sharedWebLinkShowsTheCard                                  0.888s  pass
-ui.components.ComponentsSmokeTest  sectionHeaderShowsItsTitle                          0.775s  pass
-ui.components.ComponentsSmokeTest  identityPlateShowsDashForBlankValues                0.787s  pass
-ui.components.ComponentsSmokeTest  statusBadgeExposesItsLabelToAccessibility           0.775s  pass
-ui.components.ComponentsSmokeTest  ledgerEntryShowsItsDateAndTitle                     0.829s  pass
-ui.nav.NavigationSmokeTest  bottomBarSwitchesToScan                                    1.299s  pass
-ui.nav.NavigationSmokeTest  dashboardIsTheStartDestination                             0.893s  pass
+ui.AppSmokeTest             bottomBarReachesScanAndShowsReadyToScan                    2.448s  pass
+ui.AppSmokeTest             assetCanBeCreatedFromTheDashboardAndOpens                  2.262s  pass
+ui.AppSmokeTest             secondNewAssetFormStartsBlank                              3.120s  pass
+ui.AppSmokeTest             dashboardShowsTheBackupNudgeOnAFreshInstall                1.132s  pass
+ui.AppSmokeTest             backupScreenRenders                                        1.328s  pass
+ui.DeepLinkSmokeTest        malformedDeepLinkLandsOnDashboard                          1.039s  pass
+ui.EditorsDeviceProofTest   aCustomReadingAndActionDriveALoggedEntry                   8.072s  pass
+ui.EditorsDeviceProofTest   rejectionComesFromOneTestAndIsNeverCombinedAcrossEvents    6.634s  pass
+ui.EditorsDeviceProofTest   archivingASourceEmptiesTheDerivedRowAndLeavesHistoryAlone  7.750s  pass
+ui.EditorsDeviceProofTest   deletingAReadingWithDataAndADependentIsRefusedByName       4.545s  pass
+ui.EditorsDeviceProofTest   formatThreeRoundTripBringsTheDerivedReadingBack            1.630s  pass
+ui.EditorsDeviceProofTest   imeNextWalksFocusDownALongProfile                          4.249s  pass
+ui.JournalDeviceProofTest   hotTubTemplateSeedsReadingsThenAWaterTestFillsThem         8.872s  pass
+ui.JournalDeviceProofTest   editingTheWaterTestCorrectsItInPlace                       5.440s  pass
+ui.JournalDeviceProofTest   aBackdatedTestSitsBelowAndLeavesTheCurrentReadingAlone     5.396s  pass
+ui.JournalDeviceProofTest   upsLoadTestShowsNoTargetsAndPassedYes                      3.831s  pass
+ui.JournalDeviceProofTest   mowerOilChangeRecordsTheMeterAndBothMaterials              4.286s  pass
+ui.JournalDeviceProofTest   anAssetWithNoTemplateCanBeSetUpLater                       1.732s  pass
+ui.JournalDeviceProofTest   backupRoundTripKeepsEveryCountAndTheAssetRendersAgain      4.958s  pass
+ui.JournalDeviceProofTest   deletingTodaysTestFallsBackToTheOlderReading               6.524s  pass
+ui.JournalSmokeTest         hotTubWaterTestShowsInRecordAndReadings                    3.258s  pass
+ui.ShareActivitySmokeTest   sharedWebLinkShowsTheCard                                  0.915s  pass
+ui.components.ComponentsSmokeTest  sectionHeaderShowsItsTitle                          0.781s  pass
+ui.components.ComponentsSmokeTest  identityPlateShowsDashForBlankValues                0.817s  pass
+ui.components.ComponentsSmokeTest  statusBadgeExposesItsLabelToAccessibility           0.787s  pass
+ui.components.ComponentsSmokeTest  ledgerEntryShowsItsDateAndTitle                     0.824s  pass
+ui.nav.NavigationSmokeTest  bottomBarSwitchesToScan                                    1.254s  pass
+ui.nav.NavigationSmokeTest  dashboardIsTheStartDestination                             0.981s  pass
 ```
 
 The twenty-two from 1C and 2A are unchanged but for one assertion (below). `EditorsDeviceProofTest`
@@ -200,11 +222,11 @@ delivers no NFC intent to a package in the *stopped* state. Row 1 therefore runs
 | # | Step | Expected | Result |
 |---|---|---|---|
 | 1 | v2 → v3 migration over a real 2A install: `adb install -r -d` the 2A debug build (versionCode 3), `pm clear`, drive its own screens to create an asset and log an entry, then `adb install -r` the 2B-1 debug build over it, open it from the launcher, and read the database back out through `run-as` | `user_version` 3; the asset, definitions, profiles, event, measurements and materials all still there; `kind = 'ENTERED'` and null sources on every definition; the two new source indexes present; no `FATAL EXCEPTION` | **PASS** (controller, `adb`, 2026-09-15). The 2A build was installed, its data cleared, and then **seeded through its own UI** — 2A's own `JournalDeviceProofTest.hotTubTemplateSeedsReadingsThenAWaterTestFillsThem` run against the 2A APK, which taps **Log water test** on a hot-tub asset and types five readings and two materials into the real form (10.5s, OK) — so the database the migration ran against was written by the 2A app through the 2A app's screens. Read back through `run-as` (the phone has no `sqlite3`, so the file is inspected off-device): `user_version` **2**, ten app tables, **18** indexes, `measurement_definition` with its fourteen 2A columns and no `kind`. The 2B-1 build was then installed over it and **opened from the launcher** (`am start` → `MainActivity` is `topResumedActivity`; `dumpsys package` reports `versionCode=4 versionName=2.2 stopped=false notLaunched=false`). After the upgrade: `user_version` **3**; counts **identical** — asset 1, measurement_definition 5, event_profile 2, profile_field 7, profile_consumable 8, asset_event 1, measurement 5, consumable_usage 2, nfc_tag 0, external_link 0; `measurement_definition` now carries `kind`, `formula`, `source_a_id` and `source_b_id`; all five rows read `kind = 'ENTERED'` with all three of those NULL; **20** indexes, the two new ones being `index_measurement_definition_source_a_id` and `index_measurement_definition_source_b_id`; every stored value survives exactly (pH 7.9 with the definition's empty unit, free chlorine 0.8 ppm, alkalinity 110 ppm, calcium hardness 200 ppm, water temperature 102 °F, Chlorine 1 oz, pH reducer 0.5 oz) and the asset still reads "Hot tub" with `template_key = 'hot_tub'`; `logcat` `FATAL EXCEPTION` count **0** |
-| 2 | `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `svc power stayon false`; then **reinstall and launch** (the task uninstalls the app) | All instrumented tests pass (22 from 1C and 2A + the six of `EditorsDeviceProofTest`) | **PASS** 2026-09-15: **28/28**, 0 failures, 0 skipped, green on two consecutive runs — per-test lines in §3, along with the earlier keyguard-blocked attempt and the one stale 2A assertion this run found. Reinstall and launch done: `versionCode=4 versionName=2.2 stopped=false notLaunched=false`, `MainActivity` resumed, `FATAL EXCEPTION` count 0 |
+| 2 | `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `svc power stayon false`; then **reinstall and launch** (the task uninstalls the app) | All instrumented tests pass (22 from 1C and 2A + the six of `EditorsDeviceProofTest`) | **PASS** 2026-09-15: **28/28**, 0 failures, 0 skipped, green on three runs — two before the fix wave and one after it, with row 6 extended to save — per-test lines in §3 (from the last run), along with the earlier keyguard-blocked attempt and the one stale 2A assertion this run found. Reinstall and launch done: `versionCode=4 versionName=2.2 stopped=false notLaunched=false`, `MainActivity` resumed, `FATAL EXCEPTION` count 0 |
 | 3 | Plain asset (Template = None) → **Readings & actions** → **Add reading** (Label "Pressure", Unit "psi", Decimals 0) → Save → **Add action** (Name "Pressure check", field Pressure, required) → Save → back on the asset, **Log pressure check** → 42 → Save | The reading and the action appear on the setup screen; the asset grows a "Log pressure check" quick action; afterwards CURRENT READINGS shows Pressure 42 and SERVICE RECORD shows "Pressure check" | **PASS** (automated: `EditorsDeviceProofTest.aCustomReadingAndActionDriveALoggedEntry`, run on the owner's Android 17 phone 2026-09-15). Nothing here is seeded: the key `pressure` is minted from the label by `slugify`, the entry field is found by the `value-pressure` tag the definition's own key produces, and the quick action's wording comes from `quickActionLabel`. The field is switched from Optional to Required on the way, and the row says so |
 | 4 | `ro_water` asset → **Log TDS test** 310 / 18 / 12 → Save | The asset shows a DERIVED "Rejection" row reading **94.2** | **PASS** (automated: `EditorsDeviceProofTest.rejectionComesFromOneTestAndIsNeverCombinedAcrossEvents`, same run). (310 − 18) / 310 × 100 = 94.1935…, drawn at the derived definition's one decimal |
 | 5 | Same asset → edit the **TDS test** action so post-membrane and output are optional → log a second test with pre-filter 300 only | Pre-filter reads 300, and "Rejection" is **still 94.2** — never a number made of two events | **PASS** (automated: same test as row 4). The two fields are made optional **through the profile editor** on the phone, which is what makes the second entry possible at all; afterwards 300 is on screen, 310 is gone, Rejection is still 94.2, and the record lists two "TDS test" entries |
-| 6 | Archive Pre-filter TDS from the setup screen's row overflow | The entry form has no `value-tds_prefilter` field; the Rejection row on the asset reads "—"; the earlier entry's detail still lists Pre-filter TDS 310 | **PASS** (automated: `EditorsDeviceProofTest.archivingASourceEmptiesTheDerivedRowAndLeavesHistoryAlone`, same run). The row's badge reads ARCHIVED, the asset then shows exactly four em dashes — the plate's three blank cells plus the blanked derived row — with "Pre-filter TDS" and "94.2" gone; the entry form has `value-tds_output` and no `value-tds_prefilter`; and the entry logged before the archive still lists Pre-filter TDS 310 under READINGS |
+| 6 | Archive Pre-filter TDS from the setup screen's row overflow, **then log another TDS test** | The entry form has no `value-tds_prefilter` field; the Rejection row on the asset reads "—"; the earlier entry's detail still lists Pre-filter TDS 310; and **Log TDS test still saves** with only the two fields it still asks for | **PASS** (automated: `EditorsDeviceProofTest.archivingASourceEmptiesTheDerivedRowAndLeavesHistoryAlone`, same run). The row's badge reads ARCHIVED, the asset then shows exactly four em dashes — the plate's three blank cells plus the blanked derived row — with "Pre-filter TDS" and "94.2" gone; the entry form has `value-tds_output` and no `value-tds_prefilter`; the entry logged before the archive still lists Pre-filter TDS 310 under READINGS; and a second test typed into the two remaining fields (17 / 11) **saves** — the record then lists two "TDS test" entries and the plate reads 17. That last half is what the review's B1 added: proving the field is gone proves nothing if the archived field's `required` flag has quietly made the action unsaveable |
 | 7 | Export a format-3 backup, wipe through the ports, import it back, then open the asset | Every table count equal; the derived definition and both its sources back; "Rejection" renders 94.2 again | **PASS** (automated: `EditorsDeviceProofTest.formatThreeRoundTripBringsTheDerivedReadingBack`, same run). **Said plainly: the export and the import are called in-process**, because the file half of the backup screen is a SAF document picker, which is the system's and not the app's. All **eight** counts are equal before and after, the wipe in between is asserted to have emptied the store, "Rejection" comes back as the single DERIVED row with `sourceA` = Pre-filter TDS and `sourceB` = Post-membrane TDS, no ENTERED row carries a spec, and the asset is then cold-started and draws 94.2 from the imported rows |
 | 8 | Delete Post-membrane TDS from the setup screen | The delete is refused and the dialog names the entries, the derived reading and the action that point at it; nothing is written | **PASS** (automated: `EditorsDeviceProofTest.deletingAReadingWithDataAndADependentIsRefusedByName`, same run). Past the neutral confirmation, the refusal dialog reads **"Cannot delete this reading"** with **"1 reading logged"**, **"Used by Rejection"** and **"Offered by TDS test"**, and points at Archive instead. After OK the row is still there and still unarchived |
 | 9 | Long profile (six NUMBER fields): type into the first field, press IME **Next** five times | The sixth field holds focus — the 2A scroll/focus bug | **PASS** (automated: `EditorsDeviceProofTest.imeNextWalksFocusDownALongProfile`, same run). All six `value-f*` fields exist before anything is scrolled, which a `LazyColumn` would not have managed, and the focus lands on each next field in turn until `value-f6` is focused. This is the 2A minor closed by making the entry form a `Column` + `verticalScroll` |
@@ -224,7 +246,8 @@ editors and then logged through the quick action they produce, RO rejection appe
 test and refusing to combine with a second, an archived source leaving the entry form and blanking
 what depends on it while its history stands, a refused delete naming every referrer, the format-3
 round trip, and the IME focus walk down a six-field profile. With the twenty-two from 1C and 2A the
-instrumented suite is **28 tests, 0 failures**, green on two consecutive runs.
+instrumented suite is **28 tests, 0 failures**, green on every run — twice before the fix wave and
+once again after it.
 
 **Run by the controller (§4 rows 1, 2).** The v2 → v3 migration over a real 2A install whose rows
 were written by the 2A app through the 2A app's own screens, and the suite itself.
@@ -244,7 +267,7 @@ What is complete on this machine:
 
 - The final gate passes, including `:app:compileDebugAndroidTestKotlin` and a signed release build
   (§9).
-- `:core` 223 and `:app` 127 JVM tests pass — 90 of them new in 2B-1 — covering the derived
+- `:core` 225 and `:app` 128 JVM tests pass — 93 of them new in 2B-1 — covering the derived
   computation, the nine definition/profile use cases and their prospective graph checks, the
   migration chain, the new DAO columns and the self-referencing RESTRICT, format 3 and the
   four-table restore proof, the three new ViewModels and the entry form's derived rows.
@@ -268,12 +291,16 @@ From the task ledger, in plain words:
   event fake, so `deleteProfileLeavesEventsWithProfileCleared` can be written at all. Production
   relies on the schema's `SET NULL`; the hook is a test helper and nothing else.
 - **Turning a definition DERIVED is refused while a profile still offers it.**
-  `DefinitionWouldBreakProfiles(id, profileIds)` names the unarchived profiles that would be left
-  holding a field nobody can type into. Checked *after* the derived-graph check, so a definition
-  that is both a source and a field reports the derived break first.
+  `DefinitionWouldBreakProfiles(id, profileIds)` names the profiles that would be left holding a
+  field nobody can type into — **archived ones included**, per the review's S2: unarchiving is one
+  tap and does not re-validate, so exempting them bought nothing and left a state `SaveProfile`
+  would later refuse. Checked *after* the derived-graph check, so a definition that is both a
+  source and a field reports the derived break first.
 - **`SaveProfile` keeps a field whose definition has since been archived.** "Unarchived" is a rule
   about *adding* a field, not about keeping one: the entry form already skips archived rows, so
   dropping it on save would silently rewrite someone's quick action the next time they renamed it.
+  The ruling stands, but it took a third party with it that nobody updated: `buildEvent` was still
+  demanding the archived field, which is the review's B1 and the fix wave's first change (§2).
 - **A label with nothing slug-able in it is `BadKey`, not a guess.** `slugify` returns "" and the
   editor asks for a key rather than inventing one.
 - **A derived source must not be a meter.** `DerivedProblem.SourceIsMeter`; spec §4 was amended to
@@ -314,11 +341,11 @@ Minors from the task ledger — small, real, none of them blocking:
 - A doubly-listed invalid profile field reports one reason rather than two.
 - `DeleteDefinition` scans only the owning asset for derived referrers.
 - The format-2 decode test serialises defaults rather than omitting the keys (house style since
-  1A), and `BackupCodecTest.formatTwoRoundTripsAllSevenTables` keeps a name that is now stale — it
-  covers ten.
-- `Migration1To3Test`'s last comment overclaims what its refusal proves; the `profile_field` FK is
-  not exercised after the chain; the DAO's ordered delete pieces are public; `deleteAll` keys on
-  `kind` rather than on the source columns.
+  1A). The stale `formatTwoRoundTripsAllSevenTables` name is no longer deferred — the fix wave
+  renamed it `roundTripsAllSevenTables` (§2).
+- The `profile_field` FK is not exercised after the chain; the DAO's ordered delete pieces are
+  public; `deleteAll` keys on `kind` rather than on the source columns. `Migration1To3Test`'s
+  closing comment no longer overclaims — the fix wave corrected it (§2).
 - The entry form's header still says TARGET over the derived block's badge column (cosmetic).
 - A fast double **Move** drops the second tap.
 - `ProfileProblem.BadField`'s reason string is shown verbatim, which is unreachable from the form
@@ -390,14 +417,16 @@ layouts, reset-from-template, and templates as editable objects.
     :app:compileDebugAndroidTestKotlin
 ```
 
-→ **BUILD SUCCESSFUL**, 113 actionable tasks — 15s on a cold build cache, under a second on a
+→ **BUILD SUCCESSFUL**, 113 actionable tasks — 14s on a cold build cache, under a second on a
 warm one.
 
-Test totals from the JUnit XML: **`:core` 223 tests, 0 failures, 0 skipped**; **`:app` 127 tests, 0
+Test totals from the JUnit XML: **`:core` 225 tests, 0 failures, 0 skipped**; **`:app` 128 tests, 0
 failures, 0 skipped** (per-class breakdown in §3). Instrumented: **28 tests, 0 failures, 0
-skipped** on the owner's Android 17 phone, twice in a row (§3, §4 row 2). The gate itself is
-unchanged by the device-proof commit — `EditorsDeviceProofTest` is `androidTest` source, so it adds
-nothing to either APK and the sizes below are the same bytes as before.
+skipped** on the owner's Android 17 phone (§3, §4 row 2) — twice before the fix wave and once again
+after it, with device row 6 now saving. The fix wave touched three production files (§2), so the
+whole gate and the whole instrumented suite were re-run rather than reasoned about; the APKs below
+were rebuilt from `clean` and came out the same size to the byte, which is the shape of the change:
+one early `return`, one `&&`, one deleted `filter`, one string constant.
 
 APK sizes:
 
@@ -423,12 +452,12 @@ No personal path or username anywhere in the tree:
 git grep -nIiE '/home/[a-z]+|<the owner's username>|<the phone's model and codename>' -- . ':!.superpowers'
 ```
 
-→ four hits, and none of them is a leak: `NfcDispatchActivity.kt` line 31 says "every pixel the app
-draws", which the case-insensitive model-name pattern matches, and the other three are this document's
-own §9 — the command quoting itself, plus the two lines of prose that name the pattern in order to
-explain the first hit. No path, no username, no device serial and no phone model in any
-source file, document or resource — including `EditorsDeviceProofTest`, which names no device at
-all.
+→ two hits, and neither is a leak: `NfcDispatchActivity.kt` line 31 says "every pixel the app
+draws", which the case-insensitive model-name pattern matches, and the other is this very sentence,
+which quotes that line in order to explain it. The command above no longer matches anything itself,
+because the two private words in it are placeholders. No path, no username, no device serial and no
+phone model in any source file, document or resource — including `EditorsDeviceProofTest`, which
+names no device at all.
 
 No asset kind outside the seed data:
 

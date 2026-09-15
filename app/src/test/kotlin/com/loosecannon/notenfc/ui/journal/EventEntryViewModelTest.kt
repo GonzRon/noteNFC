@@ -399,6 +399,34 @@ class EventEntryViewModelTest {
         assertEquals(before.id, reloaded.measurements.first { it.definitionId == alkalinity.id }.id)
     }
 
+    /**
+     * Archiving a *required* reading used to make its quick action unsaveable: the row was off the
+     * form but the domain still demanded it, so Save did nothing and said nothing. The remaining
+     * fields are enough now, and the entry is stored.
+     */
+    @Test fun archivedRequiredFieldDoesNotBlockSave() = runTest {
+        val asset = graph.createAsset.run("RO unit", "Water", templateKey = "ro_water")
+        val defs = graph.definitions.forAsset(asset.id).associateBy(MeasurementDefinition::key)
+        val tdsTest = graph.profiles.forAsset(asset.id).first { it.name == "TDS test" }
+        graph.definitions.upsert(defs.getValue("tds_prefilter").copy(archivedAt = 9_000L))
+
+        val vm = entryModel(asset.id, tdsTest.id, null)
+        val loaded = vm.state.first { it.loaded }
+        assertEquals(
+            listOf("tds_post_membrane", "tds_output"),
+            loaded.fields.map { it.definition.key },
+        )
+
+        vm.onValue(defs.getValue("tds_post_membrane").id, "12")
+        vm.onValue(defs.getValue("tds_output").id, "8")
+        vm.save()
+        val after = vm.state.first { !it.saving }
+
+        assertNull(after.firstProblem)
+        val stored = graph.events.forAsset(asset.id).single()
+        assertEquals(2, stored.measurements.size)
+    }
+
     @Test fun deleteRemovesAndEmits() = runTest {
         val spa = spa()
         val logged = graph.logEvent.run(

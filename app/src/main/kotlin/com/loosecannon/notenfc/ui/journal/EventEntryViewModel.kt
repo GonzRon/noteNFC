@@ -413,7 +413,7 @@ class EventEntryViewModel(
      * the form names is not this asset's any more. Say so once and leave the form as it was typed.
      */
     private fun refuse(cause: Throwable) {
-        val line = if (cause is NoSuchEvent) "This entry is no longer there." else "Could not save this entry."
+        val line = if (cause is NoSuchEvent) "This entry is no longer there." else CANNOT_SAVE
         _state.update { it.copy(saving = false, firstProblem = line) }
     }
 
@@ -436,9 +436,10 @@ private fun Long.at(zone: ZoneId) = Instant.ofEpochMilli(this).atZone(zone)
 
 /**
  * The problems that are not about a single row name themselves; anything else is a row, and the
- * first of those is named by its definition's label ("pH is required").
+ * first of those is named by its definition's label ("pH is required"). A problem that lands on
+ * no visible row still gets a line — a refusal must never be silent.
  */
-private fun List<FieldProblem>.firstProblemText(fields: List<FieldRow>): String? {
+private fun List<FieldProblem>.firstProblemText(fields: List<FieldRow>): String {
     firstNotNullOfOrNull { problem ->
         when (problem) {
             is FieldProblem.BadDate -> "Enter a date as YYYY-MM-DD"
@@ -449,13 +450,17 @@ private fun List<FieldProblem>.firstProblemText(fields: List<FieldRow>): String?
         }
     }?.let { return it }
 
-    val row = fields.firstOrNull { it.problem != null } ?: return null
+    val row = fields.firstOrNull { it.problem != null } ?: return CANNOT_SAVE
     return when (row.problem) {
         is FieldProblem.Required -> "${row.definition.label} is required"
         is FieldProblem.NotANumber -> "${row.definition.label} is not a number"
-        else -> null
+        else -> CANNOT_SAVE
     }
 }
+
+/** The line for a refusal no row can explain. */
+private const val CANNOT_SAVE = "Could not save this entry."
+
 
 /**
  * A stored value back as the text that produced it — the entry field holds what was typed, not a

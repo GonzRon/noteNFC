@@ -130,8 +130,9 @@ class SaveDefinition(
 
             // A profile field is something a person types into; a derived value is computed.
             if (existing.kind == DefinitionKind.ENTERED && candidate.kind == DefinitionKind.DERIVED) {
+                // Archived quick actions count too: unarchiving is one tap and does not
+                // re-validate, so an exemption here would leave a derived profile field behind.
                 val offering = profiles.forAsset(cmd.assetId)
-                    .filter { it.archivedAt == null }   // an archived quick action offers nothing
                     .filter { p -> p.fields.any { it.definitionId == candidate.id } }
                     .map { it.id }
                 if (offering.isNotEmpty()) throw DefinitionWouldBreakProfiles(candidate.id, offering)
