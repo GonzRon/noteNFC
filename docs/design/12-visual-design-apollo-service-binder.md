@@ -21,7 +21,8 @@ not change the approved implementation sequence in D7.
 - **Visual-design gate before Phase 1C (G1, D8 §2):** review 3–4 representative screens — asset
   detail, dashboard, structured water-test entry, NFC scan/write — to confirm the written system
   works as a real Android interface and that the Apollo influence is restrained. Those mockups are
-  not produced in Phase 0 unless separately requested.
+  not produced in Phase 0 unless separately requested. **G1 was run on 2026-09-14: PASS WITH
+  CHANGES** — corrections a–j from `g1/01-g1-visual-gate-report.md` are applied in this document.
 - Naming: `Apollo Service Binder` is the internal design-system/theme name. It is not assumed to
   be a public subtitle or brand.
 
@@ -239,7 +240,7 @@ borders.
 | `surface`                 | `#151D23` | Standard surface                 |
 | `onSurface`               | `#E5E7E8` | Surface text                     |
 | `surfaceVariant`          | `#3D474E` | Variant surface                  |
-| `onSurfaceVariant`        | `#D9E0E4` | Metadata                         |
+| `onSurfaceVariant`        | `#B9C3C9` | Metadata (G1 correction h: must recede from `onSurface`; ≈9.5:1 on `surface`) |
 | `surfaceDim`              | `#10171D` | Lowest surface                   |
 | `surfaceBright`           | `#353F46` | Highest highlighted surface      |
 | `surfaceContainerLowest`  | `#0C1217` | Recessed dark surface            |
@@ -276,13 +277,14 @@ Color is reinforcement.
 | -------------------- | ---------------------------- | --------------------------- | ----------------------------------------- | ------------------------------------- |
 | Maintenance OK       | `#245B78` / `#DCEBF3`        | `#91BED6` / `#17384B`       | `check_circle` — **OK**                   | Normal weight, quiet container        |
 | Due soon             | `#7A4B0A` / `#F6E5C3`        | `#E4B45F` / `#4A320D`       | `schedule` — **DUE SOON**                 | Clock + remaining time                |
-| Due                  | `#8C4700` / `#F7D3AD`        | `#F0A15D` / `#573015`       | `event` — **DUE**                         | Strong label and medium-weight border |
+| Due                  | `#8C4700` / `#F3C89A`        | `#F0A15D` / `#573015`       | `event` — **DUE**                         | Strong label and medium-weight border |
 | Overdue              | `#8C2E2A` / `#F8DAD6`        | `#F2B8B5` / `#4E1C1A`       | `warning` — **OVERDUE**                   | Strong left rule + overdue duration   |
 | Season inactive      | `#586269` / `#E6E8E8`        | `#B1B8BC` / `#2A3136`       | `calendar_month` — **OUT OF SEASON**      | De-emphasized placement               |
 | Paused               | `#5B4D6F` / `#E8E3EF`        | `#C4B4D3` / `#342C3B`       | `pause_circle` — **PAUSED**               | Pause glyph + reason                  |
 | Measurement low      | `#4F5F9A` / `#E2E5F6`        | `#B5C1F0` / `#2A3152`       | `arrow_downward` — **LOW**                | Down arrow and range                  |
 | Measurement in range | `#245B78` / `#DCEBF3`        | `#91BED6` / `#17384B`       | `check` — **IN RANGE**                    | Check + reference range               |
 | Measurement high     | `#8C4700` / `#F7D3AD`        | `#F0A15D` / `#573015`       | `arrow_upward` — **HIGH**                 | Up arrow and range                    |
+| Measurement no target| `#444B50` / `#E6E5DF`        | `#D9E0E4` / `#202A32`       | (no glyph) — **NO TARGET SET**            | Neutral; invites configuring a range   |
 | Reminder healthy     | Same as OK                   | Same as OK                  | `notifications_active` — **ACTIVE**       | Normal treatment                      |
 | Scheduler failure    | Error family                 | Error family                | `notifications_off` — **REMINDER FAILED** | Explicit failure text                 |
 | Sync problem         | `#684682` / `#E9DFF2`        | `#CFB3E5` / `#3B2C46`       | `cloud_off` — **SYNC ISSUE**              | Provider name + retry state           |
@@ -304,7 +306,9 @@ visual carrier of information.
 Mapping to the domain vocabulary (D5 §1): OK → `OK`; Due soon → `DUE_SOON`; Due → `DUE`;
 Overdue → `OVERDUE`; Season inactive → `INACTIVE_SEASON`; Paused → `PAUSED`; `NO_DATA` renders
 with the Season-inactive treatment plus the wording **NO BASELINE**. Measurement low / in range /
-high derive from `measurement_definition.range_low/range_high` (D4 §6). Scheduler failure and
+high derive from `measurement_definition.range_low/range_high` (D4 §6); a definition whose
+range is null renders **NO TARGET SET** (G1 correction f — the owner logs readings such as TDS
+without a target). Scheduler failure and
 Sync problem render the reminder-health findings of D3 §7.3.
 
 ---
@@ -355,7 +359,8 @@ It should not be used for paragraphs, button labels or entire screens.
 | Metadata label      | 11–12sp, Medium, uppercase or title case      |
 | Metadata value      | 14–15sp, Regular                              |
 | Serial/model/NFC ID | 13–14sp monospace                             |
-| Major measurement   | 28–32sp, Medium, tabular/monospace numerals   |
+| Measurement (entry) | 22sp, Medium, monospace tabular numerals, inside the outlined value field |
+| Measurement (hero)  | 28–32sp, Medium, monospace tabular numerals — one featured reading per asset screen only |
 | Unit                | 13–14sp sans, medium                          |
 | Event title         | 15–16sp Medium                                |
 | Event timestamp     | 12sp, `onSurfaceVariant`                      |
@@ -469,6 +474,10 @@ Examples:
 
 Do not have several competing FABs.
 
+G1 ruling (correction c): **no FAB on the asset detail screen** — its 2×2 action grid already
+leads with "Log maintenance" — and none on the dashboard, where Scan is a navigation
+destination. At most one FAB exists app-wide, on the History/Ledger screen.
+
 ### Text fields
 
 6–8dp corners.
@@ -506,7 +515,7 @@ SERIAL
 XYZ12345
 
 NFC TAG
-04:A7:91:2C:...
+41c11b73 · v1
 ```
 
 Surface: `surfaceContainerLow`.
@@ -583,9 +592,10 @@ A subtle rule separates entries.
 
 This should look much more like a **maintenance record** than an activity feed.
 
-Note on the NFC line of the plate: the value shown is the tag's `nfc_tag.id` (payload format v1)
-or the 8-char legacy key, optionally alongside the hardware UID (`physical_uid`, informational
-only) — see D4 §3.
+Note on the NFC line of the plate: the value shown is the first 8 characters of the tag's
+`nfc_tag.id` plus the format ("41c11b73 · v1") or the 8-char legacy key ("63b37acf · legacy").
+The hardware UID (`physical_uid`) is informational only and appears solely in the tag detail
+sheet, labelled "Chip UID" — never on the plate (G1 correction a; see D4 §3).
 
 ---
 
@@ -673,20 +683,25 @@ UPCOMING
 UPS load test
 5 days                                  ›
 
-SEASONAL
-─────────────────────────────────────
-
-▣ IN SEASON
-Snowblower readiness
-Checklist incomplete                    ›
-
 CURRENT
 ─────────────────────────────────────
 
 ✓ OK
 RO filters
 Next replacement in 74 days             ›
+
+OUT OF SEASON
+─────────────────────────────────────
+
+▦ OUT OF SEASON
+Snowblower pre-season check
+Resumes 1 Nov                           ›
 ```
+
+Section order is fixed: ATTENTION · UPCOMING · CURRENT · OUT OF SEASON; empty sections are
+omitted. The duration lives inside the state label ("OVERDUE · 12 DAYS", "DUE SOON · 5 DAYS").
+Season is shown only when *inactive*; an in-season schedule flows into the normal sections and
+there is no IN SEASON badge (G1 correction g).
 
 The hierarchy is carried by several simultaneous dimensions.
 
@@ -695,7 +710,7 @@ The hierarchy is carried by several simultaneous dimensions.
 | Overdue   | Top      | Strongest tinted surface | Warning triangle | Bold       |
 | Due       | Top      | Warm container           | Calendar/event   | Bold       |
 | Due soon  | Upcoming | Lighter warm treatment   | Clock            | Medium     |
-| In season | Seasonal | Neutral/blue             | Calendar         | Medium     |
+| Out of season | Bottom | Recessed neutral, lighter text | Calendar    | Regular    |
 | OK        | Current  | Quiet blue/neutral       | Check            | Normal     |
 
 Even if every color were converted to grayscale, the hierarchy should still be obvious.
@@ -785,18 +800,26 @@ Generator
 Tag verified successfully.
 ```
 
-### Existing tag already bound
+### Overwrite confirmation (tag already holds something)
+
+A bound tag that is *scanned* simply opens its target (a link tag launches with no sheet at
+all, R-7). This sheet appears only inside the **write** flow, when the tag being written already
+holds content — another noteNFC tag, a legacy tag, or foreign NDEF data:
 
 ```text
-LINKED TAG
+OVERWRITE THIS TAG?
 
-This tag is already assigned to:
-Honda EU7000is
+ⓘ The tag already holds: Honda EU7000is
 
-[ Open asset ]
+Replacing it will make the tag identify
+Hot tub. The old content is lost.
+
+[ Overwrite ]
+[ Keep it ]
 ```
 
-No frightening warning styling unless overwriting is attempted.
+One informational line in the due-soon family names what is on the tag. Brick is not used:
+nothing here is an error.
 
 ### Legacy tag detected
 
@@ -808,14 +831,15 @@ noteNFC identifier.
 
 Its asset record was found.
 
-[ Upgrade tag ]
-[ Open without upgrading ]
+[ Rewrite in format v1 ]
+[ Bind as-is ]
 ```
 
 This should look like a migration opportunity, not damaged data.
 
-(These states map onto D6 §4 resolutions and D6 §5 re-link; the "Unknown legacy tag" case adds
-the re-link instruction from D6 §5 to the Unknown-tag treatment.)
+(These states map onto the `Resolution` outcomes of D3 §9 as implemented in Phase 1B. Re-link
+was dropped by D13; an unknown legacy tag offers "Rewrite in format v1" (primary) and "Bind
+as-is" (secondary), per D13 §3.)
 
 ---
 
@@ -1182,6 +1206,15 @@ by every later feature lane.
 
 ---
 
+## 16. Navigation and window structure (added at G1)
+
+- **Bottom navigation** with three destinations: Dashboard · Assets · Scan (`NavigationBar`,
+  indicator pill squared to 6dp, `secondaryContainer`). Asset detail, ledger and sheets are
+  pushed on top; `notenfc://` deep links land inside this structure (D3 §13).
+- **Edge-to-edge** (target 36+): the canvas colour runs under the status and navigation bars in
+  both themes; app bars and bottom sheets pad by the system insets; no separate status-bar colour.
+- **No FAB** on dashboard or asset detail (§7).
+
 ## The recognizable noteNFC signature
 
 If only three things survive from this specification, make them these.
@@ -1197,7 +1230,7 @@ Manufacturer Model
 Friendly asset name
 
 SERIAL        NFC ID
-XYZ12345      04:A7:...
+XYZ12345      41c11b73 · v1
 ```
 
 That should become visually synonymous with noteNFC.
