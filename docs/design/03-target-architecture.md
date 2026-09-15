@@ -25,7 +25,7 @@ Boundaries that earn their keep (they hide foreign vocabularies):
 |---|---|---|
 | `*Repository` | Room entities, DAOs, SQL | `RoomAssetRepository`, … |
 | `ReminderProvider` | AlarmManager/WorkManager/Notification vs Todoist HTTP | `LocalReminderProvider`, `TodoistReminderProvider` |
-| `NdefCodec` (pure) + `TagReader`/`TagWriter` ports | `android.nfc.*` | `NfcReaderModeSession`, `NdefTagWriter` |
+| `NdefCodec` (pure) + `TagReader`/`TagWriter` ports | `android.nfc.*` | `NfcReaderModeSession`, `TagWriter` |
 | `AttachmentStore` | filesystem vs SAF vs future cloud | `LocalAttachmentStore`, `SafTreeAttachmentStore` |
 | `SecretStore` | Android Keystore + `Cipher` | `KeystoreSecretStore` |
 | `BackupCodec` (pure) + `BackupIO` port | ZIP/JSON layout vs SAF streams | `SafBackupIO` |
@@ -57,7 +57,7 @@ Boundaries that earn their keep (they hide foreign vocabularies):
 │ └────────────────────────────────────────────────────────────────────────────────────────────────┘ │
 │        ▲ adapters                                                                                  │
 │  data/room: AppDatabase(v1..v6) · entities · DAOs · migrations · Room*Repository · LegacyPrefsReader│
-│  nfc: NfcReaderModeSession · NdefTagWriter · NfcDispatchActivity (NDEF_DISCOVERED entry)           │
+│  nfc: NfcReaderModeSession · TagWriter · NfcDispatchActivity (NDEF_DISCOVERED entry)           │
 │  reminders/local: DailyDigestAlarm · ReminderWorker · BootReceiver · NotificationPublisher         │
 │                   · QuickActionReceiver · ReminderHealthCheck                                       │
 │  integrations/todoist: TodoistApi · TodoistReminderProvider · TodoistSyncWorker · OutboxDrainer     │
@@ -84,7 +84,7 @@ core/src/test/kotlin/…                       JUnit 5 + kotlin.test; property t
 app/src/main/kotlin/com/loosecannon/notenfc/
   NoteNfcApp.kt (AppGraph)
   data/room/     AppDatabase.kt · entities/ · dao/ · migrations/ · repos/ · LegacyPrefsMigration.kt
-  nfc/           NfcReaderModeSession.kt · NdefTagWriter.kt · NfcDispatchActivity.kt
+  nfc/           NfcReaderModeSession.kt · TagWriter.kt · NfcDispatchActivity.kt
   reminders/     local/ · health/
   integrations/todoist/
   attachments/
@@ -293,8 +293,8 @@ Tag ──▶ NfcReaderModeSession (in-app Scan/Write screens, enableReaderMode)
 ```
 
 - `NdefCodec`, `OverwritePolicy` and `TagRoute` live in `:core` and are tested with byte fixtures; no Android types.
-- Reader mode (`enableReaderMode`, `FLAG_READER_NFC_A | FLAG_READER_SKIP_NDEF_CHECK` where we
-  want raw tags) replaces foreground dispatch for in-app scanning and writing: callback-based, no
+- Reader mode (`enableReaderMode` with `FLAG_READER_NFC_A|B|F|V`; **never** `FLAG_READER_SKIP_NDEF_CHECK`,
+  which stops the platform marking the tag as NDEF so `Ndef.get()` returns null — Phase 1B finding) replaces foreground dispatch for in-app scanning and writing: callback-based, no
   PendingIntent, no activity relaunch. Background scans (app not open) still arrive through the
   manifest `NDEF_DISCOVERED` filters on `NfcDispatchActivity`.
 - Writer: reads the tag first; if it already holds a noteNFC payload for a *different* binding or
