@@ -79,6 +79,9 @@ class WriteTagActivity : Activity() {
                     .setMessage("A locked tag can never be rewritten or reused. Only lock tags that are installed for good.")
                     .setPositiveButton("Lock after writing", null)
                     .setNegativeButton("Don't lock") { _, _ -> lock.isChecked = false }
+                    // Back press or a tap outside must not leave the box armed: dismissing the
+                    // warning without accepting it is not consent to lock the tag for good.
+                    .setOnCancelListener { lock.isChecked = false }
                     .show()
             }
         }

@@ -16,12 +16,19 @@ import kotlinx.coroutines.launch
 object TargetPicker {
     fun show(activity: Activity, graph: AppGraph, scope: CoroutineScope, allowNone: Boolean, onPicked: (TagTarget) -> Unit) {
         scope.launch {
-            val assets = graph.assets.all().sortedBy { it.name.lowercase() }
-            val links = graph.links.all().sortedBy { it.label.lowercase() }
             val labels = ArrayList<String>()
             val actions = ArrayList<() -> Unit>()
-            assets.forEach { a -> labels += "Asset: ${a.name}"; actions += { onPicked(TagTarget.AssetTarget(a.id)) } }
-            links.forEach { l -> labels += "Link: ${l.label}"; actions += { onPicked(TagTarget.LinkTarget(l.id)) } }
+            try {
+                val assets = graph.assets.all().sortedBy { it.name.lowercase() }
+                val links = graph.links.all().sortedBy { it.label.lowercase() }
+                assets.forEach { a -> labels += "Asset: ${a.name}"; actions += { onPicked(TagTarget.AssetTarget(a.id)) } }
+                links.forEach { l -> labels += "Link: ${l.label}"; actions += { onPicked(TagTarget.LinkTarget(l.id)) } }
+            } catch (e: Exception) {
+                // A repository failure here would otherwise escape the caller's MainScope and take
+                // the process with it; the picker is not worth a crash.
+                Toast.makeText(activity, "Could not load targets: ${e.message}", Toast.LENGTH_LONG).show()
+                return@launch
+            }
             labels += "New asset…"; actions += { promptNewAsset(activity, graph, scope, onPicked) }
             if (allowNone) { labels += "No target yet (spare tag)"; actions += { onPicked(TagTarget.None) } }
             if (activity.isFinishing || activity.isDestroyed) return@launch
@@ -46,6 +53,8 @@ object TargetPicker {
                         onPicked(TagTarget.AssetTarget(asset.id))
                     } catch (e: IllegalArgumentException) {
                         Toast.makeText(activity, "Give the asset a name.", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(activity, "Could not create the asset: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
             }

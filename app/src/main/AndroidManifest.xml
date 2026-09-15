@@ -10,6 +10,7 @@
 
         <activity
             android:name="com.loosecannon.notenfc.ui.interim.WriteTagActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false"
             android:label="@string/write_title" />
     </application>
