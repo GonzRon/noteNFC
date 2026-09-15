@@ -281,6 +281,58 @@ class DefinitionUseCasesTest {
         assertEquals(commits, uow.commits)
     }
 
+    @Test fun sourceUsedByProfileCannotBecomeDerived() = runTest {
+        seed("ro_water")
+        val output = byKey("tds_output")            // a field of "TDS test", and no derived reads it
+        val tdsTest = profiles.forAsset(a1).first { it.name == "TDS test" }
+        val before = LinkedHashMap(defs.rows)
+        val commits = uow.commits
+        val refused = assertFailsWith<DefinitionWouldBreakProfiles> {
+            save.run(
+                output.id,
+                cmd(
+                    "Output TDS", key = "tds_output", unit = "ppm", decimals = 0,
+                    kind = DefinitionKind.DERIVED, formula = DerivedFormula.PERCENT_DROP,
+                    sourceA = byKey("tds_prefilter").id, sourceB = byKey("tds_post_membrane").id,
+                ),
+            )
+        }
+        assertEquals(output.id, refused.id)
+        assertEquals(listOf(tdsTest.id), refused.profileIds)
+        assertEquals(before, defs.rows)
+        assertEquals(commits, uow.commits)
+        // a definition that is both a derived source and a profile field reports the derived break
+        assertFailsWith<DefinitionWouldBreakDerived> {
+            save.run(
+                byKey("tds_prefilter").id,
+                cmd(
+                    "Pre-filter TDS", key = "tds_prefilter", unit = "ppm", decimals = 0,
+                    kind = DefinitionKind.DERIVED, formula = DerivedFormula.PERCENT_DROP,
+                    sourceA = output.id, sourceB = byKey("tds_post_membrane").id,
+                ),
+            )
+        }
+        assertEquals(before, defs.rows)
+    }
+
+    @Test fun relabellingAProfileFieldDefinitionPasses() = runTest {
+        seed("ro_water")
+        val output = byKey("tds_output")
+        val tdsTest = profiles.forAsset(a1).first { it.name == "TDS test" }
+        val edited = save.run(
+            output.id,
+            cmd("Outlet TDS", key = "tds_outlet", unit = "mg/L", decimals = 2, rangeLow = 0.0, rangeHigh = 50.0),
+        )
+        assertEquals("Outlet TDS", edited.label)
+        assertEquals("tds_outlet", edited.key)
+        assertEquals(DefinitionKind.ENTERED, defs.get(output.id)!!.kind)
+        // the profile still offers the field it always did
+        assertEquals(tdsTest.fields, profiles.get(tdsTest.id)!!.fields)
+        // and archiving it is still allowed
+        archive.run(output.id, archived = true)
+        assertEquals(5_000L, defs.get(output.id)!!.archivedAt)
+    }
+
     @Test fun sourceUsedByDerivedCanBeRelabelledOrArchived() = runTest {
         seed("ro_water")
         val prefilter = byKey("tds_prefilter")

@@ -156,6 +156,35 @@ class ProfileUseCasesTest {
         assertTrue(ok.fields.single().required)
     }
 
+    @Test fun existingArchivedFieldSurvivesProfileResave() = runTest {
+        seed("ro_water")
+        val tdsTest = profile("TDS test")
+        val prefilter = byKey("tds_prefilter")
+        val postMembrane = byKey("tds_post_membrane")
+        val output = byKey("tds_output")
+        val outputField = tdsTest.fields.first { it.definitionId == output.id }
+        archiveDefinition.run(output.id, archived = true)
+
+        // renaming the profile keeps the field whose definition was archived under it, id and all
+        val saved = save.run(
+            tdsTest.id,
+            cmd(
+                "TDS check",
+                fields = tdsTest.fields.map { ProfileFieldInput(it.definitionId, it.required) },
+            ),
+        )
+        assertEquals("TDS check", saved.name)
+        assertEquals(listOf(prefilter.id, postMembrane.id, output.id), saved.fields.map { it.definitionId })
+        assertEquals(outputField.id, saved.fields.last().id)
+        assertEquals(saved, profiles.get(tdsTest.id))
+
+        // but it cannot be added to a profile that didn't already have it
+        val problems = problemsOf {
+            save.run(null, cmd("TDS retest", fields = listOf(ProfileFieldInput(output.id, required = false))))
+        }
+        assertEquals(listOf(ProfileProblem.BadField(output.id, "archived")), problems)
+    }
+
     @Test fun updateKeepsChildIds() = runTest {
         seed("hot_tub")
         val waterTest = profile("Water test")

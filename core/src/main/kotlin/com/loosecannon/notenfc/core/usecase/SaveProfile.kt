@@ -15,9 +15,12 @@ import com.loosecannon.notenfc.core.ports.UnitOfWork
 
 /**
  * Creates or edits one event profile — a quick action, with the fields it puts on the form (spec
- * §6). Validation is collected, not fail-fast. A field has to name an ENTERED, unarchived
- * definition of the same asset, and may appear once: a DERIVED value is computed, never typed, and
- * an archived definition is one a person has deliberately taken off the forms.
+ * §6). Validation is collected, not fail-fast. A field has to name an ENTERED definition of the
+ * same asset, and may appear once: a DERIVED value is computed, never typed.
+ *
+ * "Unarchived" is a rule about *adding* a field. A field the profile already carries is kept even
+ * if its definition has since been archived: the entry form skips archived rows anyway, so
+ * dropping it here would silently rewrite someone's quick action the next time they renamed it.
  *
  * Child ids are identity, not bookkeeping (see [ProfileField] / [ProfileConsumable]): on an update
  * a field keeps the id it already had for that definition, and a consumable keeps the id the
@@ -52,12 +55,13 @@ class SaveProfile(
 
         val seen = mutableSetOf<DefinitionId>()
         val fields = mutableListOf<ProfileField>()
+        val alreadyOnProfile = existing?.fields?.map { it.definitionId }?.toSet().orEmpty()
         for (input in cmd.fields) {
             val definition = definitions.get(input.definitionId)
             val reason = when {
                 definition == null || definition.assetId != cmd.assetId -> "not a definition of this asset"
                 definition.kind != DefinitionKind.ENTERED -> "derived values are computed, not entered"
-                definition.archivedAt != null -> "archived"
+                definition.archivedAt != null && input.definitionId !in alreadyOnProfile -> "archived"
                 !seen.add(input.definitionId) -> "listed twice"
                 else -> null
             }

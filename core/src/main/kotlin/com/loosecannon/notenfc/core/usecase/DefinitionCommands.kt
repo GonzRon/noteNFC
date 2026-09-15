@@ -78,6 +78,15 @@ class DefinitionReferenced(
 class DefinitionWouldBreakDerived(val id: DefinitionId, val dependentDerivedIds: List<DefinitionId>) :
     IllegalStateException("definition ${id.value} is a source of ${dependentDerivedIds.map { it.value }}")
 
+/**
+ * Turning this ENTERED definition DERIVED would leave the named profiles offering a field that
+ * can no longer be typed into (a derived value is computed, never entered). Nothing was written;
+ * drop the field from those profiles first, or add a new derived definition instead of converting
+ * this one.
+ */
+class DefinitionWouldBreakProfiles(val id: DefinitionId, val profileIds: List<ProfileId>) :
+    IllegalStateException("definition ${id.value} is a field of ${profileIds.map { it.value }}")
+
 /** The definition this edit, archive or delete was aimed at is no longer there. */
 class NoSuchDefinition(id: DefinitionId) : IllegalArgumentException("no definition ${id.value}")
 

@@ -15,7 +15,7 @@ import com.loosecannon.notenfc.core.ports.UnitOfWork
 
 /**
  * Creates or edits one measurement definition (spec §6). Validation is collected, not fail-fast:
- * a form gets every [DefinitionProblem] at once. Three things are refused outside that list,
+ * a form gets every [DefinitionProblem] at once. Four things are refused outside that list,
  * because they are not about the field a person typed:
  *
  * - [DefinitionInUse] — `valueType`, `kind` or `key` changed while measurements exist. Those three
@@ -24,18 +24,17 @@ import com.loosecannon.notenfc.core.ports.UnitOfWork
  *   asset's definitions in memory and every *other* DERIVED definition is re-checked with
  *   [derivedProblems]. Any of them that was valid and would stop being valid refuses the write.
  *   Relabel, unit, range, decimals and key edits pass it, and so does archiving a source (§5).
+ * - [DefinitionWouldBreakProfiles] — the same idea one table over: turning an ENTERED definition
+ *   DERIVED would leave a profile offering a field nobody can type into, so it is refused with
+ *   the profiles that would be left holding it. Checked after the derived graph, so a definition
+ *   that is both a derived source and a profile field reports the derived break first.
  * - [EventOwnership] / [NoSuchAsset] / [NoSuchDefinition] — the edit isn't aimed at a row of this
  *   asset at all.
- *
- * [profiles] is not read: a profile field can only name an ENTERED definition, and a definition
- * with a field pointing at it always has the measurements that freeze its kind — but the editor
- * constructs this use case with the profile repository so a later rule can say so out loud
- * without changing every call site.
  */
 class SaveDefinition(
     private val definitions: DefinitionRepository,
     private val events: EventRepository,
-    @Suppress("unused") private val profiles: ProfileRepository,
+    private val profiles: ProfileRepository,
     private val assets: AssetRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
@@ -128,6 +127,14 @@ class SaveDefinition(
                 .filter { it.derivedProblems(before).isEmpty() && it.derivedProblems(after).isNotEmpty() }
                 .map { it.id }
             if (broken.isNotEmpty()) throw DefinitionWouldBreakDerived(candidate.id, broken)
+
+            // A profile field is something a person types into; a derived value is computed.
+            if (existing.kind == DefinitionKind.ENTERED && candidate.kind == DefinitionKind.DERIVED) {
+                val offering = profiles.forAsset(cmd.assetId)
+                    .filter { p -> p.fields.any { it.definitionId == candidate.id } }
+                    .map { it.id }
+                if (offering.isNotEmpty()) throw DefinitionWouldBreakProfiles(candidate.id, offering)
+            }
         }
 
         uow.write { definitions.upsert(candidate) }
