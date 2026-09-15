@@ -193,7 +193,10 @@ class BackupUseCasesTest {
             assertEquals(source.tags.all().sortedBy { it.id.value }, target.tags.all().sortedBy { it.id.value })
             assertEquals(source.links.all().sortedBy { it.id.value }, target.links.all().sortedBy { it.id.value })
         }
-        assertEquals(ImportReport(assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0, events = 0), report)
+        assertEquals(
+            ImportReport(formatVersion = 2, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0, events = 0),
+            report,
+        )
     }
 
     @Test
@@ -328,7 +331,7 @@ class BackupUseCasesTest {
         val target = Fakes()
         runBlocking { target.assets.upsert(asset("gone", "Gone")) }
         val report = importInto(target, exportOf(f))
-        assertEquals(ImportReport(0, 0, 0, 0, 0, 0), report)
+        assertEquals(ImportReport(formatVersion = 2, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0, events = 0), report)
         runBlocking { assertTrue(target.assets.all().isEmpty()) }
     }
 
@@ -372,7 +375,10 @@ class BackupUseCasesTest {
 
         val report = importInto(target, bytes)
 
-        assertEquals(ImportReport(assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1, events = 1), report)
+        assertEquals(
+            ImportReport(formatVersion = 2, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1, events = 1),
+            report,
+        )
         runBlocking {
             assertNull(target.definitions.get(DefinitionId("d-old")))
             assertNull(target.profiles.get(ProfileId("p-old")))
@@ -412,6 +418,29 @@ class BackupUseCasesTest {
         }
         assertEquals(1, target.uow.rollbacks)
         assertEquals(0, target.uow.commits)
+    }
+
+    @Test
+    fun importReportEchoesTheManifestsFormatVersion() {
+        val source = Fakes()
+        runBlocking { populate(source) }
+        val v2Bytes = exportOf(source)
+
+        val v2Report = importInto(Fakes(), v2Bytes)
+        assertEquals(2, v2Report.formatVersion)
+
+        // reseal the same, already-valid data under a manifest claiming format 1 — the same
+        // trick BackupCodecTest's formatOneFileStillDecodes uses.
+        val v1Data = BackupCodec.decode(v2Bytes).data
+        val v1Bytes = BackupCodec.encode(
+            v1Data,
+            appVersion = "2.0",
+            schemaVersion = 1,
+            createdAt = 1_726_000_000_000L,
+            formatVersion = 1,
+        )
+        val v1Report = importInto(Fakes(), v1Bytes)
+        assertEquals(1, v1Report.formatVersion)
     }
 
     // --- helper: rewrite the manifest to claim a newer format version --------------------------

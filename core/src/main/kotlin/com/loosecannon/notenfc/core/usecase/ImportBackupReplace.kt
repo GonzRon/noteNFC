@@ -11,6 +11,7 @@ import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 
 data class ImportReport(
+    val formatVersion: Int,
     val assets: Int,
     val tags: Int,
     val links: Int,
@@ -56,6 +57,7 @@ class ImportBackupReplace(
         }
 
         return ImportReport(
+            formatVersion = backup.manifest.formatVersion,
             assets = data.assets.size,
             tags = data.nfcTags.size,
             links = data.externalLinks.size,
