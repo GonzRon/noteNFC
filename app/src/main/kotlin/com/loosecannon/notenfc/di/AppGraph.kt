@@ -6,25 +6,36 @@ import androidx.sqlite.driver.AndroidSQLiteDriver
 import com.loosecannon.notenfc.BuildConfig
 import com.loosecannon.notenfc.core.ports.AssetRepository
 import com.loosecannon.notenfc.core.ports.Clock
+import com.loosecannon.notenfc.core.ports.DefinitionRepository
+import com.loosecannon.notenfc.core.ports.EventRepository
 import com.loosecannon.notenfc.core.ports.IdGenerator
 import com.loosecannon.notenfc.core.ports.LinkRepository
+import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.ports.UuidGenerator
+import com.loosecannon.notenfc.core.usecase.ApplyTemplate
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.BindTag
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
 import com.loosecannon.notenfc.core.usecase.ExportBackup
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
+import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.OpenLink
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.ResolveTag
 import com.loosecannon.notenfc.core.usecase.SaveLink
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
+import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.data.room.AppDatabase
+import com.loosecannon.notenfc.data.room.MIGRATION_1_2
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
+import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
+import com.loosecannon.notenfc.data.room.RoomEventRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
+import com.loosecannon.notenfc.data.room.RoomProfileRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
 import com.loosecannon.notenfc.prefs.AppPrefs
@@ -42,6 +53,7 @@ class AppGraph(context: Context) {
         )
         .setDriver(AndroidSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
+        .addMigrations(MIGRATION_1_2)
         .build()
 
     val clock: Clock = Clock { System.currentTimeMillis() }
@@ -50,14 +62,20 @@ class AppGraph(context: Context) {
     val assets: AssetRepository = RoomAssetRepository(db.assetDao())
     val tags: TagRepository = RoomTagRepository(db.nfcTagDao())
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
+    val definitions: DefinitionRepository = RoomDefinitionRepository(db.definitionDao())
+    val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
+    val events: EventRepository = RoomEventRepository(db.eventDao())
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
-    /** Produces the bytes of a v1 backup; where they go is the caller's choice (a SAF document). */
-    val exportBackup: ExportBackup =
-        ExportBackup(assets, tags, links, uow, clock, BuildConfig.VERSION_NAME, SCHEMA_VERSION)
+    /** Produces the bytes of a v2 backup; where they go is the caller's choice (a SAF document). */
+    val exportBackup: ExportBackup = ExportBackup(
+        assets, tags, links, definitions, profiles, events, uow, clock,
+        BuildConfig.VERSION_NAME, SCHEMA_VERSION,
+    )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
-    val importBackupReplace: ImportBackupReplace = ImportBackupReplace(assets, tags, links, uow)
+    val importBackupReplace: ImportBackupReplace =
+        ImportBackupReplace(assets, tags, links, definitions, profiles, events, uow)
 
     /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -66,7 +84,8 @@ class AppGraph(context: Context) {
     val resolveTag: ResolveTag = ResolveTag(tags, assets, links, uow, clock)
     val bindTag: BindTag = BindTag(tags, assets, links, uow, ids, clock)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
-    val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock)
+    val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
+    val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
     val saveLink: SaveLink = SaveLink(links, uow, ids, clock)
     val openLink: OpenLink = OpenLink(links, uow, clock)
 
@@ -77,10 +96,15 @@ class AppGraph(context: Context) {
     /** A link is a pointer, not a record, so it can be deleted — unless a tag still points at it. */
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
 
+    // Phase 2A — the maintenance journal.
+    val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
+    val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
+    val deleteEvent: DeleteEvent = DeleteEvent(events, uow)
+
     private companion object {
         const val DB_NAME = "notenfc.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 }

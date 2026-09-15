@@ -13,6 +13,7 @@ data class AssetEntity(
     val category: String,
     val notes: String,
     val status: String,
+    @ColumnInfo(name = "template_key") val templateKey: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )

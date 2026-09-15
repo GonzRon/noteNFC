@@ -25,6 +25,7 @@ fun AssetEntity.toDomain(): Asset = Asset(
     category = category,
     notes = notes,
     status = AssetStatus.valueOf(status),
+    templateKey = templateKey,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
@@ -36,6 +37,7 @@ fun Asset.toEntity(): AssetEntity = AssetEntity(
     category = category,
     notes = notes,
     status = status.name,
+    templateKey = templateKey,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

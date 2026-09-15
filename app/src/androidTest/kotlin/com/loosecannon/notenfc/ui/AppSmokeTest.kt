@@ -53,6 +53,9 @@ private fun clearInstall() {
     val graph = app.graph
     runBlocking {
         graph.uow.write {
+            graph.events.deleteAll()
+            graph.profiles.deleteAll()
+            graph.definitions.deleteAll()
             graph.tags.deleteAll()
             graph.links.deleteAll()
             graph.assets.deleteAll()
