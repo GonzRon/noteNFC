@@ -65,8 +65,10 @@ data class MeasurementDefinition(
 enum class EventKind { MAINTENANCE, INSPECTION, MEASUREMENT, TREATMENT, INCIDENT, REPLACEMENT,
                        SEASON_START, SEASON_END, NOTE, CUSTOM }
 
-data class ProfileField(val definitionId: DefinitionId, val required: Boolean, val sortOrder: Int)
-data class ProfileConsumable(val name: String, val defaultQuantity: Double?, val unit: String, val sortOrder: Int)
+data class ProfileField(val id: String, val definitionId: DefinitionId, val required: Boolean, val sortOrder: Int)
+data class ProfileConsumable(val id: String, val name: String, val defaultQuantity: Double?, val unit: String, val sortOrder: Int)
+// Child rows carry durable ids of their own (seven tables, one identity rule): they survive backup
+// verbatim and 2B edits/reorders them by id. Import never generates replacement ids.
 
 data class EventProfile(
     val id: ProfileId, val assetId: AssetId,
@@ -176,13 +178,22 @@ interface EventRepository {     // aggregate: upsert replaces measurements and c
 
 - **`ApplyTemplate(assetId, template)`** — inside one `uow.write`: if the asset already has any
   definition or profile, return `AlreadySetUp` and change nothing (this is the idempotency rule);
-  otherwise create the template's definitions and profiles with fresh ids and timestamps, set
+  otherwise create the template's definitions and profiles (and their fields and consumable
+  suggestions) with fresh ids and timestamps, set
   `asset.templateKey` if null, return `Applied(definitions, profiles)`. `template_key` on the
   asset and on profiles means "originally seeded from"; nothing later consults the template.
 - **`CreateAsset.run(name, category, description, notes, templateKey: String?)`** — as today,
-  then applies the named seed in the same transaction when `templateKey` is non-null.
+  then applies the named seed in the same transaction when `templateKey` is non-null. `null` means
+  "no template": the asset has no definitions or profiles and can be set up from a template later
+  from its own screen. The new-asset form defaults to that `null`; Generic is an explicit choice
+  like the other four, never the default, because applying it creates the Note profile and
+  `ApplyTemplate` then (correctly) refuses any other seed until the 2B editor exists.
 - **`LogEvent(command)`** and **`UpdateEvent(command)`** — one validation path
-  (`EventCommand` → `AssetEvent`): title non-blank (defaulted from the profile); `occurredOn`
+  (`EventCommand` → `AssetEvent`). Ownership first, as domain errors distinct from field
+  validation: `UpdateEvent` requires `existing.assetId == command.assetId` (an edit edits an
+  event, it never re-parents it), and any `profileId` must name a profile of that same asset;
+  every definition in `values` must belong to that asset (`EventOwnership` exception, nothing
+  stored). Then fields: title non-blank (defaulted from the profile); `occurredOn`
   parses as a calendar date; `occurredTime` null or `HH:MM`; every `required` profile field has a
   value; NUMBER values parse (locale-independent, `.` decimal), BOOLEAN is 0/1, TEXT is trimmed
   non-empty or absent; unit snapshotted from the definition at save; consumables need a name and
@@ -194,7 +205,8 @@ interface EventRepository {     // aggregate: upsert replaces measurements and c
 
 ## 7. Seed templates (`core.journal.SeedTemplates`, typed Kotlin, no JSON)
 
-Five `Template(key, name, definitions, profiles)` values. Ranges and units below are the seeds'
+Five `Template(key, name, definitions, profiles)` values; template rows carry no ids (a template
+consumable is `TemplateConsumable(name, defaultQuantity, unit)`), `ApplyTemplate` mints them. Ranges and units below are the seeds'
 defaults; from the moment they are applied they are the asset's own rows and 2B's editor may
 change them. Keys are stable identifiers; labels are what the user sees.
 
@@ -242,9 +254,15 @@ UoW) and returns events newest-first by the §4.1 order expressed in SQL
   (each carrying its `fields` and `consumables`), `assetEvents` (each carrying `measurements` and
   `consumables`) — seven tables, three lists, every row represented. All new lists default to
   empty so a format-1 file decodes; `AssetDto.templateKey` defaults to null.
-- Validation on decode: unique ids per table; every `assetId`, `definitionId`, `profileId`
-  references a row in the same file; a measurement's definition belongs to the same asset as its
-  event; `value_type` and `kind` names known. Failures are `BackupCorrupt` with the offending id.
+- Validation on decode: unique ids per table (fields, consumable suggestions, measurements and
+  usages included); every `assetId`, `definitionId`, `profileId` references a row in the same
+  file; a profile's fields reference definitions of the profile's asset; an event's profile and
+  every measurement's definition belong to the event's asset; `valueType`, `eventKind`, `kind` and
+  `source` names known. **Value shape** per the referenced definition's `valueType`, the same
+  invariant `LogEvent` enforces, because import is an untrusted boundary: NUMBER → `valueNum`
+  present, `valueText` null; BOOLEAN → `valueNum` exactly 0.0 or 1.0, `valueText` null; TEXT →
+  `valueText` non-blank, `valueNum` null; both set, neither set, or the wrong kind →
+  `BackupCorrupt` naming the measurement id.
 - Import order inside the one write transaction: delete events, profiles, definitions, tags,
   links, assets; then insert assets, definitions, profiles, links, tags, events. `ImportReport`
   gains `definitions`, `profiles`, `events` counts. Export reads everything in one read
@@ -270,8 +288,9 @@ newest first: date column, title, detail line = up to three readings "pH 7.8 · 
 the first consumable, badge only when a reading is LOW/HIGH; tap → `EventDetail`; empty → "No
 service recorded yet") → Tags → Links → Notes.
 
-**New asset form** gains a **Template** row (the five seeds by name, default Generic) that maps
-to `CreateAsset(templateKey)`. Edit of an existing asset shows no template row.
+**New asset form** gains a **Template** row: **None · set up later** (default), Hot tub, Power
+equipment, UPS, RO water, Generic — mapping to `CreateAsset(templateKey)` with `null` for None.
+Edit of an existing asset shows no template row.
 
 **Entry route** (`EventEntryScreen`, G1 §1.3 layout). A full-screen destination is the
 recommended container; the implementation may choose otherwise only with a reason in the ledger.
@@ -312,11 +331,14 @@ LOW / IN RANGE / HIGH / NO TARGET SET.
 **JVM (`:core`).** `EventChronologyTest` (the four pins in §4.1), `LatestReadingsTest` (the four
 pins in §4.2 plus "no reading yet"), `RangeStateTest` (bounds inclusive, NO_TARGET, one-sided
 ranges), `SeedTemplatesTest` (five keys, unique definition keys per template, every profile field
-references a definition in the same template), `ApplyTemplateTest` (applies once, second call
-`AlreadySetUp` with no change, sets `templateKey` only when null), `LogEventTest` (required field
-missing → typed error; NUMBER parse; BOOLEAN 0/1; unit snapshot; consumables), `UpdateEventTest`,
+references a definition in the same template), `ApplyTemplateTest` (applies once with fresh ids on
+fields and suggestions, second call `AlreadySetUp` with no change, sets `templateKey` only when
+null; `CreateAsset` with `templateKey = null` leaves the asset empty and set-up-able), `LogEventTest` (required field
+missing → typed error; NUMBER parse; BOOLEAN 0/1; unit snapshot; consumables; profile or
+definition of another asset → `EventOwnership`), `UpdateEventTest` (cannot move an event to another
+asset: `EventOwnership`, nothing stored),
 `DeleteEventTest`, `BackupCodecTest` additions (format-1 decode, format-2 round trip, referential
-validation failures), `BackupUseCasesTest` additions (import order, report counts).
+validation failures, the four value-shape rejections), `BackupUseCasesTest` additions (import order, report counts).
 
 **JVM (`:app`).** `Migration1To2Test`, `JournalDaoTest` (aggregate upsert replaces children;
 newest-first order; observe emits on child change; RESTRICT on a definition with data),

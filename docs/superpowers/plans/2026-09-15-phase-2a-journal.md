@@ -19,6 +19,9 @@
 - Chronology has one owner: `EventChronology` (spec §4.1). Nothing else decides "newest". Insertion order and `updatedAt` never participate.
 - Current readings are derived from the event list (spec §4.2); nothing caches a "current" value.
 - Units are snapshotted onto each `Measurement` at save; stored values are never rounded.
+- Child rows (`profile_field`, `profile_consumable`, `measurement`, `consumable_usage`) have durable text ids of their own, carried domain → Room → backup verbatim; import never mints replacement ids.
+- Ownership: an event, its profile and every definition it measures belong to one asset; `UpdateEvent` never re-parents (spec §6).
+- New assets default to **no template** (`templateKey = null`); Generic is an explicit choice (spec §6, §10).
 - Seed templates are starter data, not taxonomy: after `ApplyTemplate` runs, no code may branch on a template key. The only places a template key appears are `SeedTemplates`, `ApplyTemplate`, the two pickers, and provenance columns.
 - Schema: `exportSchema = true`; version 2 ships `MIGRATION_1_2` and `Migration1To2Test`; `app/schemas/com.loosecannon.notenfc.data.room.AppDatabase/2.json` is committed.
 - Backup: `BackupCodec.FORMAT_VERSION = 2`; every new list defaults to empty so format-1 files decode; export in one `uow.read`, import in one `uow.write`; ids verbatim; lists sorted by id.
@@ -62,7 +65,7 @@
 
 **Interfaces:**
 - Consumes: `AssetId` (`core/model/Ids.kt`).
-- Produces: everything in spec §4 verbatim, plus `object EventChronology : Comparator<AssetEvent>`, `fun classify(value: Double, low: Double?, high: Double?): RangeState`, `data class Reading(val definition: MeasurementDefinition, val measurement: Measurement?, val occurredOn: String?, val occurredTime: String?, val state: RangeState?)`, `object LatestReadings { fun of(definitions: List<MeasurementDefinition>, events: List<AssetEvent>): List<Reading> }`.
+- Produces: everything in spec §4 verbatim (`ProfileField` and `ProfileConsumable` carry `id: String`), plus `object EventChronology : Comparator<AssetEvent>`, `fun classify(value: Double, low: Double?, high: Double?): RangeState`, `data class Reading(val definition: MeasurementDefinition, val measurement: Measurement?, val occurredOn: String?, val occurredTime: String?, val state: RangeState?)`, `object LatestReadings { fun of(definitions: List<MeasurementDefinition>, events: List<AssetEvent>): List<Reading> }`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -307,7 +310,7 @@ git add core/src && git commit -m "journal model, chronology, range state, lates
 
 **Interfaces:**
 - Consumes: Task 1 types.
-- Produces: the three repository interfaces exactly as spec §5; `data class TemplateDefinition(key, label, unit, valueType, decimals, rangeLow, rangeHigh, isMeter)`, `data class TemplateProfile(name, eventKind, defaultTitle, fields: List<Pair<String /*definition key*/, Boolean /*required*/>>, consumables: List<ProfileConsumable>)`, `data class Template(key, name, definitions: List<TemplateDefinition>, profiles: List<TemplateProfile>)`, `object SeedTemplates { val all: List<Template>; fun byKey(key: String): Template? }`; `class ApplyTemplate(defs, profiles, assets, uow, ids, clock) { suspend fun run(assetId: AssetId, template: Template): ApplyResult }` with `sealed interface ApplyResult { data object AlreadySetUp; data class Applied(val definitions: List<MeasurementDefinition>, val profiles: List<EventProfile>) }`; `CreateAsset.run(name, category, description, notes, templateKey: String? = null)` — `CreateAsset` now also takes `applyTemplate: ApplyTemplate` as its last constructor parameter.
+- Produces: the three repository interfaces exactly as spec §5; `data class TemplateDefinition(key, label, unit, valueType, decimals, rangeLow, rangeHigh, isMeter)`, `data class TemplateConsumable(name: String, defaultQuantity: Double?, unit: String)`, `data class TemplateProfile(name, eventKind, defaultTitle, fields: List<Pair<String /*definition key*/, Boolean /*required*/>>, consumables: List<TemplateConsumable>)`, `data class Template(key, name, definitions: List<TemplateDefinition>, profiles: List<TemplateProfile>)`, `object SeedTemplates { val all: List<Template>; fun byKey(key: String): Template? }`; `class ApplyTemplate(defs, profiles, assets, uow, ids, clock) { suspend fun run(assetId: AssetId, template: Template): ApplyResult }` with `sealed interface ApplyResult { data object AlreadySetUp; data class Applied(val definitions: List<MeasurementDefinition>, val profiles: List<EventProfile>) }`; `CreateAsset.run(name, category, description, notes, templateKey: String? = null)` — `CreateAsset` now also takes `applyTemplate: ApplyTemplate` as its last constructor parameter.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -382,6 +385,9 @@ class ApplyTemplateTest {
         assertEquals(setOf("ph", "free_chlorine"),
             waterTest.fields.filter { it.required }.map { f -> defs.get(f.definitionId)!!.key }.toSet())
         assertEquals("hot_tub", waterTest.templateKey)
+        // child rows have durable ids of their own
+        assertEquals(5, waterTest.fields.map { it.id }.toSet().size)
+        assertEquals(4, waterTest.consumables.map { it.id }.toSet().size)
     }
 
     @Test fun secondApplicationIsANoOp() = runTest {
@@ -408,7 +414,10 @@ class ApplyTemplateTest {
         val a = create.run("UPS", templateKey = "ups")
         assertEquals(4, defs.forAsset(a.id).size)
         assertEquals("ups", assets.get(a.id)!!.templateKey)
-        assertEquals(0, defs.forAsset(create.run("Plain").id).size)
+        val plain = create.run("Plain")                       // templateKey = null: no template
+        assertEquals(0, defs.forAsset(plain.id).size); assertEquals(0, profiles.forAsset(plain.id).size)
+        assertNull(assets.get(plain.id)!!.templateKey)
+        assertTrue(apply.run(plain.id, hotTub) is ApplyResult.Applied)   // can be set up later
     }
 }
 ```
@@ -422,7 +431,7 @@ Expected: compilation failure.
 
 `ports/Repositories.kt`: append the three interfaces from spec §5 verbatim.
 
-`journal/SeedTemplates.kt`: the types from **Interfaces** above and the five templates from spec §7. Transcribe every row: keys, labels, units, `ValueType`, decimals, ranges, `isMeter`, profile names, `EventKind`, default titles (= profile name), fields with `required`, and consumable suggestions (`ProfileConsumable(name, defaultQuantity = null, unit, sortOrder)`).
+`journal/SeedTemplates.kt`: the types from **Interfaces** above and the five templates from spec §7. Transcribe every row: keys, labels, units, `ValueType`, decimals, ranges, `isMeter`, profile names, `EventKind`, default titles (= profile name), fields with `required`, and consumable suggestions (`TemplateConsumable(name, defaultQuantity = null, unit)`).
 
 `usecase/ApplyTemplate.kt`:
 
@@ -449,8 +458,8 @@ class ApplyTemplate(
         val profs = template.profiles.mapIndexed { i, p ->
             EventProfile(ProfileId(ids.newId()), assetId, p.name, p.eventKind, p.defaultTitle, template.key,
                 i, null, now, now,
-                fields = p.fields.mapIndexed { j, (key, required) -> ProfileField(byKey.getValue(key).id, required, j) },
-                consumables = p.consumables)
+                fields = p.fields.mapIndexed { j, (key, required) -> ProfileField(ids.newId(), byKey.getValue(key).id, required, j) },
+                consumables = p.consumables.mapIndexed { j, c -> ProfileConsumable(ids.newId(), c.name, c.defaultQuantity, c.unit, j) })
         }
         defs.forEach { definitions.upsert(it) }
         profs.forEach { profiles.upsert(it) }
@@ -510,6 +519,7 @@ sealed interface FieldProblem { val definitionId: DefinitionId?
     data class BadConsumable(val index: Int) : FieldProblem { override val definitionId = null }
 }
 class EventValidation(val problems: List<FieldProblem>) : IllegalArgumentException("invalid event: $problems")
+class EventOwnership(detail: String) : IllegalArgumentException(detail)   // wrong asset for event, profile or definition
 class NoSuchEvent(id: EventId) : IllegalArgumentException("no event ${id.value}")
 
 class LogEvent(events, definitions, profiles, assets, uow, ids, clock) { suspend fun run(cmd: EventCommand): AssetEvent }
@@ -517,7 +527,7 @@ class UpdateEvent(events, definitions, profiles, uow, clock) { suspend fun run(i
 class DeleteEvent(events, uow) { suspend fun run(id: EventId) }
 ```
 
-Validation lives in one internal function `buildEvent(cmd, definitions, profile, existing: AssetEvent?, ids, now): AssetEvent` in `EventCommands.kt` used by both Log and Update: title trimmed non-blank else `TitleRequired` (Log defaults a blank title to the profile's `defaultTitle` before checking); `occurredOn` must match `^\d{4}-\d{2}-\d{2}$` and parse as `java.time.LocalDate` (java.time is allowed in `:core`; it is JVM, not Android); `occurredTime` null or `^\d{2}:\d{2}$` with hour < 24, minute < 60; for each `values` entry the definition must belong to `cmd.assetId` (else `EventValidation` with `NotANumber`? no — throw `IllegalArgumentException("definition not on asset")`, a programming error); NUMBER: `trim().toDoubleOrNull()` else `NotANumber`; BOOLEAN: "1"/"true" → 1.0, "0"/"false" → 0.0, else `NotANumber`; TEXT: trimmed, blank = absent; each `required` field of the profile (when `profileId` is set) with no value → `Required`; consumables: blank name or quantity not a non-negative double → `BadConsumable(i)`. Measurements are produced in profile field order first, then any extra definitions in definition `sortOrder`, `unit` snapshotted from the definition, ids new (Log) or preserved by definition id (Update, so an edit keeps measurement ids where the definition is unchanged). Collect all problems, throw once.
+Validation lives in one internal function `buildEvent(cmd, definitions, profile, existing: AssetEvent?, ids, now): AssetEvent` in `EventCommands.kt` used by both Log and Update: title trimmed non-blank else `TitleRequired` (Log defaults a blank title to the profile's `defaultTitle` before checking); `occurredOn` must match `^\d{4}-\d{2}-\d{2}$` and parse as `java.time.LocalDate` (java.time is allowed in `:core`; it is JVM, not Android); `occurredTime` null or `^\d{2}:\d{2}$` with hour < 24, minute < 60; ownership is checked before any field: `UpdateEvent` throws `EventOwnership` when `existing.assetId != cmd.assetId`; both use cases throw `EventOwnership` when `cmd.profileId` names a profile whose `assetId != cmd.assetId` (or no profile), or when any definition in `values` has `assetId != cmd.assetId`; nothing is stored in those cases; NUMBER: `trim().toDoubleOrNull()` else `NotANumber`; BOOLEAN: "1"/"true" → 1.0, "0"/"false" → 0.0, else `NotANumber`; TEXT: trimmed, blank = absent; each `required` field of the profile (when `profileId` is set) with no value → `Required`; consumables: blank name or quantity not a non-negative double → `BadConsumable(i)`. Measurements are produced in profile field order first, then any extra definitions in definition `sortOrder`, `unit` snapshotted from the definition, ids new (Log) or preserved by definition id (Update, so an edit keeps measurement ids where the definition is unchanged). Collect all problems, throw once.
 
 - [ ] **Step 1: Write the failing tests** — `EventUseCasesTest` using the fakes: seed one asset with the `hot_tub` template via `ApplyTemplate`, then:
   - `logsAWaterTestWithSnapshotUnitsAndConsumables` (pH "7.8", free chlorine "0.8", one consumable "Chlorine" "1" "oz" → event has 2 measurements with `unit` from the definitions, `valueNum` parsed, consumable quantity 1.0, `source == MANUAL`, `createdAt == updatedAt == clock`).
@@ -529,6 +539,9 @@ Validation lives in one internal function `buildEvent(cmd, definitions, profile,
   - `updateUnknownEventFails` (`NoSuchEvent`).
   - `deleteRemovesTheAggregate` (get returns null afterwards).
   - `logAgainstUnknownAssetFails` (`NoSuchAsset`).
+  - `updateCannotMoveAnEventToAnotherAsset` (second asset; `UpdateEvent` with the other `assetId` → `EventOwnership`; the stored event is byte-for-byte unchanged).
+  - `profileMustBelongToTheCommandAsset` (a UPS profile id on the hot-tub asset → `EventOwnership`; nothing stored).
+  - `definitionMustBelongToTheCommandAsset` (a UPS definition in `values` on the hot-tub asset → `EventOwnership`).
 
 - [ ] **Step 2: Run to verify they fail** — `./gradlew :core:test --tests '*EventUseCasesTest'` → compilation failure.
 
@@ -556,8 +569,8 @@ data class AssetDto(..., val templateKey: String? = null)          // appended, 
 data class MeasurementDefinitionDto(val id: String, val assetId: String, val key: String, val label: String,
     val unit: String, val valueType: String, val decimals: Int, val rangeLow: Double?, val rangeHigh: Double?,
     val isMeter: Boolean, val sortOrder: Int, val archivedAt: Long?, val createdAt: Long, val updatedAt: Long)
-data class ProfileFieldDto(val definitionId: String, val required: Boolean, val sortOrder: Int)
-data class ProfileConsumableDto(val name: String, val defaultQuantity: Double?, val unit: String, val sortOrder: Int)
+data class ProfileFieldDto(val id: String, val definitionId: String, val required: Boolean, val sortOrder: Int)
+data class ProfileConsumableDto(val id: String, val name: String, val defaultQuantity: Double?, val unit: String, val sortOrder: Int)
 data class EventProfileDto(val id: String, val assetId: String, val name: String, val eventKind: String,
     val defaultTitle: String, val templateKey: String?, val sortOrder: Int, val archivedAt: Long?,
     val createdAt: Long, val updatedAt: Long, val fields: List<ProfileFieldDto>, val consumables: List<ProfileConsumableDto>)
@@ -584,7 +597,8 @@ data class ImportReport(val assets: Int, val tags: Int, val links: Int, val defi
 - `formatOneFileStillDecodes`: build a `BackupData` with only the three original lists, encode with a manifest whose `formatVersion = 1` (construct the zip by hand through the existing private helpers or a test-only `encodeWithVersion`), decode → new lists empty, `templateKey` null.
 - `formatTwoRoundTripsAllSevenTables`: one asset with one definition, one profile (one field, one consumable), one event (one measurement, one consumable) → encode → decode equals input; `manifest.counts` has the seven keys with value 1 each plus the three originals.
 - `measurementMustReferenceADefinitionOnTheSameAsset`: measurement whose definition belongs to another asset → `BackupCorrupt` naming the measurement id.
-- `profileFieldMustReferenceAKnownDefinition`, `eventMustReferenceAKnownAsset`, `unknownValueTypeIsCorrupt`, `duplicateDefinitionIdIsCorrupt`.
+- `profileFieldMustReferenceAKnownDefinition`, `eventMustReferenceAKnownAsset`, `unknownValueTypeIsCorrupt`, `duplicateDefinitionIdIsCorrupt`, `duplicateProfileFieldIdIsCorrupt`.
+- `measurementValueShapeMustMatchItsDefinition`: four files, each `BackupCorrupt` naming the measurement id — NUMBER with `valueNum = null, valueText = "7.8"`; TEXT with `valueNum = 7.8, valueText = null`; BOOLEAN with `valueNum = 2.0`; NUMBER with both `valueNum = 7.8` and `valueText = "seven"`. Plus a fifth: neither value set.
 - `encodeIsReproducibleWithTheNewLists` (two encodes byte-equal).
 
 `BackupUseCasesTest` additions:
@@ -594,7 +608,7 @@ data class ImportReport(val assets: Int, val tags: Int, val links: Int, val defi
 
 - [ ] **Step 2: Run to verify they fail** — `./gradlew :core:test --tests '*Backup*'` → compilation failure.
 
-- [ ] **Step 3: Implement** DTOs + `toDto()`/`toDomain()` mappings (enum names via the existing `enumOrCorrupt`), sorting of the new lists by id (and children by `sortOrder`) in `encode`, `validateGraph` extended with: unique ids for definitions, profiles, events, and (across the file) measurements and consumable usages; `definition.assetId ∈ assets`; `profile.assetId ∈ assets`; each `profile.fields[].definitionId ∈ definitions` and its definition's `assetId == profile.assetId`; `event.assetId ∈ assets`; `event.profileId` null or `∈ profiles` on the same asset; each `measurement.definitionId ∈ definitions` on the same asset as the event; `valueType`, `eventKind`, `kind`, `source` known. Export/Import per **Interfaces**.
+- [ ] **Step 3: Implement** DTOs + `toDto()`/`toDomain()` mappings (enum names via the existing `enumOrCorrupt`), sorting of the new lists by id (and children by `sortOrder`) in `encode`, `validateGraph` extended with: unique ids for definitions, profiles, events, and (across the file) measurements and consumable usages; `definition.assetId ∈ assets`; `profile.assetId ∈ assets`; each `profile.fields[].definitionId ∈ definitions` and its definition's `assetId == profile.assetId`; `event.assetId ∈ assets`; `event.profileId` null or `∈ profiles` on the same asset; each `measurement.definitionId ∈ definitions` on the same asset as the event; unique ids across the file for profile fields, profile consumables, measurements and consumable usages; `valueType`, `eventKind`, `kind`, `source` known; **value shape** per the definition's `valueType` (NUMBER: `valueNum != null && valueText == null`; BOOLEAN: `valueNum in {0.0, 1.0} && valueText == null`; TEXT: `!valueText.isNullOrBlank() && valueNum == null`), else `BackupCorrupt("assetEvents: measurement <id> …")`. Import never mints ids: every id in the file is the id stored. Export/Import per **Interfaces**.
 
 - [ ] **Step 4: Run** `./gradlew :core:test` → PASS.
 
@@ -640,7 +654,7 @@ data class MeasurementDefinitionEntity(@PrimaryKey val id: String, @ColumnInfo(n
 
 `MIGRATION_1_2` is the exact SQL Room generates for those entities (copy from `2.json`'s `createSql` after the first build, replacing `${TABLE_NAME}`), preceded by `ALTER TABLE asset ADD COLUMN template_key TEXT`. Room 3's `Migration` takes `(startVersion, endVersion)` and overrides `migrate(connection: SQLiteConnection)`; use `connection.execSQL(...)`.
 
-DAOs: `DefinitionDao` (upsert, byId, forAsset ordered by `sort_order`, all, deleteAll, observeForAsset), `ProfileDao` (profile + `@Relation` lists of `ProfileFieldEntity` and `ProfileConsumableEntity` through a `ProfileWithParts` class; `upsert(profile, fields, consumables)` is a `@Transaction` method that upserts the row, deletes the old children by `profile_id`, inserts the new; forAsset/observeForAsset ordered by `sort_order`), `EventDao` (same shape with `EventWithParts`; `forAsset`/`observeForAsset` use `ORDER BY occurred_on DESC, COALESCE(occurred_time,'00:00') DESC, created_at DESC, id DESC`; `observe(id)`; `delete(id)`; `deleteAll`). Repositories map through `JournalMappers.kt`; `RoomEventRepository.observeForAsset` additionally applies `sortedWith(EventChronology.reversed())` so the rule has one owner.
+DAOs: `DefinitionDao` (upsert, byId, forAsset ordered by `sort_order`, all, deleteAll, observeForAsset), `ProfileDao` (profile + `@Relation` lists of `ProfileFieldEntity` and `ProfileConsumableEntity` through a `ProfileWithParts` class; `upsert(profile, fields, consumables)` is a `@Transaction` method that upserts the row, deletes the old children by `profile_id`, inserts the new; forAsset/observeForAsset ordered by `sort_order`), `EventDao` (same shape with `EventWithParts`; `forAsset`/`observeForAsset` use `ORDER BY occurred_on DESC, COALESCE(occurred_time,'00:00') DESC, created_at DESC, id DESC`; `observe(id)`; `delete(id)`; `deleteAll`). Repositories map through `JournalMappers.kt` (child ids pass through unchanged in both directions); `RoomEventRepository.observeForAsset` additionally applies `sortedWith(EventChronology.reversed())` so the rule has one owner.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -730,17 +744,18 @@ BOOLEAN display: the definition's label names the question ("Passed"); the value
 
 `AssetDetailState` gains `definitions: List<MeasurementDefinition>`, `profiles: List<EventProfile>`, `events: List<AssetEvent>`, and a derived `readings: List<Reading>` (computed in the ViewModel's `combine` with `LatestReadings.of(definitions, events)`; unarchived profiles only). `AssetDetailViewModel` combines `definitions.observeForAsset`, `profiles.observeForAsset`, `events.observeForAsset` with the existing three flows (Kotlin `combine` takes up to five; nest two combines). It gains `fun setUpFromTemplate(key: String)` (viewModelScope, `applyTemplate.run`, snackbar text on `AlreadySetUp`/error via a `messages` SharedFlow the screen shows).
 
-`AssetEditState` gains `templateKey: String = "generic"` (new only); `AssetEditViewModel.onTemplate(key)`; `save()` passes `templateKey` to `createAsset.run` when `id == null`.
+`AssetEditState` gains `templateKey: String? = null` (new only; `null` = "None · set up later"); `AssetEditViewModel.onTemplate(key: String?)`; `save()` passes `templateKey` to `createAsset.run` when `id == null`.
 
 `AssetDetailScreen` gains `onLogEvent: (assetId: String, profileId: String) -> Unit` and `onOpenEvent: (eventId: String) -> Unit`, and renders per spec §10: plate → `SectionHeader("Current readings")` + one `InstrumentRow` per reading (absent when `definitions` is empty) → "No schedule yet" → `ActionGrid` (profiles first, filled, `quickActionLabel`, icon `NoteNfcIcons.Ledger` or the closest existing glyph; then the existing four; when both `definitions` and `profiles` are empty, an extra outlined "Set up from template" action that opens an `AlertDialog` listing `SeedTemplates.all` by name) → `SectionHeader("Service record")` + `LedgerList` of `events` (date from `occurredOn` — parse `LocalDate`, day/month/year strings as the existing `asLedgerDate` does for millis; title; detail `eventDetailLine`; badge only when any NUMBER measurement in the event classifies LOW or HIGH: `StatusBadge("LOW"/"HIGH")` of the first such; click → `onOpenEvent`) with empty state `QuietLine("No service recorded yet")` → Tags → Links → Notes.
 
-`AssetEditScreen` (new asset only): below Category, a "Template" row: `ExposedDropdownMenuBox` or a row of `FilterChip`s with the five template names, default Generic; helper text "Starts the asset with its readings and quick actions. You can change everything later."
+`AssetEditScreen` (new asset only): below Category, a "Template" row: `ExposedDropdownMenuBox` or `FilterChip`s with **None · set up later** (selected by default), Hot tub, Power equipment, UPS, RO water, Generic; helper text "Starts the asset with its readings and quick actions. Choose None to decide on the asset later."
 
 - [ ] **Step 1: Write the failing tests** — `AssetViewModelsTest` additions with `FakeGraph`:
   - `detailStateDerivesReadingsFromEvents`: create hot-tub asset, log two water tests (7.4 on 09-12, 7.8 on 09-15), `state.first { it?.events?.size == 2 }`, assert `readings[0].measurement?.valueNum == 7.8`, state HIGH; delete the newer event; assert 7.4.
   - `detailStateListsUnarchivedProfilesInOrder`.
   - `setUpFromTemplateOnAPlainAsset`: create asset with no template, call `setUpFromTemplate("ups")`, assert 4 definitions appear in state.
   - `newAssetFormPassesTemplateKey`: `AssetEditViewModel(graph, null)` → `onName("Spa")`, `onTemplate("hot_tub")`, `save()`, collect `saved`, assert `graph.definitions.forAsset(id).size == 5`.
+  - `newAssetDefaultsToNoTemplateAndCanBeSetUpLater`: `onName("Thing")`, `save()` without `onTemplate` → 0 definitions, 0 profiles, `templateKey == null`; then `AssetDetailViewModel(graph, id).setUpFromTemplate("ups")` → 4 definitions. And `onTemplate("generic")` explicitly → 1 profile "Note".
   - `JournalFormatTest` (plain JUnit, `ui/journal/`): `formatTarget` for both-bounds/one-sided/none; `formatValue` decimals (7.8 with decimals 1 → "7.8"; 110.0 with 0 → "110"; BOOLEAN 1.0 → "Yes"); `quickActionLabel(EventProfile(name = "Water test"…)) == "Log water test"`; `eventDetailLine` with three readings, with none but a consumable, with nothing.
 
 - [ ] **Step 2: Run to verify they fail** — `./gradlew :app:testDebugUnitTest --tests '*AssetViewModelsTest' --tests '*JournalFormatTest'` → compilation failure.
@@ -868,7 +883,7 @@ Evidence §4 device checklist rows (fill Result on the phone; the destructive su
 | 6 | Log water test dated a week earlier with pH 7.0; Save | Service record lists it **below** today's; current readings still 7.5 |
 | 7 | New asset "UPS", template UPS → Log load test: voltage 12.7, load 38, runtime 42, Passed = Yes; Save | Readings show the three numbers with NO TARGET SET and "Passed · Yes"; record line "Battery voltage 12.7 V · Load 38 % · Runtime 42 min" |
 | 8 | New asset "Mower", template Power equipment → Log oil change: engine hours 138.5, Engine oil 1.5 qt, Oil filter 1 pcs; Save | Readings show Engine hours 138.5 h NO TARGET SET; record line shows the reading; opening the event lists both materials |
-| 9 | Existing 1C asset (no template) → "Set up from template" → RO water | Three TDS rows appear with "—"; "Log TDS test" action appears; doing it again is not offered |
+| 9 | Existing 1C asset (no template) and a new asset saved with Template = None → "Set up from template" → RO water | Three TDS rows appear with "—"; "Log TDS test" action appears; doing it again is not offered |
 | 10 | Backup → Export; Debug → Wipe; Backup → Import (REPLACE) | Dashboard, assets, readings and records identical; the manifest counts in the file match `sqlite3` counts of the seven tables (`adb shell run-as … sqlite3` or the debug screen's counts) |
 | 11 | Open the hot tub → delete today's water test | Current readings fall back to the week-old pH 7.0 (LOW) |
 | 12 | `adb shell run-as com.loosecannon.notenfc sqlite3 databases/notenfc.db ".tables"` (or `.schema` via a pulled copy) | Exactly the ten tables: asset, nfc_tag, external_link + the seven journal tables; nothing named after a hot tub, UPS, RO or mower |
