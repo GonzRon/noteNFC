@@ -142,7 +142,7 @@ NDEF message
               byte 0   format version   = 0x01
               byte 1   flags            = 0x00 (reserved, must be 0)
               bytes 2..17  tag id, RFC 4122 byte order (16 bytes)
-  record 1: Android Application Record for com.looseCannon.noteNFC
+  record 1: Android Application Record for com.loosecannon.notenfc (the applicationId, D13 §4)
 ```
 
 - Legacy tags keep record type `com.loosecannon.notenfc:md5_short` and are read-only aliases,

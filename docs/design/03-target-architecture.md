@@ -50,7 +50,7 @@ Boundaries that earn their keep (they hide foreign vocabularies):
 │ │        MeasurementDefinition · EventProfile · MaintenanceSchedule · ScheduleState · SupplyItem │ │
 │ │        StockLedger · Attachment · ReminderProjection                                           │ │
 │ │ scheduling: Rules · ScheduleRecompute(rebuild) · Status · Season · ReminderSubject              │ │
-│ │ nfc: NdefCodec (bytes ⇄ TagPayload v1 / legacy md5) · LegacyKey (MD5[0:8])                      │ │
+│ │ nfc: NdefCodec (bytes ⇄ TagPayload v1 / legacy md5) · OverwritePolicy · TagRoute               │ │
 │ │ links: LinkLaunchPolicy (allowlist, kind detection)                                            │ │
 │ │ backup: BackupManifest · BackupCodec (JSON) · MergePolicy                                       │ │
 │ │ ports: repositories · ReminderProvider · AttachmentStore · SecretStore · BackupIO · Today       │ │
@@ -74,7 +74,7 @@ Boundaries that earn their keep (they hide foreign vocabularies):
 core/src/main/kotlin/com/loosecannon/notenfc/core/
   model/         plain Kotlin data classes + enums (no Room annotations)
   scheduling/    Rule.kt · ScheduleRecompute.kt · StatusEvaluator.kt · Season.kt · ReminderSubject.kt
-  nfc/           TagPayload.kt · NdefCodec.kt · LegacyKey.kt
+  nfc/           NdefCodec.kt (TagPayload) · OverwritePolicy.kt · TagRoute.kt
   links/         LinkKind.kt · LinkLaunchPolicy.kt
   backup/        BackupManifest.kt · BackupCodec.kt · MergePolicy.kt
   ports/         AssetRepository.kt … ReminderProvider.kt · AttachmentStore.kt · SecretStore.kt · Today.kt
@@ -292,7 +292,7 @@ Tag ──▶ NfcReaderModeSession (in-app Scan/Write screens, enableReaderMode)
                           = OpenAsset(id) | LaunchLink(link) | UnknownTag(payload) | Revoked(tag) | Unbound(tag)
 ```
 
-- `NdefCodec` and `LegacyKey` live in `:core` and are tested with byte fixtures; no Android types.
+- `NdefCodec`, `OverwritePolicy` and `TagRoute` live in `:core` and are tested with byte fixtures; no Android types.
 - Reader mode (`enableReaderMode`, `FLAG_READER_NFC_A | FLAG_READER_SKIP_NDEF_CHECK` where we
   want raw tags) replaces foreground dispatch for in-app scanning and writing: callback-based, no
   PendingIntent, no activity relaunch. Background scans (app not open) still arrive through the
@@ -305,8 +305,8 @@ Tag ──▶ NfcReaderModeSession (in-app Scan/Write screens, enableReaderMode)
   catch-all; for targetSdk 37 add `android:permission="android.permission.DISPATCH_NFC_MESSAGE"`
   on `NfcDispatchActivity` (Android 17 requirement). Note Android 17 no longer dispatches NFC to
   apps in the stopped state (after force-stop); the health screen explains this.
-- Unknown-tag resolutions offer: bind to an existing asset/link, create an asset, or (legacy
-  key) "re-link by sharing the note" (D6).
+- Unknown-tag resolutions offer: bind to an existing asset/link, create an asset, or (legacy tag)
+  bind as-is / rewrite in payload format v1 (D13 §3). Re-link was dropped by D13.
 
 ## 10. External links
 
