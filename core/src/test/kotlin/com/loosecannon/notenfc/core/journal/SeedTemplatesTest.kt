@@ -7,6 +7,12 @@ class SeedTemplatesTest {
     @Test fun fiveTemplatesWithStableKeys() =
         assertEquals(listOf("hot_tub", "power_equipment", "ups", "ro_water", "generic"), SeedTemplates.all.map { it.key })
 
+    @Test fun fiveTemplatesWithTheirSpecDisplayNames() =
+        assertEquals(
+            listOf("Hot tub", "Power equipment", "UPS", "RO water", "Generic"),
+            SeedTemplates.all.map { it.name },
+        )
+
     @Test fun definitionKeysUniquePerTemplate() = SeedTemplates.all.forEach { t ->
         assertEquals(t.definitions.size, t.definitions.map { it.key }.toSet().size, t.key)
     }

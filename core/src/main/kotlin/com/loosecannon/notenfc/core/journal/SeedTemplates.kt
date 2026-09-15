@@ -133,7 +133,7 @@ object SeedTemplates {
 
     private val roWater = Template(
         key = "ro_water",
-        name = "RO water system",
+        name = "RO water",
         definitions = listOf(
             TemplateDefinition("tds_prefilter", "Pre-filter TDS", "ppm", ValueType.NUMBER, 0, null, null, isMeter = false),
             TemplateDefinition("tds_post_membrane", "Post-membrane TDS", "ppm", ValueType.NUMBER, 0, null, null, isMeter = false),
