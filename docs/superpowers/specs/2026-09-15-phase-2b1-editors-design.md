@@ -61,7 +61,8 @@ data class MeasurementDefinition(
 Invariants (enforced by the use cases and by backup validation, one predicate
 `MeasurementDefinition.derivedSpecValid(sources: Map<DefinitionId, MeasurementDefinition>)`):
 a DERIVED definition has `valueType == NUMBER`, `isMeter == false`, a `derived` spec whose two
-sources are distinct, exist, belong to the same asset, are `ENTERED` and `NUMBER`; an ENTERED
+sources are distinct, exist, belong to the same asset, are `ENTERED`, `NUMBER` and not meters
+(a meter is a monotonic counter; a drop between two of its readings is a different question); an ENTERED
 definition has `derived == null`. Unit, decimals and range on a derived definition mean what they
 mean on any NUMBER definition.
 

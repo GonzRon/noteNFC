@@ -18,12 +18,13 @@ sealed interface DerivedProblem {
     data class SourceOtherAsset(val id: DefinitionId) : DerivedProblem
     data class SourceNotEntered(val id: DefinitionId) : DerivedProblem
     data class SourceNotNumber(val id: DefinitionId) : DerivedProblem
+    data class SourceIsMeter(val id: DefinitionId) : DerivedProblem
 }
 
 /**
  * Invariants (spec §4): a DERIVED definition has valueType == NUMBER, isMeter == false, a
- * `derived` spec whose two sources are distinct, exist, belong to the same asset, are ENTERED and
- * NUMBER; an ENTERED definition has `derived == null`. [sources] need only contain the candidate
+ * `derived` spec whose two sources are distinct, exist, belong to the same asset, are ENTERED,
+ * NUMBER and not meters; an ENTERED definition has `derived == null`. [sources] need only contain the candidate
  * source ids — callers typically pass every definition of the asset, keyed by id.
  */
 fun MeasurementDefinition.derivedProblems(sources: Map<DefinitionId, MeasurementDefinition>): List<DerivedProblem> {
@@ -49,6 +50,9 @@ fun MeasurementDefinition.derivedProblems(sources: Map<DefinitionId, Measurement
         if (source.assetId != assetId) problems += DerivedProblem.SourceOtherAsset(id)
         if (source.kind != DefinitionKind.ENTERED) problems += DerivedProblem.SourceNotEntered(id)
         if (source.valueType != ValueType.NUMBER) problems += DerivedProblem.SourceNotNumber(id)
+        // A meter is a monotonic counter, so a percent drop between two of its readings is a
+        // different question from one between two independent measurements: not a valid source.
+        if (source.isMeter) problems += DerivedProblem.SourceIsMeter(id)
     }
     return problems
 }

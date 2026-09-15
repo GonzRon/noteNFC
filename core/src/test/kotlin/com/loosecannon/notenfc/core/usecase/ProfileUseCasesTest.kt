@@ -230,6 +230,32 @@ class ProfileUseCasesTest {
         assertFailsWith<NoSuchProfile> { save.run(ProfileId("nope"), cmd("Ghost")) }
     }
 
+    @Test fun foreignConsumableIdIsNotTrusted() = runTest {
+        seed("hot_tub")
+        val waterTest = profile("Water test")
+        val treatment = profile("Treatment")
+        val ownId = waterTest.consumables.first { it.name == "Chlorine" }.id
+        val foreignId = treatment.consumables.first { it.name == "pH reducer" }.id
+
+        val saved = save.run(
+            waterTest.id,
+            cmd(
+                "Water test",
+                consumables = listOf(
+                    ProfileConsumableInput(ownId, "Chlorine", 1.0, "oz"),
+                    ProfileConsumableInput(foreignId, "pH reducer", null, "oz"),
+                    ProfileConsumableInput("made-up", "Clarifier", null, "oz"),
+                ),
+            ),
+        )
+        assertEquals(ownId, saved.consumables[0].id)
+        assertNotEquals(foreignId, saved.consumables[1].id)
+        assertNotEquals("made-up", saved.consumables[2].id)
+        assertEquals(3, saved.consumables.map { it.id }.toSet().size)
+        // the other profile keeps its own row untouched
+        assertEquals(treatment.consumables, profiles.get(treatment.id)!!.consumables)
+    }
+
     @Test fun deleteProfileLeavesEventsWithProfileCleared() = runTest {
         seed("hot_tub")
         val waterTest = profile("Water test")

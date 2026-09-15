@@ -114,6 +114,14 @@ class DerivedTest {
         assertTrue(DerivedProblem.SourceNotNumber(textSource.id) in problems)
     }
 
+    @Test fun sourceThatIsAMeterIsAProblem() {
+        val meter = entered("engine_hours", id = "d-hours").copy(isMeter = true)
+        val bad = rejection.copy(derived = DerivedSpec(DerivedFormula.PERCENT_DROP, meter.id, sourceB.id))
+        val problems = bad.derivedProblems(mapOf(meter.id to meter, sourceB.id to sourceB))
+        assertEquals(listOf(DerivedProblem.SourceIsMeter(meter.id)), problems)
+        assertFalse(bad.derivedSpecValid(mapOf(meter.id to meter, sourceB.id to sourceB)))
+    }
+
     @Test fun meterOnADerivedDefinitionIsAProblem() {
         val bad = rejection.copy(isMeter = true)
         assertTrue(DerivedProblem.IsMeter in bad.derivedProblems(sources))

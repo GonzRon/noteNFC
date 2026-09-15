@@ -24,7 +24,8 @@ import com.loosecannon.notenfc.core.ports.UnitOfWork
  *
  * Child ids are identity, not bookkeeping (see [ProfileField] / [ProfileConsumable]): on an update
  * a field keeps the id it already had for that definition, and a consumable keeps the id the
- * editor hands back in [ProfileConsumableInput.id]. Only genuinely new rows are minted from [ids].
+ * editor hands back in [ProfileConsumableInput.id] — but only when this profile already owns that
+ * id. Everything else, including an id from some other profile, is minted fresh from [ids].
  */
 class SaveProfile(
     private val profiles: ProfileRepository,
@@ -77,6 +78,7 @@ class SaveProfile(
             )
         }
 
+        val ownConsumableIds = existing?.consumables?.map { it.id }?.toSet().orEmpty()
         val consumables = cmd.consumables.mapIndexedNotNull { i, input ->
             val consumableName = input.name.trim()
             val quantity = input.defaultQuantity
@@ -85,7 +87,9 @@ class SaveProfile(
                 null
             } else {
                 ProfileConsumable(
-                    id = input.id ?: ids.newId(),
+                    // An id is only identity if this profile already owns it: one carried over from
+                    // another profile (or made up) would collide with a row we don't control.
+                    id = input.id?.takeIf { it in ownConsumableIds } ?: ids.newId(),
                     name = consumableName,
                     defaultQuantity = quantity,
                     unit = input.unit.trim(),

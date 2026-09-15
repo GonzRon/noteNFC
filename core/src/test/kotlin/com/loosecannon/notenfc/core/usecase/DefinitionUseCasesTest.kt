@@ -281,6 +281,62 @@ class DefinitionUseCasesTest {
         assertEquals(commits, uow.commits)
     }
 
+    @Test fun derivedSourceCannotBeAMeter() = runTest {
+        seed("hot_tub")
+        val meter = save.run(null, cmd("Pump hours", unit = "h", isMeter = true))
+        val problems = problemsOf {
+            save.run(
+                null,
+                cmd(
+                    "Hours drop", unit = "%", kind = DefinitionKind.DERIVED,
+                    formula = DerivedFormula.PERCENT_DROP, sourceA = meter.id, sourceB = byKey("ph").id,
+                ),
+            )
+        }
+        assertEquals(listOf(DefinitionProblem.Derived(DerivedProblem.SourceIsMeter(meter.id))), problems)
+    }
+
+    @Test fun sourceUsedByDerivedCannotBecomeMeter() = runTest {
+        seed("ro_water")
+        val prefilter = byKey("tds_prefilter")
+        val rejection = byKey("rejection_percent")
+        val before = LinkedHashMap(defs.rows)
+        val commits = uow.commits
+        val refused = assertFailsWith<DefinitionWouldBreakDerived> {
+            save.run(
+                prefilter.id,
+                cmd("Pre-filter TDS", key = "tds_prefilter", unit = "ppm", decimals = 0, isMeter = true),
+            )
+        }
+        assertEquals(prefilter.id, refused.id)
+        assertEquals(listOf(rejection.id), refused.dependentDerivedIds)
+        assertEquals(before, defs.rows)
+        assertEquals(commits, uow.commits)
+        // a definition no derived definition reads can be flagged a meter freely
+        val output = save.run(
+            byKey("tds_output").id,
+            cmd("Output TDS", key = "tds_output", unit = "ppm", decimals = 0, isMeter = true),
+        )
+        assertTrue(output.isMeter)
+    }
+
+    @Test fun archivedProfileDoesNotBlockDerivedChange() = runTest {
+        seed("ro_water")
+        val output = byKey("tds_output")
+        val tdsTest = profiles.forAsset(a1).first { it.name == "TDS test" }
+        ArchiveProfile(profiles, uow, clock).run(tdsTest.id, archived = true)
+        val saved = save.run(
+            output.id,
+            cmd(
+                "Output TDS", key = "tds_output", unit = "ppm", decimals = 0,
+                kind = DefinitionKind.DERIVED, formula = DerivedFormula.PERCENT_DROP,
+                sourceA = byKey("tds_prefilter").id, sourceB = byKey("tds_post_membrane").id,
+            ),
+        )
+        assertEquals(DefinitionKind.DERIVED, saved.kind)
+        assertEquals(DefinitionKind.DERIVED, defs.get(output.id)!!.kind)
+    }
+
     @Test fun sourceUsedByProfileCannotBecomeDerived() = runTest {
         seed("ro_water")
         val output = byKey("tds_output")            // a field of "TDS test", and no derived reads it

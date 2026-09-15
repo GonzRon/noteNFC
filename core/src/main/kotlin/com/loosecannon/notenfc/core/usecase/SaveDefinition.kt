@@ -26,7 +26,7 @@ import com.loosecannon.notenfc.core.ports.UnitOfWork
  *   Relabel, unit, range, decimals and key edits pass it, and so does archiving a source (§5).
  * - [DefinitionWouldBreakProfiles] — the same idea one table over: turning an ENTERED definition
  *   DERIVED would leave a profile offering a field nobody can type into, so it is refused with
- *   the profiles that would be left holding it. Checked after the derived graph, so a definition
+ *   the unarchived profiles that would be left holding it. Checked after the derived graph, so a definition
  *   that is both a derived source and a profile field reports the derived break first.
  * - [EventOwnership] / [NoSuchAsset] / [NoSuchDefinition] — the edit isn't aimed at a row of this
  *   asset at all.
@@ -131,6 +131,7 @@ class SaveDefinition(
             // A profile field is something a person types into; a derived value is computed.
             if (existing.kind == DefinitionKind.ENTERED && candidate.kind == DefinitionKind.DERIVED) {
                 val offering = profiles.forAsset(cmd.assetId)
+                    .filter { it.archivedAt == null }   // an archived quick action offers nothing
                     .filter { p -> p.fields.any { it.definitionId == candidate.id } }
                     .map { it.id }
                 if (offering.isNotEmpty()) throw DefinitionWouldBreakProfiles(candidate.id, offering)
