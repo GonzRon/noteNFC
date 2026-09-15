@@ -16,6 +16,8 @@ import com.loosecannon.notenfc.core.usecase.OpenLink
 import com.loosecannon.notenfc.core.usecase.Resolution
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.links.LinkLauncher
+import com.loosecannon.notenfc.ui.scan.FORMAT_NONE
+import com.loosecannon.notenfc.ui.scan.asTagResult
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -81,22 +83,13 @@ class NfcDispatchActivity : Activity() {
     private fun tagRoute(uri: Uri?): TagPayload? =
         TagRoute.parse(uri?.scheme, uri?.host, uri?.pathSegments.orEmpty())
 
+    /**
+     * A link tag launches its note here and now (R-7); everything else becomes the very route the
+     * foreground scanner would have produced, so the two paths say the same words about a tag.
+     */
     private fun route(r: Resolution) = when (r) {
         is Resolution.LaunchLink -> launch(r.link)
-        is Resolution.OpenAsset -> handOff(r.tag.payloadFormat.name, r.tag.payloadKey)
-        is Resolution.Unbound -> handOff(r.tag.payloadFormat.name, r.tag.payloadKey)
-        is Resolution.Revoked -> handOff(r.tag.payloadFormat.name, r.tag.payloadKey)
-        is Resolution.UnknownV1 -> handOff("V1", r.tagId.value)
-        is Resolution.UnknownLegacy -> handOff("LEGACY_MD5", r.key)
-        is Resolution.NeedsNewerApp -> handOff(FORMAT_NONE, "written by a newer noteNFC (payload format ${r.version})")
-        is Resolution.NotOurs -> handOff(FORMAT_NONE, describe(r.payload))
-    }
-
-    private fun describe(p: TagPayload): String = when (p) {
-        TagPayload.Empty -> "empty tag"
-        is TagPayload.Foreign -> "not a noteNFC tag: ${p.description}"
-        is TagPayload.Malformed -> "unreadable noteNFC record: ${p.reason}"
-        else -> "not a noteNFC tag"
+        else -> r.asTagResult().let { handOff(it.format, it.key) }
     }
 
     private fun launch(link: ExternalLink) {
@@ -122,10 +115,5 @@ class NfcDispatchActivity : Activity() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         finish()
-    }
-
-    private companion object {
-        /** Not a payload format: "this tag is not ours, and here is why". */
-        const val FORMAT_NONE = "NONE"
     }
 }

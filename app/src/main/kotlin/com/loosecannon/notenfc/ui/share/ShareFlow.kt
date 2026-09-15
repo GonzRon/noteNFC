@@ -5,41 +5,75 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.loosecannon.notenfc.core.links.LinkLaunchPolicy
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.ui.components.QuietLine
+import com.loosecannon.notenfc.ui.scan.WriteTagScreen
+import com.loosecannon.notenfc.ui.theme.SheetSentence
 
 /**
- * "Share a note link to noteNFC" (D12 §9). Task 6 turns this into save-then-write-a-tag; Task 4
- * ships the host and shows what the extractor actually found in the shared text, which is the one
- * thing worth seeing before the flow exists.
+ * "Share a note link to noteNFC" (D12 §9). The whole flow lives in `ShareActivity`'s own task: the
+ * URI is extracted and checked, the card offers the two things worth doing with it, and both of
+ * them save. Writing a tag pushes the ordinary write screen inside this task, so Done here means
+ * "back to Joplin" and never "into noteNFC's back stack".
  */
-@Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareFlow(graph: AppGraph, sharedText: CharSequence?, onFinished: () -> Unit) {
-    val uri = LinkLaunchPolicy.extractUri(sharedText?.toString())
+    val model: ShareViewModel = viewModel(key = "share") { ShareViewModel(graph, sharedText) }
+    val state by model.state.collectAsStateWithLifecycle()
+
+    val writing = state as? ShareState.Writing
+    if (writing != null) {
+        WriteTagScreen(graph = graph, key = writing.route, onDone = onFinished)
+        return
+    }
+
     Scaffold(topBar = { TopAppBar(title = { Text("Save a link") }) }) { padding ->
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (uri == null) {
-                QuietLine("No link in the shared text.")
-            } else {
-                Text(uri, style = MaterialTheme.typography.bodyMedium)
-                QuietLine("Saving and tag writing arrive in a later task.")
+        Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
+            when (val current = state) {
+                is ShareState.Card -> ShareCard(
+                    state = current,
+                    onWriteTag = model::writeToTag,
+                    onKeepAsLink = model::keepAsLink,
+                    onCancel = onFinished,
+                )
+
+                is ShareState.NeedsConfirmation -> ShareConfirmation(
+                    state = current,
+                    onConfirm = model::confirmUnknownScheme,
+                    onCancel = onFinished,
+                )
+
+                is ShareState.Saved -> Closing("Saved to noteNFC.", onFinished)
+                is ShareState.Nothing -> Closing(current.message, onFinished)
+
+                // Handled above; the write screen replaces this one entirely.
+                is ShareState.Writing -> Unit
             }
-            TextButton(onClick = onFinished, modifier = Modifier.align(Alignment.End)) { Text("Close") }
         }
+    }
+}
+
+/** One sentence and one way out — the flow is over, and this task should not linger. */
+@Composable
+private fun Closing(message: String, onFinished: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(text = message, style = SheetSentence)
+        QuietLine("Links live under Dashboard · Links.")
+        TextButton(onClick = onFinished, modifier = Modifier.align(Alignment.End)) { Text("Close") }
     }
 }

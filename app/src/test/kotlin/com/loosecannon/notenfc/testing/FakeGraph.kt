@@ -8,6 +8,8 @@ import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteLink
+import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
@@ -41,6 +43,8 @@ class FakeGraph(private val db: AppDatabase = inMemoryDb()) {
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock)
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
     val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
+    val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
+    val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
 
     fun close() = db.close()
 }

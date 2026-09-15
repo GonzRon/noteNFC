@@ -25,5 +25,8 @@ val MonoText = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, li
 val MeasurementEntryText = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, fontSize = 22.sp, fontFeatureSettings = "tnum")
 val MeasurementHeroText = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, fontSize = 30.sp, fontFeatureSettings = "tnum")
 
+/** The one sentence an NFC sheet is built around: 18sp Medium, over the mono identifier (G1 §1.4). */
+val SheetSentence = TextStyle(fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 24.sp)
+
 /** Small all-caps label above a group (D12 §6). Uppercasing is applied by the caller. */
 val Eyebrow = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.6.sp)

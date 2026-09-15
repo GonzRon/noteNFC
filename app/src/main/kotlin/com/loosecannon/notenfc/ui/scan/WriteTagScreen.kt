@@ -1,24 +1,57 @@
 package com.loosecannon.notenfc.ui.scan
 
+import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.notenfc.core.model.AssetId
+import com.loosecannon.notenfc.core.model.LinkId
+import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.di.AppGraph
+import com.loosecannon.notenfc.nfc.NfcReaderModeSession
+import com.loosecannon.notenfc.ui.components.NoteNfcIcons
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.nav.Route
+import com.loosecannon.notenfc.ui.theme.ControlShape
+import com.loosecannon.notenfc.ui.theme.NoteNfcTheme
+import com.loosecannon.notenfc.ui.theme.PlateShape
 
 /**
- * Write a v1 payload to a physical tag, with the overwrite guard in front of it.
+ * Write a v1 payload to a physical tag, with the Phase 1B overwrite guard in front of it (D3 §9):
+ * read first, ask before replacing anything, write off the main thread, read back and compare,
+ * and lock — if the user armed it — only once the read-back has proved what is on the tag.
  *
- * Phase 1C Task 4 ships the route and its callbacks only; the body arrives with the screen's own
- * task, which replaces this file rather than moving it.
+ * The screen is hosted both by the nav shell and by `ShareActivity`, so it owns nothing but its
+ * own reader-mode session; every decision belongs to [TagWriteController].
  */
-@Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WriteTagScreen(
@@ -26,7 +59,238 @@ fun WriteTagScreen(
     key: Route.WriteTag,
     onDone: () -> Unit,
 ) {
-    Scaffold(topBar = { TopAppBar(title = { Text("Write a tag") }) }) { padding ->
-        QuietLine("Coming in a later task", Modifier.padding(padding).padding(16.dp))
+    val target = remember(key) { key.target() }
+    val model: WriteTagViewModel = viewModel(key = "write/${key.targetKind}/${key.targetId}") {
+        WriteTagViewModel(graph, target, key.label)
     }
+    val state by model.state.collectAsStateWithLifecycle()
+    val lock by model.lock.collectAsStateWithLifecycle()
+    val targetName by model.targetName.collectAsStateWithLifecycle()
+    val activity = LocalActivity.current
+
+    val session = remember(activity) {
+        activity?.let { host -> NfcReaderModeSession(host) { tag -> model.onTag(NfcTagHandle(tag)) } }
+    }
+    LifecycleResumeEffect(session) {
+        session?.start()
+        onPauseOrDispose { session?.stop() }
+    }
+
+    var warnAboutLock by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Write a tag") },
+                navigationIcon = {
+                    IconButton(onClick = onDone) { Icon(Icons.Outlined.Close, contentDescription = "Close") }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TargetLine(targetName)
+            WriteStatus(state, targetName, onDone)
+            NfcAvailabilityLine(session)
+            LockSwitch(
+                checked = lock,
+                onCheckedChange = { checked -> if (checked) warnAboutLock = true else model.setLock(false) },
+            )
+        }
+    }
+
+    val asking = state as? WriteState.Confirm
+    if (asking != null) {
+        OverwriteSheet(
+            reason = asking.reason,
+            target = targetName,
+            onOverwrite = model::confirmOverwrite,
+            onKeepIt = model::keepIt,
+        )
+    }
+
+    if (warnAboutLock) {
+        LockWarning(
+            onLock = { warnAboutLock = false; model.setLock(true) },
+            // Backing out of the warning is not consent: the switch stays off.
+            onCancel = { warnAboutLock = false; model.setLock(false) },
+        )
+    }
+}
+
+/** What this tag will end up identifying, said before anything is written. */
+@Composable
+private fun TargetLine(targetName: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = PlateShape,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "TARGET",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(text = targetName, style = MaterialTheme.typography.titleSmall)
+        }
+    }
+}
+
+/** The five states of the write flow, each in the family its meaning asks for (D12 §5, §11). */
+@Composable
+private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Unit) {
+    when (state) {
+        is WriteState.Idle -> NfcSheet(
+            eyebrow = "Write nfc tag",
+            glyph = NoteNfcIcons.NfcTag,
+            sentence = state.message,
+        )
+
+        is WriteState.Confirm -> NfcSheet(
+            eyebrow = "Overwrite this tag?",
+            accent = NoteNfcTheme.semanticColors.dueSoon.foreground,
+            border = NoteNfcTheme.semanticColors.dueSoon.foreground,
+            glyph = NoteNfcIcons.NfcTag,
+            sentence = "Hold the tag to the phone while you answer.",
+        )
+
+        is WriteState.Verifying -> NfcSheet(
+            eyebrow = "Verifying",
+            accent = MaterialTheme.colorScheme.tertiary,
+            glyph = NoteNfcIcons.NfcTag,
+            sentence = state.message,
+        )
+
+        is WriteState.Written -> NfcSheet(
+            eyebrow = "Tag written",
+            accent = NoteNfcTheme.semanticColors.maintenanceOkay.foreground,
+            glyph = NoteNfcIcons.NfcTag,
+            sentence = targetName,
+            identifier = "${state.tagId.take(8)} · v1 · ${if (state.locked) "locked" else "rewritable"}",
+            actions = { FilledAction("Done", onDone) },
+        ) {
+            // The verification gets its own OK-container line: it is the claim the screen makes.
+            VerifiedLine()
+        }
+
+        is WriteState.Error -> NfcSheet(
+            eyebrow = "Not written",
+            accent = NoteNfcTheme.semanticColors.destructiveAction.foreground,
+            border = NoteNfcTheme.semanticColors.destructiveAction.foreground,
+            glyph = NoteNfcIcons.NfcTag,
+            sentence = state.message,
+        )
+    }
+}
+
+/** The proof, in the OK family — cool blue, never green (D12 §5). */
+@Composable
+private fun VerifiedLine() {
+    Surface(
+        color = NoteNfcTheme.semanticColors.maintenanceOkay.container,
+        contentColor = NoteNfcTheme.semanticColors.maintenanceOkay.foreground,
+        shape = PlateShape,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = "Read back byte-identical",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+}
+
+/**
+ * "Overwrite?" as its own sheet (G1 §1.4): one warning line in the due-soon family naming what is
+ * on the tag, Overwrite filled and Keep it outlined. Brick is not used — nothing here is an error.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OverwriteSheet(
+    reason: String,
+    target: String,
+    onOverwrite: () -> Unit,
+    onKeepIt: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onKeepIt) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "OVERWRITE THIS TAG?",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Surface(
+                color = NoteNfcTheme.semanticColors.dueSoon.container,
+                contentColor = NoteNfcTheme.semanticColors.dueSoon.foreground,
+                shape = PlateShape,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "The tag already holds $reason.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+            Text(
+                text = "Replacing it will make the tag identify $target. The old content is lost. " +
+                    "Hold the tag to the phone while confirming.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledAction("Overwrite", onOverwrite)
+                OutlinedAction("Keep it", onKeepIt)
+            }
+        }
+    }
+}
+
+/** Locking is the one irreversible thing this app does, so it is asked for in those words. */
+@Composable
+private fun LockWarning(onLock: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Lock permanently?") },
+        text = {
+            Text("A locked tag can never be rewritten or reused. Only lock tags that are installed for good.")
+        },
+        confirmButton = { TextButton(onClick = onLock) { Text("Lock after writing") } },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Don't lock") } },
+        shape = ControlShape,
+    )
+}
+
+@Composable
+private fun LockSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Lock permanently", style = MaterialTheme.typography.titleSmall)
+            QuietLine("A locked tag can never be rewritten.")
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun NfcAvailabilityLine(session: NfcReaderModeSession?) {
+    val line = when {
+        session == null -> "Writing needs the app's own window."
+        !session.available -> "This phone has no NFC hardware."
+        !session.enabled -> "NFC is turned off. Enable it in system settings, then come back."
+        else -> null
+    }
+    line?.let { QuietLine(it) }
+}
+
+/** The route carries ids, never objects; this is the one place they become a [TagTarget] again. */
+internal fun Route.WriteTag.target(): TagTarget = when (targetKind) {
+    "asset" -> targetId?.let { TagTarget.AssetTarget(AssetId(it)) } ?: TagTarget.None
+    "link" -> targetId?.let { TagTarget.LinkTarget(LinkId(it)) } ?: TagTarget.None
+    else -> TagTarget.None
 }

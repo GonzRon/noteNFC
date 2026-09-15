@@ -102,7 +102,12 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                     )
                 }
                 entry<Route.LinkDetail> { key ->
-                    LinkDetailScreen(graph = graph, linkId = key.id, onBack = { backStack.removeLastOrNull() })
+                    LinkDetailScreen(
+                        graph = graph,
+                        linkId = key.id,
+                        onBack = { backStack.removeLastOrNull() },
+                        onWriteTag = { backStack.add(it) },
+                    )
                 }
                 entry<Route.Scan> {
                     ScanScreen(graph = graph, onResolved = { backStack.add(it) })
@@ -113,7 +118,11 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         format = key.format,
                         key = key.key,
                         onDismiss = { backStack.removeLastOrNull() },
-                        onWriteTag = { backStack.add(it) },
+                        // The sheet is done once it has pushed the next thing: a result is never
+                        // somewhere to come back to.
+                        onWriteTag = { backStack.removeLastOrNull(); backStack.add(it) },
+                        onOpenAsset = { backStack.removeLastOrNull(); backStack.add(Route.AssetDetail(it)) },
+                        onNewAsset = { backStack.removeLastOrNull(); backStack.add(Route.AssetEdit(null)) },
                     )
                 }
                 entry<Route.WriteTag> { key ->

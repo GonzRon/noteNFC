@@ -14,6 +14,7 @@ import com.loosecannon.notenfc.core.ports.UuidGenerator
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.BindTag
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteLink
 import com.loosecannon.notenfc.core.usecase.ExportBackup
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.OpenLink
@@ -72,6 +73,9 @@ class AppGraph(context: Context) {
     // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
     val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
+
+    /** A link is a pointer, not a record, so it can be deleted — unless a tag still points at it. */
+    val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
 
     private companion object {
         const val DB_NAME = "notenfc.db"
