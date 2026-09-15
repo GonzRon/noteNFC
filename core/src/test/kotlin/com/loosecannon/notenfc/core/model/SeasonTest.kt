@@ -66,4 +66,13 @@ class SeasonTest {
         assertTrue(Season.inSeason(earlierStart, endBoundary, LocalDate.of(2027, 2, 28)))
         assertFalse(Season.inSeason(earlierStart, endBoundary, LocalDate.of(2027, 3, 1)))
     }
+
+    @Test fun todayFeb29AgainstAFeb28Boundary() {
+        // The other direction of the leap-year rule: the boundary is a plain 02-28 and *today*
+        // is the leap day. Nothing is resolved away, so Feb 29 simply falls after Feb 28.
+        val leapDay = LocalDate.of(2028, 2, 29)
+        assertFalse(Season.inSeason("01-01", "02-28", leapDay))   // window ends the day before
+        assertTrue(Season.inSeason("02-28", "03-15", leapDay))    // window opened the day before
+        assertFalse(Season.inSeason("02-28", "02-28", leapDay))   // a one-day 02-28 season
+    }
 }
