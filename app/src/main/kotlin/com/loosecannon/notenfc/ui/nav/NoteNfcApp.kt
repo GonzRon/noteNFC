@@ -8,9 +8,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.ui.asset.AssetDetailScreen
@@ -48,10 +50,22 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
             }
         },
     ) { padding ->
+        // NavDisplay decorates entries with a SaveableStateHolder and nothing else by default,
+        // which leaves every `viewModel(...)` inside an entry resolving against the *activity's*
+        // store: one instance per key for the life of the process. The sheets and forms here
+        // compute their state in `init` or hold a `done` flag, so an activity-scoped model shows
+        // the previous visit's answer on the next one, and `onCleared` — where the write screen
+        // abandons an unwritten tag — never fires until the activity dies. Scoping each entry to
+        // its own ViewModelStore restores per-visit models and clears them on pop. Order matters:
+        // the ViewModelStore decorator must come after the saveable-state one.
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
             modifier = Modifier.padding(padding),
+            entryDecorators = listOf(
+                rememberSaveableStateHolderNavEntryDecorator(),
+                rememberViewModelStoreNavEntryDecorator(),
+            ),
             entryProvider = entryProvider {
                 entry<Route.Dashboard> {
                     DashboardScreen(

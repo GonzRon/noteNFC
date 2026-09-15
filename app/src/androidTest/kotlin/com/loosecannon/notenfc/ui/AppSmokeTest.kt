@@ -3,6 +3,7 @@ package com.loosecannon.notenfc.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasNoClickAction
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -119,6 +121,40 @@ class AppSmokeTest {
 
         rule.awaitText(name, count = 2)
         rule.onAllNodesWithText(name).onFirst().assertIsDisplayed()
+    }
+
+    /**
+     * Two "New asset" forms in one session must not share a draft.
+     *
+     * Before the `NavDisplay` entries got their own `ViewModelStore`, `AssetEditViewModel` for
+     * `assetId == null` resolved against the activity's store under the key "new" and lived for
+     * the whole process, so the second form opened with the first asset's name still typed in it.
+     * The route back through the Assets tab is the cheap one: it is the only other place that
+     * offers a new asset, and it proves the same key really is asked for twice.
+     */
+    @Test fun secondNewAssetFormStartsBlank() {
+        rule.awaitText("Add your first asset")
+        rule.onNodeWithText("Add your first asset").performClick()
+
+        rule.awaitText("New asset")
+        rule.onAllNodes(hasSetTextAction()).onFirst().performTextInput("First one")
+        rule.onNodeWithText("Save asset").performClick()
+        // The saved asset opens on its own screen: app bar title and identity plate, twice.
+        rule.awaitText("First one", count = 2)
+
+        // Back to the dashboard, then over to the Assets tab, which is the other way in.
+        rule.onNodeWithContentDescription("Back").performClick()
+        // The bottom bar only exists on the three top-level routes, so seeing it is proof we are
+        // back on the dashboard rather than still on the detail screen.
+        rule.awaitText("Assets")
+        rule.onNode(hasText("Assets") and hasClickAction()).performClick()
+        // Title and bar item both read "Assets" once the list is up.
+        rule.awaitText("Assets", count = 2)
+        rule.onNodeWithContentDescription("Add asset").performClick()
+
+        rule.awaitText("New asset")
+        rule.waitForIdle()
+        rule.onAllNodesWithText("First one").assertCountEquals(0)
     }
 
     /** The production Backup screen, reached the way the dashboard offers it. */
