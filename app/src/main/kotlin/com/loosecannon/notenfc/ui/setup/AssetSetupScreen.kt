@@ -138,7 +138,9 @@ fun AssetSetupScreen(
         deletingDefinition?.let { row ->
             ConfirmDialog(
                 title = "Delete this reading?",
-                body = "It has no data.",
+                // Whether it can go at all is the use case's call; the refusal dialog says so when
+                // it cannot, so the confirm no longer promises "it has no data" before anyone looked.
+                body = "This cannot be undone.",
                 onDismiss = { deletingDefinition = null },
                 onConfirm = {
                     deletingDefinition = null

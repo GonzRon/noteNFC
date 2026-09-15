@@ -30,6 +30,7 @@ import com.loosecannon.notenfc.ui.scan.WriteTagScreen
 import com.loosecannon.notenfc.ui.settings.SettingsScreen
 import com.loosecannon.notenfc.ui.setup.AssetSetupScreen
 import com.loosecannon.notenfc.ui.setup.DefinitionEditScreen
+import com.loosecannon.notenfc.ui.setup.ProfileEditScreen
 import kotlinx.coroutines.flow.SharedFlow
 
 /**
@@ -140,6 +141,15 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         definitionId = key.definitionId,
                         // Saved, archived or deleted, the editor is done: the setup screen behind
                         // it is already watching the rows and redraws itself.
+                        onDone = { backStack.removeLastOrNull() },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<Route.ProfileEdit> { key ->
+                    ProfileEditScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        profileId = key.profileId,
                         onDone = { backStack.removeLastOrNull() },
                         onBack = { backStack.removeLastOrNull() },
                     )

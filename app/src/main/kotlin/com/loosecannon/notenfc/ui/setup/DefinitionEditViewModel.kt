@@ -226,14 +226,25 @@ class DefinitionEditViewModel(
         }
     }
 
-    /** A target and a meter flag only mean something for a NUMBER (spec §6), so they go with it. */
-    fun onValueType(value: ValueType) = clearing(DefinitionField.TYPE) { form ->
-        if (value == ValueType.NUMBER) {
-            form.copy(valueType = value)
-        } else {
-            form.copy(valueType = value, rangeLow = "", rangeHigh = "", isMeter = false)
+    /**
+     * Decimals, a target and a meter flag only mean something for a NUMBER (spec §6), so they go
+     * with it — decimals back to the default rather than blank, because the command still needs a
+     * number and the control that would show a bad one is no longer on screen.
+     */
+    fun onValueType(value: ValueType) =
+        clearing(DefinitionField.TYPE, DefinitionField.DECIMALS) { form ->
+            if (value == ValueType.NUMBER) {
+                form.copy(valueType = value)
+            } else {
+                form.copy(
+                    valueType = value,
+                    decimals = DEFAULT_DECIMALS,
+                    rangeLow = "",
+                    rangeHigh = "",
+                    isMeter = false,
+                )
+            }
         }
-    }
 
     fun onMeter(value: Boolean) = clearing(DefinitionField.METER) { it.copy(isMeter = value) }
 

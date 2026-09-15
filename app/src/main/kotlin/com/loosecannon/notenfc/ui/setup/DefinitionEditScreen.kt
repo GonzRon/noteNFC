@@ -147,7 +147,7 @@ fun DefinitionEditScreen(
         if (confirming) {
             ConfirmDialog(
                 title = "Delete this reading?",
-                body = "It has no data.",
+                body = "This cannot be undone.",
                 onDismiss = { confirming = false },
                 onConfirm = {
                     confirming = false
@@ -257,23 +257,24 @@ fun DefinitionEditScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
-                value = state.decimals,
-                onValueChange = model::onDecimals,
-                label = { Text("Decimals") },
-                isError = state.problems.containsKey(DefinitionField.DECIMALS),
-                supportingText = state.problems[DefinitionField.DECIMALS]?.let { { Text(it) } },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Next,
-                ),
-                shape = ControlShape,
-                modifier = Modifier.fillMaxWidth(),
-            )
 
-            // A target and a meter are things only a number can be (spec §6).
+            // Decimals, a target and a meter are things only a number can be (spec §6) — a TEXT
+            // or BOOLEAN reading has nothing to round, so the control is not shown at all.
             if (state.numeric) {
+                OutlinedTextField(
+                    value = state.decimals,
+                    onValueChange = model::onDecimals,
+                    label = { Text("Decimals") },
+                    isError = state.problems.containsKey(DefinitionField.DECIMALS),
+                    supportingText = state.problems[DefinitionField.DECIMALS]?.let { { Text(it) } },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next,
+                    ),
+                    shape = ControlShape,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 FieldGroup(
                     label = "Target",
                     note = state.problems[DefinitionField.RANGE_LOW]
