@@ -130,7 +130,7 @@ class WriteTagActivity : Activity() {
             return false
         }
         if (awaitingVerify) {
-            verify(inspection, intended, row)
+            verify(tag, inspection, intended, row)
             return false
         }
         if (!inspection.writable) {
@@ -160,9 +160,17 @@ class WriteTagActivity : Activity() {
         }
     }
 
-    private suspend fun verify(inspection: TagInspection, intended: List<NdefRecordData>, row: TagBinding) {
+    private suspend fun verify(tag: Tag, inspection: TagInspection, intended: List<NdefRecordData>, row: TagBinding) {
         if (inspection.existingRecords == intended) {
-            finishWrite(row, inspection.uid, locked = !inspection.writable)
+            // The format path writes unlocked; the lock only happens here, once the read-back
+            // has proved the bytes on the tag are the ones we meant to put there.
+            val wantLock = withContext(Dispatchers.Main) { lock.isChecked }
+            val locked = if (wantLock && inspection.canLock && inspection.writable) {
+                TagWriter.lock(tag)
+            } else {
+                !inspection.writable
+            }
+            finishWrite(row, inspection.uid, locked)
         } else {
             awaitingVerify = false
             say("Read-back differs: the tag holds ${describe(inspection.existing)}. Try writing again.")

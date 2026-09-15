@@ -7,9 +7,9 @@ Branch `phase-1b` from master `498a0e8`. Date 2026-09-14.
 | # | Criterion | Evidence | Status |
 |---|---|---|---|
 | 1 | An NTAG213 holds the v1 message and reads back byte-identical | `WriteTagActivity` read-back compare (`TagWriter.write` → `VerifyMismatch` unless `readBack == intended`); `NdefCodecV1Test.exactByteLayout/roundTrips/fitsAnNtag213`; device run: §4 row 1 | JVM-proven; device pending |
-| 2 | Foreign NDEF content (incl. an old `md5_short` tag) triggers the confirmation and is not written without it; a legacy tag is recognised as such | `OverwritePolicyTest` (every non-empty/non-same payload → `Confirm`); `WriteTagActivity.confirm` writes only from the dialog's positive button; `NdefCodecV1Test.legacyRecordStillDecodes`, `ResolveTagTest.unknownV1AndLegacyAreDistinct`; device: §4 rows 2–3 | JVM-proven; device pending |
-| 3 | Scanning with the app closed opens it through `NfcDispatchActivity` | manifest: two `NDEF_DISCOVERED` filters (`:tag`, `:md5_short`), no `TECH_DISCOVERED`; AAR pins `com.loosecannon.notenfc`; device: §4 row 4 | device pending |
-| 4 | (optional) an old-APK tag is recognised as legacy on the device | device: §4 row 5 | optional; device pending |
+| 2 | Foreign NDEF content (incl. an old `md5_short` tag) triggers the confirmation and is not written without it; a legacy tag is recognised as such | `OverwritePolicyTest` (every non-empty/non-same payload → `Confirm`); `WriteTagActivity.confirm` writes only from the dialog's positive button; `NdefCodecV1Test.legacyRecordStillDecodes`, `ResolveTagTest.unknownV1AndLegacyAreDistinct`; device: §4 rows 2–4 | JVM-proven; device pending |
+| 3 | Scanning with the app closed opens it through `NfcDispatchActivity` | manifest: two `NDEF_DISCOVERED` filters (`:tag`, `:md5_short`), no `TECH_DISCOVERED`; AAR pins `com.loosecannon.notenfc`; device: §4 row 5 | device pending |
+| 4 | (optional) an old-APK tag is recognised as legacy on the device | device: §4 row 6 | optional; device pending |
 
 ## 2. What shipped (by commit)
 
@@ -19,7 +19,7 @@ Branch `phase-1b` from master `498a0e8`. Date 2026-09-14.
 - `db780dc` — link launch policy, `notenfc://tag` route, save/open link use cases. `LinkLaunchPolicy`, `TagRoute`, `SaveLink`/`OpenLink`.
 - `05e8ec3` — resolve/bind/provision tag use cases + create asset. `ResolveTag`, `BindTag`, `ProvisionTag`, `CreateAsset`.
 - `e70592a` — resolve tag: look the row up inside the transaction. Closes a lost-update window found in review (ruling 6, §6).
-- `ebae784` — nfc adapter: ndef bridge, reader-mode session, tag writer with read-back; wire the use cases. `NfcReaderModeSession`, `NdefTagWriter`, `TagWriter.inspect`/`write`.
+- `ebae784` — nfc adapter: ndef bridge, reader-mode session, tag writer with read-back; wire the use cases. `NfcReaderModeSession`, `TagWriter`, `TagWriter.inspect`/`write`.
 - `6bd28c7` — tag writer: say which calls throw; make the scan-clock assertions mean something. Documents `IOException`/`TagLostException` on `inspect`; `write` never throws for tag I/O (ruling 7, §6).
 - `6318223` — interim write-tag screen: read first, confirm overwrite, write, read back, optional lock. `WriteTagActivity` (View-based, ruling 1, §6).
 - `dcf3dee` — write screen: don't leave the lock armed on back; picker survives db errors. `TargetPicker` hardening.
@@ -54,26 +54,42 @@ Totals: `:core` 104, `:app` 33.
 | # | Step | Expected | Result |
 |---|---|---|---|
 | 1 | Tools → Write a new tag… → New asset "Hot tub" → hold a blank NTAG213 | "Written and read back byte-identical", Tag id shown; Tools counts show 1 asset / 1 tag | |
-| 2 | Write again for the same target → hold the tag from row 1 | dialog "The tag already holds a different noteNFC tag (…)"; choose Keep it → "Not written" | |
-| 3 | Hold an old `md5_short` tag on the Write screen | dialog names "a legacy noteNFC tag (xxxxxxxx)"; Keep it → not written | |
-| 4 | Close the app (swipe from recents) → tap the tag from row 1 | app opens on the noteNFC tag screen: "Asset: Hot tub" | |
-| 5 | (optional) tap an old `md5_short` tag with the app closed | "Legacy noteNFC tag (xxxxxxxx)" with Bind / Rewrite | |
-| 6 | Joplin → share a note's external link → noteNFC → hold a blank tag → Done | link saved, tag written; back in Joplin | |
-| 7 | Close the app → tap the tag from row 6 | Joplin opens the note, noteNFC shows no screen | |
-| 8 | `adb shell am start -a android.intent.action.VIEW -d notenfc://tag/<id from row 1>` | same screen as row 4 | |
-| 9 | `adb shell am start -a android.intent.action.VIEW -d notenfc://tag/nope` | "Unreadable noteNFC record: not a tag id" — no crash | |
-| 10 | Tap a blank/foreign tag with the app closed | nothing happens (no `TECH_DISCOVERED` filter): noteNFC is not offered | |
-| 11 | Debug build: Backup → Export; wipe; Import → tap the tag from row 1 | resolves to "Hot tub" with the same tag id (identity survives) | |
+| 2 | Write again for the same target → hold the tag from row 1 | dialog "The tag already holds a different noteNFC tag (…)"; choose Keep it → "Not written" — then hold the tag on the Tools screen: it still resolves to the original id (nothing was written) | |
+| 3 | Hold an old `md5_short` tag on the Write screen | dialog names "a legacy noteNFC tag (xxxxxxxx)"; Keep it → not written — then hold the tag on the Tools screen: it still resolves to the original legacy key (nothing was written) | |
+| 4 | Hold a tag carrying a URL or text record (any commercial NFC sticker, or one written by another app) on the Write screen | dialog names "foreign NDEF content (tnf=1 …)"; choose Keep it → tapping the tag with noteNFC closed still opens it in the phone's default handler (not written) | |
+| 5 | Close the app (swipe from recents) → tap the tag from row 1 | app opens on the noteNFC tag screen: "Asset: Hot tub" | |
+| 6 | (optional) tap an old `md5_short` tag with the app closed | "Legacy noteNFC tag (xxxxxxxx)" with Bind / Rewrite | |
+| 7 | Joplin → share a note's external link → noteNFC → hold a blank tag → Done | link saved, tag written; back in Joplin | |
+| 8 | Close the app → tap the tag from row 7 | Joplin opens the note, noteNFC shows no screen | |
+| 9 | `adb shell am start -a android.intent.action.VIEW -d notenfc://tag/<id from row 1>` | same screen as row 5 | |
+| 10 | `adb shell am start -a android.intent.action.VIEW -d notenfc://tag/nope` | "Unreadable noteNFC record: not a tag id" — no crash | pass on the attached phone (a0680e5): "Unreadable noteNFC record: not a tag id: 'nope'", no crash |
+| 11 | Tap a blank/foreign tag with the app closed | nothing happens (no `TECH_DISCOVERED` filter): noteNFC is not offered | |
+| 12 | Debug build: Backup → Export; wipe; Import → tap the tag from row 1 | resolves to "Hot tub" with the same tag id (identity survives) | |
+| 13 | `adb shell am force-stop com.loosecannon.notenfc` → tap a written tag | expected on Android 17: **no** dispatch until the app is launched once (platform rule, D3 §9). Record the observed behaviour; it is a result, not a defect. | |
+
+Note: Android 17 (the attached phone) does not deliver NFC intents to a package in the *stopped*
+state: a fresh `adb install` leaves noteNFC stopped until it is launched once, so run the
+Tools-screen rows (1–4) before the close-the-app tap rows (5, 6, 8, 11). Swiping the app from
+recents is *not* the stopped state.
 
 Result column: filled in by whoever runs the phone session (see §5).
 
 ## 5. Status of the device proof
 
-No device was attached to the build machine during Phase 1B (`adb devices` returned an empty
-list throughout). Rows 1–11 of §4 are pending the owner's phone session. Everything above the
-device line in §1 is JVM-proven, and the writer (`NdefTagWriter`/`TagWriter`) and dispatch
-(`NfcDispatchActivity`) paths are compile-checked and code-reviewed but have not been exercised
-against a real NFC radio or a real tag. No device result is claimed anywhere in this document.
+A the owner's Android 17 (SDK 37) phone is attached to the build machine, and the debug
+APK from `a0680e5` was installed on it. Two things were proven there:
+
+- `dumpsys package com.loosecannon.notenfc` showed exactly the two `NDEF_DISCOVERED` literal
+  filters (`:tag` and `:md5_short`), the browsable `notenfc://tag` `VIEW` filter, and no
+  `TECH_DISCOVERED` filter anywhere in the package.
+- §4's malformed deep-link row (row 10) passed on the device: "Unreadable noteNFC record: not a
+  tag id: 'nope'", no crash.
+
+Every tap-based row of §4 remains pending. NFC was off on the phone during that session, and the
+reader-mode flag defect (B-1, fixed in this commit) would have blocked writing in any case: with
+`FLAG_READER_SKIP_NDEF_CHECK` set the platform never marks a delivered tag as NDEF, so
+`Ndef.get(tag)` is null and there is nothing to write to. The installed build must be refreshed
+from this commit before the tap rows are run. No tap result is claimed anywhere in this document.
 
 ## 6. Rulings made during execution
 
@@ -92,6 +108,10 @@ against a real NFC radio or a real tag. No device result is claimed anywhere in 
   window); unknown scans open a no-op transaction.
 - `TagWriter.inspect` propagates `IOException`/`TagLostException` (documented); `write` never
   throws for tag I/O.
+- Final review B-1: `FLAG_READER_SKIP_NDEF_CHECK` removed from the reader-mode session — with
+  it set the platform never marks a tag as NDEF, so `Ndef.get()` is null and nothing can be
+  written; the flag is only for raw-technology access. S-1: on the `NdefFormatable` path the tag
+  is formatted unlocked and locked only after the second-tap read-back verifies the bytes.
 - Review-driven hardening beyond the plan: lock-warning cancel listener, `TargetPicker` catches
   repository failures, `configChanges` on `WriteTagActivity` and `ShareLinkActivity`,
   `LinkLauncher` catches `SecurityException`, `NfcDispatchActivity` guards `payloadOf` and
@@ -109,7 +129,6 @@ against a real NFC radio or a real tag. No device result is claimed anywhere in 
   `)`.
 - `BindTag` doesn't trim `label` while `ProvisionTag` does.
 - Silent `locked = false` when `canMakeReadOnly()` is false.
-- `"%02x".format` is locale-sensitive (house pattern, also in `BackupCodec`).
 - `WriteTagActivity` orphan window if `complete()` throws after a verified write.
 - `busy` flags are non-atomic test-and-set.
 - `catch (Exception)` inside coroutine scopes also catches `CancellationException`.

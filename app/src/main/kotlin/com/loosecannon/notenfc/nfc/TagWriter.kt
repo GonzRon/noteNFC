@@ -94,10 +94,12 @@ object TagWriter {
         val formatable = NdefFormatable.get(tag) ?: return WriteResult.Unsupported
         return try {
             formatable.connect()
-            if (lock) formatable.formatReadOnly(message) else formatable.format(message)
+            formatable.format(message)
             // The Tag object was discovered as NdefFormatable only; Ndef.get(tag) stays null
-            // until the tag is rediscovered, so verification is the next tap's job.
-            WriteResult.Written(emptyList(), needed, verified = false, locked = lock)
+            // until the tag is rediscovered, so verification is the next tap's job -- and so is
+            // the lock: the tag is formatted unlocked and [TagWriter.lock] is applied only
+            // after that second tap's verification, never blind.
+            WriteResult.Written(emptyList(), needed, verified = false, locked = false)
         } catch (e: TagLostException) {
             WriteResult.Failed("tag left the field")
         } catch (e: IOException) {
@@ -106,6 +108,19 @@ object TagWriter {
             WriteResult.Failed("tag could not be formatted: ${e.message}")
         } finally {
             runCatching { formatable.close() }
+        }
+    }
+
+    /** Makes an NDEF tag permanently read-only. Call only after a verified read-back. Blocks; call off the main thread. */
+    fun lock(tag: Tag): Boolean {
+        val ndef = Ndef.get(tag) ?: return false
+        return try {
+            ndef.connect()
+            ndef.canMakeReadOnly() && ndef.makeReadOnly()
+        } catch (e: IOException) {
+            false
+        } finally {
+            runCatching { ndef.close() }
         }
     }
 }

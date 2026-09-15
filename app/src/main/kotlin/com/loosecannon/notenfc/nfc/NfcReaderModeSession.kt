@@ -6,8 +6,11 @@ import android.nfc.Tag
 
 /**
  * Reader mode for in-app scanning and writing (D3 §9): callback-based, no PendingIntent, no
- * activity relaunch. `FLAG_READER_SKIP_NDEF_CHECK` keeps the platform from reading the tag for us
- * so the writer sees exactly what is there. Start in `onResume`, stop in `onPause`.
+ * activity relaunch. The platform's NDEF check is deliberately left ON: it is what makes `Ndef`
+ * and `NdefFormatable` available on the delivered `Tag`, so skipping it would leave nothing to
+ * write to. [TagWriter.inspect] still performs its own fresh read (`Ndef.getNdefMessage()`) and
+ * never relies on the message the platform cached during that check. Start in `onResume`, stop in
+ * `onPause`.
  *
  * @param onTag runs on a platform binder/background thread, never the main thread: blocking
  * [TagWriter] calls are allowed straight from it, but any UI update must be posted to the main
@@ -31,7 +34,6 @@ class NfcReaderModeSession(private val activity: Activity, private val onTag: (T
         const val FLAGS = NfcAdapter.FLAG_READER_NFC_A or
             NfcAdapter.FLAG_READER_NFC_B or
             NfcAdapter.FLAG_READER_NFC_F or
-            NfcAdapter.FLAG_READER_NFC_V or
-            NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK
+            NfcAdapter.FLAG_READER_NFC_V
     }
 }
