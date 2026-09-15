@@ -375,7 +375,7 @@ attachments/<attachment-id>.<ext>   managed bytes only (references are metadata)
   no preferences except the reminder hour and unit choices.
 - Export via `ACTION_CREATE_DOCUMENT` (any SAF provider, including cloud ones) and an optional
   "auto-backup folder" (`ACTION_OPEN_DOCUMENT_TREE`, persistable grant) written by a WorkManager
-  job as immutable versioned files with a daily/weekly/monthly retention policy — D7 Phase 1D,
+  job as immutable versioned files with a daily/weekly/monthly retention policy — D7 Phase 3R,
   provider-neutral so Google Drive works through its `DocumentsProvider` without a Drive API
   integration. Also "share backup" through the share sheet.
 - Import modes: **Replace** (wipe and load in one Room transaction, attachments after commit;

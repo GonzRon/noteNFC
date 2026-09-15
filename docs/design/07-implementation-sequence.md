@@ -11,11 +11,12 @@ Phase 0  Foundation
 Phase 1  Tag survival (M1)  =  1A persistence + legacy migration + backup/restore
                                1B tag payload format v1 + legacy resolver + real-device NFC proof
                                1C Compose shell + asset/link UX + full restore proof
-                               1D automatic versioned backup (SAF folder, WorkManager, retention)
    ▼
 Phase 2  Journal + profiles
    ▼
 Phase 3  Scheduling + local reminders
+   ▼
+Phase 3R Resilience: automatic versioned backup   (before attachments change the size class)
    ▼
 Phase 4  Attachments          (R-6: first, because manuals/photos/provenance records pay off immediately)
    ▼
@@ -84,28 +85,12 @@ own falsification points; the milestone is done when 1C's criteria hold.
 | **Exit criteria (milestone M1)** | (1) a new tag written on phone X resolves on phone Y after restoring X's backup, entirely through the UI; (2) the original share → write → scan → launch flow works with Joplin end to end and returns to Joplin after the write; (3) Home shows the "no backup yet" nudge until the first export succeeds; (4) all 1A/1B criteria still hold. |
 | **Rollback / compat** | The old app is a separate package and keeps working until uninstalled; Room v1 → nothing to roll back. |
 
-### 1D — Automatic versioned backup (durability foundation, before Phase 2)
-
-Recorded 2026-09-15 at the M1 boundary. Phase 2 is where the app starts holding service history
-and measurements the owner would genuinely hate to lose, so off-device backup becomes automatic
-*before* that data exists, not after.
-
-| | |
-|---|---|
-| **Prerequisites** | 1C (M1). No new format: the 1A backup ZIP (manifest + SHA-256, `BackupCodec`) is what gets written. |
-| **Scope** | (1) A **backup destination** chosen once through `ACTION_OPEN_DOCUMENT_TREE` with a persistable URI grant — Google Drive, a local folder, Nextcloud or any other `DocumentsProvider`; noteNFC never becomes a Drive client (no OAuth, no Drive API, no hidden `appDataFolder`). (2) A **WorkManager** job (constraints: storage/network as the provider needs; retry with backoff) that runs at most daily and only when the store is dirty since the last successful backup, plus an explicit *Back up now*. (3) **Immutable versioned files** `notenfc-<UTC stamp>-v1.zip`; never a single overwritten `latest.zip`. (4) **Retention** applied after each successful write: 14 daily, 8 weekly, 12 monthly (≈ a year of rollback for a database this small). (5) **Backup health** state surfaced in Settings (destination, last backup, current / stale / failed / not configured) and on the dashboard once assets exist ("BACKUP NOT CONFIGURED — Choose backup location"), replacing the 1C "no backup yet" nudge; the 1C rule that an empty install is never nagged stands. (6) Restore from any versioned file through the existing Replace import. |
-| **Replication is someone else's job** | The destination is an ordinary folder of ordinary ZIPs so that a sync tool (Syncthing to a NAS, another phone or a workstation; a cloud provider's own client) owns off-device copies and redundancy while noteNFC owns creation, format, integrity and retention. **Retention ownership caveat:** noteNFC's deletions propagate through a plain mirror, so a truly independent archive needs versioning on the receiving side (Syncthing file versioning, NAS snapshots) — the Settings copy for the destination says so, and noteNFC never assumes it is the only copy. |
-| **Out of scope** | Attachments (Phase 4 separates database backup from attachment storage because photos/PDFs change the size class); Merge import; a Google-specific path — only if the SAF/Drive provider proves unreliable in the device spike does the direct Drive API (`drive.appdata`) get a concrete reason to exist. |
-| **Tests** | JVM: dirty-flag semantics, retention policy over synthetic file lists, filename stamping/parsing, health-state derivation. Device: choose a Drive-backed folder, dirty the store, run the worker on demand, see the file appear in Drive's own UI; reboot and confirm the grant persists; restore an older version. |
-| **Exit criteria** | (1) after one change and one worker run, a new versioned ZIP exists in the chosen tree and imports cleanly; (2) a second run with no change writes nothing; (3) retention deletes exactly the files the policy says over a synthetic 60-day history; (4) the grant survives a reboot; (5) health reads "current" only after a verified write. |
-| **Rollback / compat** | Feature is additive and off until a destination is chosen; manual export/import unchanged. |
-
 ## Phase 2 — Asset core, journal, profiles
 
 | | |
 |---|---|
 | **Goal** | "Scan the hot tub → log a water test in a few taps; see the history." |
-| **Prerequisites** | Phase 1 including 1D (automatic backup established before history accumulates). |
+| **Prerequisites** | Phase 1. |
 | **Source areas** | Room v2 (`measurement_definition`, `event_profile`, `profile_field`, `profile_consumable`, `asset_event`, `measurement`, `consumable_usage`; full `asset` fields incl. hierarchy and season window); seed templates JSON (`hot_tub`, `power_equipment`, `ups`, `generic`); generic entry form rendered as D12 §9 Instrument Measurement rows (value, unit, range, explicit LOW / IN RANGE / HIGH); journal as the D12 §8 Service Ledger; full Asset Identity Plate; journal list/detail/edit; range classification; profile editor; backup importer tolerates the new tables. |
 | **Schema** | Room v2 migration + test. |
 | **Tests** | `:core`: template application (idempotent), range classification, measurement typing. `:app`: DAO tests for the time-series query, migration v1→v2, entry-form Compose test (required-field gating), backup round-trip incl. events. |
@@ -126,12 +111,34 @@ and measurements the owner would genuinely hate to lose, so off-device backup be
 | **Exit criteria** | (1) all D5 §10 worked examples pass as tests; (2) on the device, a schedule due tomorrow produces exactly one notification at the configured hour without opening the app, and again after a reboot; (3) revoking notification permission turns the health screen red and Repair opens settings; (4) winter-only hot tub shows INACTIVE_SEASON in July and DUE on Oct 15 (injected `Today`); (5) deleting the completion event moves the due date back, observed in the UI. |
 | **Rollback / compat** | Schedules are additive; disabling reminders globally disarms everything. |
 
+## Phase 3R — Resilience: automatic versioned backup
+
+Recorded 2026-09-15 at the M1 boundary and deliberately kept **off the critical path**: manual
+export/import, the proven restore into a fresh database and durable ids already give real
+protection, and automatic backup unlocks no product capability, whereas Phase 2 does. It lands
+after Phase 3 and before Phase 4 because attachments change the storage story (photos and PDFs
+move backups into another size class), so the database-only version should exist first.
+
+No hook is added to the code in the meantime: "dirty since the last backup" is already answerable
+from the `updated_at` columns against the `lastBackupAt` preference, so no `backupDirty` flag or
+abstraction is needed ahead of the phase.
+
+| | |
+|---|---|
+| **Prerequisites** | Phase 3 (WorkManager is already in the app for the reminder backstop). No new format: the 1A backup ZIP (manifest + SHA-256, `BackupCodec`) is what gets written. |
+| **Scope** | (1) A **backup destination** chosen once through `ACTION_OPEN_DOCUMENT_TREE` with a persistable URI grant — Google Drive, a local folder, Nextcloud or any other `DocumentsProvider`; noteNFC never becomes a Drive client (no OAuth, no Drive API, no hidden `appDataFolder`). (2) A **WorkManager** job (constraints: storage/network as the provider needs; retry with backoff) that runs at most daily and only when the store is dirty since the last successful backup, plus an explicit *Back up now*. (3) **Immutable versioned files** `notenfc-<UTC stamp>-v1.zip`; never a single overwritten `latest.zip`. (4) **Retention** applied after each successful write: 14 daily, 8 weekly, 12 monthly (≈ a year of rollback for a database this small). (5) **Backup health** state surfaced in Settings (destination, last backup, current / stale / failed / not configured) and on the dashboard once assets exist ("BACKUP NOT CONFIGURED — Choose backup location"), replacing the 1C "no backup yet" nudge; the 1C rule that an empty install is never nagged stands. (6) Restore from any versioned file through the existing Replace import. |
+| **Replication is someone else's job** | The destination is an ordinary folder of ordinary ZIPs so that a sync tool (Syncthing to a NAS, another phone or a workstation; a cloud provider's own client) owns off-device copies and redundancy while noteNFC owns creation, format, integrity and retention. **Retention ownership caveat:** noteNFC's deletions propagate through a plain mirror, so a truly independent archive needs versioning on the receiving side (Syncthing file versioning, NAS snapshots) — the Settings copy for the destination says so, and noteNFC never assumes it is the only copy. |
+| **Out of scope** | Attachments (Phase 4 separates database backup from attachment storage because photos/PDFs change the size class); Merge import; a Google-specific path — only if the SAF/Drive provider proves unreliable in the device spike does the direct Drive API (`drive.appdata`) get a concrete reason to exist. |
+| **Tests** | JVM: dirty-flag semantics, retention policy over synthetic file lists, filename stamping/parsing, health-state derivation. Device: choose a Drive-backed folder, dirty the store, run the worker on demand, see the file appear in Drive's own UI; reboot and confirm the grant persists; restore an older version. |
+| **Exit criteria** | (1) after one change and one worker run, a new versioned ZIP exists in the chosen tree and imports cleanly; (2) a second run with no change writes nothing; (3) retention deletes exactly the files the policy says over a synthetic 60-day history; (4) the grant survives a reboot; (5) health reads "current" only after a verified write. |
+| **Rollback / compat** | Feature is additive and off until a destination is chosen; manual export/import unchanged. |
+
 ## Phase 4 — Attachments and the storage-provider boundary
 
 | | |
 |---|---|
 | **Goal** | Photos, labels, receipts, manuals on assets and events; SAF-first storage choice; backup bundles managed bytes. |
-| **Prerequisites** | Phase 2 (and 3 for event attachments from completion forms); spike S5 (which installed cloud providers expose a tree). |
+| **Prerequisites** | Phase 2 (and 3 for event attachments from completion forms); Phase 3R (database backups are automatic before attachment storage exists); spike S5 (which installed cloud providers expose a tree). |
 | **Source areas** | Room v4 (`attachment`); `attachments/*` (LOCAL + SAF tree stores, references, thumbnails, health); camera/document pickers; Documents tab; backup ZIP with `attachments/`; storage settings ("current location / change"). |
 | **Tests** | store contract tests run against both stores (put/open/delete/exists round-trip, locator relativity), backup with attachments round-trip, permission-lost health finding, migration v3→v4. |
 | **Exit criteria** | (1) same `attachment` rows after switching the store from LOCAL to a SAF tree and migrating (locators unchanged); (2) a referenced cloud PDF opens after reboot; (3) restore on a second phone restores managed photos and lists references as "not available on this device". |

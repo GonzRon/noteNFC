@@ -12,7 +12,7 @@ outside `docs/design/` was changed; no GitHub issue was edited; nothing is commi
 | [04-domain-data-model.md](04-domain-data-model.md) | D4 — concrete Room schema, canonical vs derived, lifecycle |
 | [05-scheduling-semantics.md](05-scheduling-semantics.md) | D5 — recurrence rules, seasons, the four operations, worked examples, invariants |
 | [06-legacy-compatibility.md](06-legacy-compatibility.md) | D6 — keeping every existing tag working |
-| [07-implementation-sequence.md](07-implementation-sequence.md) | D7 — phases (1A/1B/1C inside M1, 1D automatic backup before Phase 2) with falsifiable exit criteria |
+| [07-implementation-sequence.md](07-implementation-sequence.md) | D7 — phases (1A/1B/1C inside M1, 3R automatic backup after Phase 3, before attachments) with falsifiable exit criteria |
 | [08-risk-register.md](08-risk-register.md) | D8 — decisions, spikes, rulings received, ranked risks |
 | [09-security-privacy.md](09-security-privacy.md) | threat analysis |
 | [10-testing-strategy.md](10-testing-strategy.md) | testing pyramid and the deterministic scheduling suite |
