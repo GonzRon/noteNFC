@@ -178,6 +178,20 @@ NDEF message
 
 Indexes: `status`, `parent_asset_id`, `name COLLATE NOCASE`.
 
+Equipment-type decision (2026-09-15): there is **no canonical equipment-type key**, and none is
+planned unless a later feature shows a concrete need that free text cannot meet (bulk actions by
+class, class roll-ups on the dashboard, interoperability with an external equipment ontology).
+`category` stays free text and is the user's classification; `template_key` stays provenance
+only (starter data, never taxonomy or runtime behaviour); the actual behaviour comes from the
+asset's own definitions, profiles and, later, schedules. What the 2B asset editor adds instead is
+a compiled **category suggestion catalog** — Generator, Lawn mower, Snowblower, UPS, Battery,
+Inverter / charger, Solar charge controller, RO system, Hot tub, HVAC, Pump, Other — where a
+suggestion may carry a `suggestedTemplateKey` used only while creating the asset; typing any
+other text is equally valid and nothing branches on the chosen string afterwards. The reason for
+not modelling the type is that a taxonomy brings its own problems (portable vs inverter
+generator; inverter vs inverter/charger vs energy storage; a UPS battery as a battery or a
+component) without improving the core workflow, and some assets belong to more than one class.
+
 Hierarchy guidance: the UPS/battery question is answered without child assets in the common case
 (a completion-relative "replace batteries every 4 years" schedule gives the battery age as
 `last_completed_on`). Child assets are for users who want a component's own serial number,

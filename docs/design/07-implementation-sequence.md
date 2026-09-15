@@ -95,6 +95,7 @@ own falsification points; the milestone is done when 1C's criteria hold.
 | **Schema** | Room v2 migration + test. |
 | **Tests** | `:core`: template application (idempotent), range classification, measurement typing. `:app`: DAO tests for the time-series query, migration v1→v2, entry-form Compose test (required-field gating), backup round-trip incl. events. |
 | **User-visible** | Full asset fields; child assets; profiles and quick actions on the asset screen; structured history; "log a reading". |
+| **2A / 2B split (2026-09-15)** | 2A = the journal vertical slice (spec `docs/superpowers/specs/2026-09-15-phase-2a-journal-design.md`). 2B = the definition/profile editor, full asset fields, child assets, season windows, template management, derived display values (e.g. RO rejection %), the retirement of the Scan tab (D12 §16), and a **category suggestion catalog** with optional template hints used only at creation. **Open 2B question, default answer no:** a canonical `equipment_type_key` is not introduced unless a concrete 2B-or-later feature needs one that free-text category plus suggestions cannot satisfy (D4 §4). |
 | **Exit criteria** | (1) hot-tub acceptance from issue #13.1 reproduced on device; (2) mower oil-change event with engine hours stored as a meter reading; (3) exported backup re-imports with identical table counts; (4) no hot-tub- or mower-specific table exists (schema inspection). |
 | **Rollback / compat** | Room down-migration not supported; a Phase-1 backup imports into Phase 2. |
 
