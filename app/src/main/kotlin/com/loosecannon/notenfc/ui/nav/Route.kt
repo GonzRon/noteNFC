@@ -50,5 +50,10 @@ sealed interface Route : NavKey {
     @Serializable data object Settings : Route
 }
 
-/** The three roots the bottom bar switches between; nothing else ever shows it. */
-val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets, Route.Scan)
+/**
+ * The two roots the bottom bar switches between; nothing else ever shows it. [Route.Scan] is a
+ * pushed destination reached from Settings or the dashboard's empty-state action, not a tab
+ * (D12 §16 correction, spec §9): normal tag reading is ambient dispatch, so "Scan" does not earn
+ * a slot in the primary navigation for something the app never asks the user to open.
+ */
+val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets)

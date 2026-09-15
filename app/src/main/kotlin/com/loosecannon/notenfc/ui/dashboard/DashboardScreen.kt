@@ -47,8 +47,9 @@ import com.loosecannon.notenfc.ui.theme.PlateShape
  *
  * The section order is fixed — ATTENTION · UPCOMING · CURRENT · OUT OF SEASON (G1 §1.2) — and a
  * section with no rows is omitted, so Phase 1C only ever draws CURRENT: schedules, and with them
- * the other three sections, arrive in Phase 3. Scan is a bottom-bar destination, so the dashboard
- * has no FAB (G1 §1.2 "Navigation").
+ * the other three sections, arrive in Phase 3. Scan has no FAB of its own to replace (G1 §1.2
+ * "Navigation") — [onScan] pushes the scan screen from the empty-state action, same as Settings
+ * does with its own Read / inspect tag row.
  *
  * [onOpenLinks] is not wired to anything on this screen yet — links reach the dashboard with the
  * ledger in Phase 3 — but the route already knows how to answer it, so the parameter stays.

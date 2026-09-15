@@ -80,9 +80,9 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         onNewAsset = { backStack.add(Route.AssetEdit(null)) },
                         onBackup = { backStack.add(Route.Backup) },
                         onSettings = { backStack.add(Route.Settings) },
-                        // Scan is a destination, not a dialog: the empty dashboard sends the user
-                        // to the same place the bottom bar does, so one back press leaves it.
-                        onScan = { backStack.switchTopLevel(Route.Scan) },
+                        // Scan is a pushed destination, not a tab (D12 §16 correction): a plain
+                        // push means one back press returns to the dashboard that sent it there.
+                        onScan = { backStack.add(Route.Scan) },
                     )
                 }
                 entry<Route.Assets> {
@@ -199,7 +199,11 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                     )
                 }
                 entry<Route.Scan> {
-                    ScanScreen(graph = graph, onResolved = { backStack.add(it) })
+                    ScanScreen(
+                        graph = graph,
+                        onResolved = { backStack.add(it) },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
                 }
                 entry<Route.TagResult> { key ->
                     TagResultSheet(
@@ -221,7 +225,11 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                     BackupScreen(graph = graph, onBack = { backStack.removeLastOrNull() })
                 }
                 entry<Route.Settings> {
-                    SettingsScreen(graph = graph, onBack = { backStack.removeLastOrNull() })
+                    SettingsScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
+                        onReadTag = { backStack.add(Route.Scan) },
+                    )
                 }
             },
         )

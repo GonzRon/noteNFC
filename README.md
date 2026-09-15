@@ -16,8 +16,10 @@ later projection that never becomes the source of truth.
 
 ## What it does today
 
-A single-screen Compose app — Dashboard, Assets and Scan along the bottom, everything else one
-push deep — around the original one-tap flow, which is still the spine:
+A single-screen Compose app — Dashboard and Assets along the bottom, everything else one push
+deep — around the original one-tap flow, which is still the spine: tap a tag anywhere and the
+phone opens the right place with no screen to hunt for; Read / inspect tag, for the rare
+deliberate look, lives under Settings.
 
 - **Dashboard** — the assets in service, and, until the first export succeeds, a card that says
   there is no backup yet and offers to take one.
@@ -37,10 +39,10 @@ push deep — around the original one-tap flow, which is still the spine:
   showing the URI; write it to a blank tag and you are back in the notes app. The writer reads
   the tag first, asks before overwriting anything, checks capacity, and reads the tag back to
   verify it. An asset's own screen can write a tag the same way.
-- **Scan a tag** — in the app, the scan screen reads tags in the foreground; with the app closed,
-  tapping a tag still opens it. A link tag opens the note directly with no screen in between; an
-  asset tag opens the asset. Unknown, legacy or foreign tags are recognised as such and offered a
-  bind or a rewrite, never an error.
+- **Scan a tag** — tapping a tag opens it whether the app is running or not: a link tag opens the
+  note directly with no screen in between, an asset tag opens the asset, and unknown, legacy or
+  foreign tags are recognised as such and offered a bind or a rewrite, never an error. Read /
+  inspect tag, under Settings, is the same reader kept as a utility for a deliberate look.
 - **Links** — saved note links with their kind and host, openable and deletable (unless a tag
   still points at one).
 - **Back up and restore** — a Backup screen (from the dashboard's nudge, or the backup action on

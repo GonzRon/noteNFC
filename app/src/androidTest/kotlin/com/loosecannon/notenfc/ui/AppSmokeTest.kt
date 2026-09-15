@@ -97,14 +97,20 @@ class AppSmokeTest {
     }
 
     /**
-     * "Scan" is on screen twice once the destination is open — the bar item and the screen title —
-     * so both matchers say which one they mean (the bar item is the clickable one).
+     * Scan is a pushed destination now, not a tab (D12 §16 correction): the empty dashboard's own
+     * "Scan a tag" action is one of the two ways in, and a single Back press must return to the
+     * dashboard that sent it there rather than leaving the stack empty or landing elsewhere.
      */
-    @Test fun bottomBarReachesScanAndShowsReadyToScan() {
-        rule.onNode(hasText("Scan") and hasClickAction()).performClick()
-        rule.onNode(hasText("Scan") and hasNoClickAction()).assertIsDisplayed()
+    @Test fun emptyDashboardScanActionOpensReadInspectTag() {
+        rule.awaitText("Scan a tag")
+        rule.onNodeWithText("Scan a tag").performClick()
+
         rule.awaitText("READY TO SCAN")
         rule.onNodeWithText("READY TO SCAN").assertIsDisplayed()
+
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.awaitText("Scan a tag")
+        rule.onNodeWithText("Scan a tag").assertIsDisplayed()
     }
 
     /**

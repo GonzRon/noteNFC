@@ -1,21 +1,26 @@
 package com.loosecannon.notenfc.ui.nav
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasNoClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.loosecannon.notenfc.MainActivity
+import com.loosecannon.notenfc.ui.awaitText
 import org.junit.Rule
 import org.junit.Test
 
 /**
  * Compiled in Task 4, executed on the phone in Task 8.
  *
- * "Scan" appears twice on screen — once as a bottom-bar label and once as the screen's title — so
- * every matcher here says which of the two it means: the bar item is the clickable one, the title
- * is not. The dashboard's own title is the app's name, which only ever appears once.
+ * The bottom bar has two items as of 2B-2 (D12 §16 correction): Scan is a pushed destination
+ * reached from Settings' "Read / inspect tag" row, not a tab, so it never shows a clickable
+ * "Scan" node on the bar. The dashboard's own title is the app's name, which only ever appears
+ * once.
  */
 class NavigationSmokeTest {
 
@@ -25,8 +30,19 @@ class NavigationSmokeTest {
         rule.onNode(hasText("noteNFC") and hasNoClickAction()).assertIsDisplayed()
     }
 
-    @Test fun bottomBarSwitchesToScan() {
-        rule.onNode(hasText("Scan") and hasClickAction()).performClick()
-        rule.onNode(hasText("Scan") and hasNoClickAction()).assertIsDisplayed()
+    @Test fun bottomBarHasTwoItems() {
+        rule.onNode(hasText("Dashboard") and hasClickAction()).assertIsDisplayed()
+        rule.onNode(hasText("Assets") and hasClickAction()).assertIsDisplayed()
+        rule.onAllNodes(hasText("Scan") and hasClickAction()).assertCountEquals(0)
+    }
+
+    @Test fun settingsOpensReadInspectTag() {
+        rule.onNodeWithContentDescription("Settings").performClick()
+
+        rule.awaitText("Read / inspect tag")
+        rule.onNodeWithText("Read / inspect tag").performClick()
+
+        rule.awaitText("READY TO SCAN")
+        rule.onNodeWithText("READY TO SCAN").assertIsDisplayed()
     }
 }
