@@ -1,16 +1,26 @@
 package com.loosecannon.notenfc.core.testing
 
+import com.loosecannon.notenfc.core.journal.EventChronology
 import com.loosecannon.notenfc.core.model.Asset
+import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.EventId
+import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.LinkId
+import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.PayloadFormat
+import com.loosecannon.notenfc.core.model.ProfileId
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.DefinitionRepository
+import com.loosecannon.notenfc.core.ports.EventRepository
 import com.loosecannon.notenfc.core.ports.LinkRepository
+import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import kotlinx.coroutines.flow.Flow
@@ -187,6 +197,121 @@ class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {
     override fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>> = version.map {
         rows.values.filter { it.assetId == assetId }.sortedBy { it.label.lowercase() }
     }
+}
+
+class InMemoryDefinitionRepository : DefinitionRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, MeasurementDefinition>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("definition")
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(d: MeasurementDefinition) {
+        rig.check()
+        rows[d.id.value] = d
+        version.value += 1
+    }
+
+    override suspend fun get(id: DefinitionId): MeasurementDefinition? = rows[id.value]
+
+    override suspend fun forAsset(assetId: AssetId): List<MeasurementDefinition> =
+        rows.values.filter { it.assetId == assetId }
+
+    override suspend fun all(): List<MeasurementDefinition> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<MeasurementDefinition>> = version.map {
+        rows.values.filter { it.assetId == assetId }.sortedBy { it.sortOrder }
+    }
+}
+
+class InMemoryProfileRepository : ProfileRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, EventProfile>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("profile")
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(p: EventProfile) {
+        rig.check()
+        rows[p.id.value] = p
+        version.value += 1
+    }
+
+    override suspend fun get(id: ProfileId): EventProfile? = rows[id.value]
+
+    override suspend fun forAsset(assetId: AssetId): List<EventProfile> =
+        rows.values.filter { it.assetId == assetId }
+
+    override suspend fun all(): List<EventProfile> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<EventProfile>> = version.map {
+        rows.values.filter { it.assetId == assetId }.sortedBy { it.sortOrder }
+    }
+}
+
+class InMemoryEventRepository : EventRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, AssetEvent>()
+    override var witness: TransactionWitness? = null
+    private val rig = UpsertRig("event")
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int?
+        get() = rig.failOnUpsert
+        set(value) { rig.failOnUpsert = value }
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(e: AssetEvent) {
+        rig.check()
+        rows[e.id.value] = e
+        version.value += 1
+    }
+
+    override suspend fun get(id: EventId): AssetEvent? = rows[id.value]
+
+    override suspend fun forAsset(assetId: AssetId): List<AssetEvent> =
+        rows.values.filter { it.assetId == assetId }
+
+    override suspend fun all(): List<AssetEvent> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun delete(id: EventId) { rows.remove(id.value); version.value += 1 }
+
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<AssetEvent>> = version.map {
+        rows.values.filter { it.assetId == assetId }.sortedWith(EventChronology.reversed())
+    }
+
+    override fun observe(id: EventId): Flow<AssetEvent?> = version.map { rows[id.value] }
 }
 
 /**
