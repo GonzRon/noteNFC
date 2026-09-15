@@ -303,8 +303,10 @@ Tag ──▶ NfcReaderModeSession (in-app Scan/Write screens, enableReaderMode)
   external record first, AAR second.
 - Manifest: keep the `md5_short` filter; add the `:tag` filter; remove the `TECH_DISCOVERED`
   catch-all; for targetSdk 37 add `android:permission="android.permission.DISPATCH_NFC_MESSAGE"`
-  on `NfcDispatchActivity` (Android 17 requirement). Note Android 17 no longer dispatches NFC to
-  apps in the stopped state (after force-stop); the health screen explains this.
+  on `NfcDispatchActivity` (Android 17 requirement). Observed on the owner's Android 17 phone: a
+  freshly installed, never-launched package gets no NFC dispatch until its first launch (1B
+  evidence), but a package that was launched once and then force-stopped (even with its data
+  cleared) still gets dispatched (1C evidence row 16). The health screen explains the first case.
 - Unknown-tag resolutions offer: bind to an existing asset/link, create an asset, or (legacy tag)
   bind as-is / rewrite in payload format v1 (D13 §3). Re-link was dropped by D13.
 

@@ -11,19 +11,24 @@ import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.ports.UuidGenerator
+import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.BindTag
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteLink
 import com.loosecannon.notenfc.core.usecase.ExportBackup
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.OpenLink
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.ResolveTag
 import com.loosecannon.notenfc.core.usecase.SaveLink
+import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
+import com.loosecannon.notenfc.prefs.AppPrefs
+import com.loosecannon.notenfc.prefs.SharedPrefsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +50,7 @@ class AppGraph(context: Context) {
     val assets: AssetRepository = RoomAssetRepository(db.assetDao())
     val tags: TagRepository = RoomTagRepository(db.nfcTagDao())
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
+    val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     /** Produces the bytes of a v1 backup; where they go is the caller's choice (a SAF document). */
     val exportBackup: ExportBackup =
@@ -63,6 +69,13 @@ class AppGraph(context: Context) {
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock)
     val saveLink: SaveLink = SaveLink(links, uow, ids, clock)
     val openLink: OpenLink = OpenLink(links, uow, clock)
+
+    // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
+    val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
+    val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
+
+    /** A link is a pointer, not a record, so it can be deleted — unless a tag still points at it. */
+    val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
 
     private companion object {
         const val DB_NAME = "notenfc.db"

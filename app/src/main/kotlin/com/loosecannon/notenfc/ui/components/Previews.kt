@@ -1,0 +1,159 @@
+package com.loosecannon.notenfc.ui.components
+
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.loosecannon.notenfc.ui.theme.NoteNfcSemanticColors
+import com.loosecannon.notenfc.ui.theme.NoteNfcTheme
+import com.loosecannon.notenfc.ui.theme.StatusColor
+
+private const val UI_MODE_NIGHT = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL
+
+@Preview(name = "Light", showBackground = true)
+@Preview(name = "Dark", showBackground = true, uiMode = UI_MODE_NIGHT)
+private annotation class LightDarkPreview
+
+/** D12 §8 sample asset. Nothing here comes from a real tag or a real owner. */
+private val rackUpsCells = listOf(
+    "Serial" to PlateValue("XYZ12345", mono = true),
+    "NFC tag" to PlateValue("41c11b73 · v1", mono = true),
+    "Installed" to PlateValue("10 Jun 2024"),
+    "Documents" to PlateValue(""),
+)
+
+@Composable
+private fun PreviewFrame(content: @Composable () -> Unit) {
+    NoteNfcTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+        }
+    }
+}
+
+@LightDarkPreview
+@Composable
+private fun NoteNfcThemePreview() {
+    PreviewFrame {
+        Text("Apollo Service Binder", style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+@LightDarkPreview
+@Composable
+private fun IdentityPlatePreview() {
+    PreviewFrame {
+        IdentityPlate(
+            category = "Battery / power · Server rack",
+            model = "CyberPower OR2200LCDRT2U",
+            name = "Server Rack",
+            cells = rackUpsCells,
+            icon = NoteNfcIcons.NfcTag,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        StatusBlock(
+            kind = NoteNfcTheme.semanticColors.overdue,
+            headline = "Overdue",
+            title = "Load test",
+            detail = "12 days overdue · originally due 2 Sep 2026",
+            icon = Icons.Outlined.Warning,
+            leftRule = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+private data class BadgeSample(val label: String, val pick: (NoteNfcSemanticColors) -> StatusColor, val icon: ImageVector?)
+
+@Composable
+private fun badgeSamples(): List<BadgeSample> = listOf(
+    BadgeSample("OK", { it.maintenanceOkay }, Icons.Outlined.CheckCircle),
+    BadgeSample("Due soon", { it.dueSoon }, NoteNfcIcons.Schedule),
+    BadgeSample("Due", { it.due }, NoteNfcIcons.Event),
+    BadgeSample("Overdue", { it.overdue }, Icons.Outlined.Warning),
+    BadgeSample("Out of season", { it.seasonInactive }, NoteNfcIcons.CalendarMonth),
+    BadgeSample("Paused", { it.paused }, NoteNfcIcons.PauseCircle),
+    BadgeSample("Low", { it.measurementLow }, NoteNfcIcons.ArrowDownward),
+    BadgeSample("In range", { it.measurementInRange }, Icons.Outlined.Check),
+    BadgeSample("High", { it.measurementHigh }, NoteNfcIcons.ArrowUpward),
+    BadgeSample("No target set", { it.measurementNoTarget }, null),
+    BadgeSample("Active", { it.reminderHealthy }, NoteNfcIcons.NotificationsActive),
+    BadgeSample("Reminder failed", { it.reminderFailure }, NoteNfcIcons.NotificationsOff),
+    BadgeSample("Sync issue", { it.syncProblem }, NoteNfcIcons.CloudOff),
+    BadgeSample("Delete", { it.destructiveAction }, NoteNfcIcons.DeleteForever),
+)
+
+@LightDarkPreview
+@Composable
+private fun StatusBadgeRowPreview() {
+    PreviewFrame {
+        val semantic = NoteNfcTheme.semanticColors
+        SectionHeader(title = "Operational states")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            badgeSamples().forEach { sample ->
+                StatusBadge(label = sample.label, colors = sample.pick(semantic), icon = sample.icon)
+            }
+        }
+    }
+}
+
+@LightDarkPreview
+@Composable
+private fun LedgerPreview() {
+    PreviewFrame {
+        SectionHeader(title = "Service record", trailing = { QuietLine("All 12") })
+        val entries = listOf(
+            Triple("10", "Jun", "2024") to Triple("Battery replaced", "CyberPower RB1290X2", listOf("Receipt", "Photo")),
+            Triple("03", "Sep", "2025") to Triple("Load test", "Runtime 46 min", emptyList()),
+            Triple("14", "Mar", "2026") to Triple("Inspection", "No visible swelling", emptyList()),
+        )
+        LedgerList(count = entries.size) { index ->
+            val (date, body) = entries[index]
+            LedgerEntry(
+                day = date.first,
+                month = date.second,
+                year = date.third,
+                title = body.first,
+                detail = body.second,
+                badge = if (index == 1) {
+                    { StatusBadge(label = "Pass", colors = NoteNfcTheme.semanticColors.measurementInRange, icon = Icons.Outlined.Check) }
+                } else {
+                    null
+                },
+                meta = body.third,
+            )
+        }
+        QuietLine("No entries yet · Log maintenance to start")
+    }
+}
+
+@LightDarkPreview
+@Composable
+private fun ActionGridPreview() {
+    PreviewFrame {
+        ActionGrid(
+            actions = listOf(
+                ActionSpec("Log maintenance", Icons.Outlined.Build, outlined = true, onClick = {}),
+                ActionSpec("Record reading", NoteNfcIcons.Speed, outlined = true, onClick = {}),
+                ActionSpec("History", NoteNfcIcons.History, outlined = false, onClick = {}),
+                ActionSpec("Documents", NoteNfcIcons.Description, outlined = false, onClick = {}),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}

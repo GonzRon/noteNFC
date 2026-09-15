@@ -6,6 +6,7 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Update
 import com.loosecannon.notenfc.data.room.entities.ExternalLinkEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ExternalLinkDao {
@@ -30,6 +31,12 @@ interface ExternalLinkDao {
 
     @Query("SELECT * FROM external_link ORDER BY created_at")
     suspend fun all(): List<ExternalLinkEntity>
+
+    @Query("SELECT * FROM external_link ORDER BY label COLLATE NOCASE")
+    fun observeAll(): Flow<List<ExternalLinkEntity>>
+
+    @Query("SELECT * FROM external_link WHERE asset_id = :assetId ORDER BY label COLLATE NOCASE")
+    fun observeForAsset(assetId: String): Flow<List<ExternalLinkEntity>>
 
     @Query("DELETE FROM external_link WHERE id = :id")
     suspend fun delete(id: String)

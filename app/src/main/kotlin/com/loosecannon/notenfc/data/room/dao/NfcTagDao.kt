@@ -6,6 +6,7 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Update
 import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NfcTagDao {
@@ -30,6 +31,12 @@ interface NfcTagDao {
 
     @Query("SELECT * FROM nfc_tag WHERE link_id = :linkId")
     suspend fun forLink(linkId: String): List<NfcTagEntity>
+
+    @Query("SELECT * FROM nfc_tag WHERE asset_id = :assetId ORDER BY created_at")
+    fun observeForAsset(assetId: String): Flow<List<NfcTagEntity>>
+
+    @Query("SELECT * FROM nfc_tag WHERE link_id = :linkId ORDER BY created_at")
+    fun observeForLink(linkId: String): Flow<List<NfcTagEntity>>
 
     @Query("SELECT * FROM nfc_tag ORDER BY created_at")
     suspend fun all(): List<NfcTagEntity>

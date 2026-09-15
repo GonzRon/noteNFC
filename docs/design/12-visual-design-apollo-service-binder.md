@@ -277,7 +277,7 @@ Color is reinforcement.
 | -------------------- | ---------------------------- | --------------------------- | ----------------------------------------- | ------------------------------------- |
 | Maintenance OK       | `#245B78` / `#DCEBF3`        | `#91BED6` / `#17384B`       | `check_circle` — **OK**                   | Normal weight, quiet container        |
 | Due soon             | `#7A4B0A` / `#F6E5C3`        | `#E4B45F` / `#4A320D`       | `schedule` — **DUE SOON**                 | Clock + remaining time                |
-| Due                  | `#8C4700` / `#F3C89A`        | `#F0A15D` / `#573015`       | `event` — **DUE**                         | Strong label and medium-weight border |
+| Due                  | `#8C4700` / `#F3CA9D`        | `#F0A15D` / `#573015`       | `event` — **DUE**                         | Strong label and medium-weight border |
 | Overdue              | `#8C2E2A` / `#F8DAD6`        | `#F2B8B5` / `#4E1C1A`       | `warning` — **OVERDUE**                   | Strong left rule + overdue duration   |
 | Season inactive      | `#586269` / `#E6E8E8`        | `#B1B8BC` / `#2A3136`       | `calendar_month` — **OUT OF SEASON**      | De-emphasized placement               |
 | Paused               | `#5B4D6F` / `#E8E3EF`        | `#C4B4D3` / `#342C3B`       | `pause_circle` — **PAUSED**               | Pause glyph + reason                  |
@@ -292,6 +292,11 @@ Color is reinforcement.
 
 The semantic foreground/container combinations above were selected with roughly **4.9:1–8.2:1**
 contrast, depending on state and theme.
+
+Phase 1C closure correction: the light **Due** container was `#F3C89A` in the approved D12, which
+measures 4.49:1 against `#8C4700` — a hair under the 4.5:1 target the table claims. Task 1 nudged
+it 4% toward WarmIvory to `#F3CA9D` (4.56:1) and the table above now carries the shipped value;
+`ContrastTest` in `:app` asserts it. No other value in this table changed.
 
 Most importantly:
 

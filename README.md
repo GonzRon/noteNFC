@@ -16,17 +16,31 @@ later projection that never becomes the source of truth.
 
 ## What it does today
 
-The original one-tap flow still works and is the spine of the app:
+A single-screen Compose app — Dashboard, Assets and Scan along the bottom, everything else one
+push deep — around the original one-tap flow, which is still the spine:
 
+- **Dashboard** — the assets in service, and, until the first export succeeds, a card that says
+  there is no backup yet and offers to take one.
+- **Assets** — a list you can filter to include archived ones, an asset screen built around the
+  identity plate (category, name, description, tags and links), a create/edit form, and archive
+  rather than delete.
 - **Write a tag** — share a note's external link (Joplin *Copy external link*, an Obsidian or
-  Logseq URI, or any `https://` page) to noteNFC, hold a blank tag to the phone, done. The
-  writer reads the tag first, asks before overwriting anything, checks capacity, and reads the
-  tag back to verify it.
-- **Scan a tag** — with the app closed, tap the tag: a link tag opens the note directly, an
-  asset tag opens the asset. Unknown or foreign tags are recognised as such and offered a bind
-  or a rewrite, never an error.
-- **Back up and restore** — one ZIP holds every asset, tag binding and link with its original
-  id, so a restored phone resolves the same tags.
+  Logseq URI, or any `https://` page) to noteNFC and you get a card naming the kind of link and
+  showing the URI; write it to a blank tag and you are back in the notes app. The writer reads
+  the tag first, asks before overwriting anything, checks capacity, and reads the tag back to
+  verify it. An asset's own screen can write a tag the same way.
+- **Scan a tag** — in the app, the scan screen reads tags in the foreground; with the app closed,
+  tapping a tag still opens it. A link tag opens the note directly with no screen in between; an
+  asset tag opens the asset. Unknown, legacy or foreign tags are recognised as such and offered a
+  bind or a rewrite, never an error.
+- **Links** — saved note links with their kind and host, openable and deletable (unless a tag
+  still points at one).
+- **Back up and restore** — a Backup screen (from the dashboard's nudge, or the backup action on
+  any asset) exports one ZIP holding every asset, tag binding and link with its original id, so a
+  restored phone resolves the same tags. Import replaces everything on the phone and makes you
+  type `REPLACE` first.
+- **Settings** — appearance (system / light / dark), the palette's name, the build's version and
+  a link to the project.
 
 Tags written by the pre-2.0 app (`md5_short` records) are still recognised as legacy tags and
 can be bound as-is or rewritten in the current payload format; there is no dependency on the
@@ -38,13 +52,13 @@ The design package under [`docs/design/`](docs/design/README.md) lays out the wh
 the phase sequence: assets with a journal of events and typed measurements (Phase 2),
 provider-neutral maintenance schedules with local reminders and a health screen (Phase 3),
 attachments on a pluggable, cloud-agnostic store (Phase 4), an optional Todoist projection
-(Phase 5), supplies and parts (Phase 6). Phases 0–1A are merged; Phase 1B (the NFC payload
-format, resolver and safe writer) is in progress. Progress is tracked in the GitHub issues,
-one milestone per phase.
+(Phase 5), supplies and parts (Phase 6). Phases 0–1B are merged; Phase 1C (the Compose shell and
+the asset/link UX) closes milestone M1. Progress is tracked in the GitHub issues, one milestone
+per phase.
 
 Code shape: `:core` is pure Kotlin (domain model, NDEF codec, scheduling engine, backup format,
-policies, ports) and is tested on the JVM; `:app` is the Android shell (Room 3, NFC reader
-mode, later Compose/Material 3). No DI framework, no plugin system.
+policies, ports) and is tested on the JVM; `:app` is the Android shell (Room 3, NFC reader mode,
+Compose + Material 3 + Navigation 3). No DI framework, no plugin system.
 
 ## Building
 
@@ -61,12 +75,17 @@ Unit tests: `./gradlew :core:test :app:testDebugUnitTest`.
 
 ## Debug backup screen
 
+Backup and restore are product features now: the dashboard's nudge, or the backup action on an
+asset, opens a real screen that exports a ZIP and imports one back after you type `REPLACE`. What
+stays debug-only is the harness beside it.
+
 Debug builds only, from `app/src/debug/`: a second launcher icon, **noteNFC Backup (debug)**,
 with four buttons — Seed sample, Export, Import (replace), Wipe — and a live `assets / tags /
-links` count. Export writes a `notenfc-backup-<yyyyMMdd-HHmm>.zip` through the Storage Access
-Framework; Import replaces everything in the database with the contents of the file you pick.
-It is a harness for the Phase 1A restore proof, not product UI, and the release APK contains
-neither the activity nor its manifest entry (see `docs/design/phase-1a-evidence.md` §7).
+links` count. **Wipe is the reason it still exists**: emptying the database without touching the
+tags is how the restore proof stands in for a second phone, and it is deliberately not offered
+anywhere in the app. It is a harness, not product UI, and the release APK contains neither the
+activity nor its manifest entry (see `docs/design/phase-1a-evidence.md` §7 and
+`docs/design/phase-1c-evidence.md` §9).
 
 ## Signing
 

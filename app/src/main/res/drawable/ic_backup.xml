@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols Outlined "backup", 24dp. Tint is the caller's job. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M260-160Q169-160 104-223Q40-286 40-377Q40-455 87-516Q134-577 210-594Q235-686 310-743Q385-800 480-800Q597-800 678-718Q760-637 760-520Q829-512 874-460Q920-409 920-340Q920-265 868-212Q815-160 740-160H520Q487-160 464-184Q440-207 440-240V-446L376-384L320-440L480-600L640-440L584-384L520-446V-240Q520-240 520-240Q520-240 520-240H740Q782-240 811-269Q840-298 840-340Q840-382 811-411Q782-440 740-440H680V-520Q680-603 622-662Q563-720 480-720Q397-720 338-662Q280-603 280-520H260Q202-520 161-479Q120-438 120-380Q120-322 161-281Q202-240 260-240H360V-160ZM480-440Z" />
+    </group>
+</vector>
