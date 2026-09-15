@@ -139,14 +139,38 @@ class TagBindingUseCasesTest {
     // --- CreateAsset -----------------------------------------------------------------------
 
     @Test fun createAssetTrimsAndStores() = runTest {
-        val asset = create.run("  Pool pump ", category = "Yard")
+        val asset = create.run(
+            AssetCommand(
+                name = "  Pool pump ",
+                category = "Yard",
+                manufacturer = " Pentair ",
+                serialNumber = " SN-3 ",
+                purchasePriceMinor = 45_000L,
+                currency = "USD",
+                seasonStartMmdd = "05-01",
+                seasonEndMmdd = "09-30",
+            ),
+        )
         assertEquals("Pool pump", asset.name)
         assertEquals("Yard", asset.category)
+        assertEquals("Pentair", asset.manufacturer)
+        assertEquals("SN-3", asset.serialNumber)
+        assertEquals(45_000L, asset.purchasePriceMinor)
+        assertEquals("USD", asset.currency)
+        assertEquals("05-01", asset.seasonStartMmdd)
+        assertEquals("09-30", asset.seasonEndMmdd)
         assertEquals(7_000L, asset.createdAt)
         assertEquals(asset, assets.rows[asset.id.value])
     }
     @Test fun createAssetRefusesABlankName() = runTest {
         assertFailsWith<IllegalArgumentException> { create.run("   ") }
+        assertTrue(assets.rows.isEmpty())
+    }
+    @Test fun createAssetRefusesAnUnknownParent() = runTest {
+        val boom = assertFailsWith<AssetValidation> {
+            create.run(AssetCommand(name = "Heater", parentAssetId = AssetId("ghost")))
+        }
+        assertEquals(listOf(AssetProblem.UnknownParent), boom.problems)
         assertTrue(assets.rows.isEmpty())
     }
 }
