@@ -895,6 +895,33 @@ class AssetViewModelsTest {
         )
     }
 
+    /**
+     * The COMPONENTS section is always there (spec §9), so a childless asset still offers
+     * "+ Add component" — the action that makes a first child cannot be behind already having one.
+     * At this level that is a state with no children and a screen that does not branch on it.
+     */
+    @Test fun componentsSectionOffersAddOnAChildlessAsset() = runTest {
+        val generator = graph.createAsset.run("Generator", "Power")
+        val vm = detailModel(generator.id)
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it != null }!!
+        assertTrue(state.components.isEmpty())
+        // And it is childless rather than unloaded: the asset itself is there.
+        assertEquals("Generator", state.asset.name)
+
+        // One child later the same state lists it, with no other part of the screen changing.
+        val battery = graph.createAsset.run("Starter battery", "Battery")
+        graph.updateAsset.run(
+            battery.id,
+            AssetCommand(name = "Starter battery", parentAssetId = generator.id),
+        )
+        assertEquals(
+            listOf("Starter battery"),
+            vm.state.first { it?.components?.size == 1 }!!.components.map(ComponentRow::name),
+        )
+    }
+
     /** A row says whose component it is and whether today is outside its window (spec §6, §9). */
     @Test fun assetsRowsCarryPartOf() = runTest {
         val generator = graph.createAsset.run("Generator", "Power")

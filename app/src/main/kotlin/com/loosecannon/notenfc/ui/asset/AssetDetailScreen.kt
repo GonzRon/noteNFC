@@ -522,9 +522,9 @@ private fun LogWhatHappenedDialog(
 }
 
 /**
- * The plate's six cells are fixed in spec §9: CATEGORY / MODEL / SERIAL / LOCATION / IN SERVICE /
- * NFC TAG, laid out 2×3. A blank [PlateValue] renders as "—", which is the honest thing to show
- * for a field nobody has filled in yet.
+ * The plate's six cells are fixed in spec §9: MODEL / SERIAL / LOCATION / PURCHASED / IN SERVICE /
+ * NFC TAG, laid out 2×3. The category is the eyebrow above them and is not repeated as a cell. A
+ * blank [PlateValue] renders as "—", which is the honest thing to show for an unfilled field.
  */
 @Composable
 private fun AssetPlate(state: AssetDetailState) {
@@ -534,10 +534,10 @@ private fun AssetPlate(state: AssetDetailState) {
         model = asset.name,
         name = asset.description.takeIf { it.isNotBlank() },
         cells = listOf(
-            "Category" to PlateValue(asset.category),
             "Model" to PlateValue(modelLine(asset)),
             "Serial" to PlateValue(asset.serialNumber, mono = true),
             "Location" to PlateValue(asset.location),
+            "Purchased" to PlateValue(asset.purchaseOn.orEmpty().asDayDate()),
             "In service" to PlateValue(asset.inServiceOn.orEmpty().asDayDate()),
             "NFC tag" to PlateValue(state.tags.firstOrNull()?.let(::tagIdentity).orEmpty(), mono = true),
         ),
@@ -627,9 +627,11 @@ private fun priceLine(asset: Asset): String? {
 }
 
 /**
- * The asset's children (spec §9). Each row says how many of the child's *own* readings are out of
- * range and never what they read: 2B-2 rolls nothing up, so a parent that looks fine is not a
- * claim about its components, only an invitation to open one.
+ * The asset's children (spec §9). Always present, because "+ Add component" is how the first child
+ * gets made and an action nobody can reach is no action at all; empty reads "No components" rather
+ * than vanishing. Each row says how many of the child's *own* readings are out of range and never
+ * what they read: 2B-2 rolls nothing up, so a parent that looks fine is not a claim about its
+ * components, only an invitation to open one.
  */
 @Composable
 private fun ComponentsSection(
@@ -637,9 +639,9 @@ private fun ComponentsSection(
     onOpenAsset: (String) -> Unit,
     onAddComponent: () -> Unit,
 ) {
-    if (components.isEmpty()) return
     SectionHeader(title = "Components")
     Column {
+        if (components.isEmpty()) QuietLine("No components")
         components.forEach { child ->
             Column(
                 modifier = Modifier
