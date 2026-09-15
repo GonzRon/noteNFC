@@ -21,6 +21,7 @@ outside `docs/design/` was changed; no GitHub issue was edited; nothing is commi
 | [13-compatibility-policy.md](13-compatibility-policy.md) | **post-Phase-0 ruling**: legacy compatibility is best-effort and non-blocking; package identity normalised to `com.loosecannon.notenfc`; what was dropped and what stays |
 | [phase-1a-evidence.md](phase-1a-evidence.md) | Phase 1A evidence: package identity, schema v1, durable IDs, replace-mode backup |
 | [phase-1b-evidence.md](phase-1b-evidence.md) | Phase 1B evidence: payload format v1, resolver, reader mode, safe writer; device checklist |
+| [g1/01-g1-visual-gate-report.md](g1/01-g1-visual-gate-report.md) | **G1 visual-design gate** (pre-1C): four archetype screens against D12, D12 corrections a–j, verdict PASS WITH CHANGES; input inventory in [g1/00-source-data-inventory.md](g1/00-source-data-inventory.md) |
 
 Terminology: the new NFC payload is **noteNFC tag payload format v1** (version byte `0x01`, record type `com.loosecannon.notenfc:tag`), the new-generation replacement for the legacy `md5_short` record. "v1" always refers to that payload version byte, never to an application generation.
 
