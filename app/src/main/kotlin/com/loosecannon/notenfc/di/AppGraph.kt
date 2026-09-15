@@ -24,6 +24,8 @@ import com.loosecannon.notenfc.data.room.RoomAssetRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
+import com.loosecannon.notenfc.prefs.AppPrefs
+import com.loosecannon.notenfc.prefs.SharedPrefsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +47,7 @@ class AppGraph(context: Context) {
     val assets: AssetRepository = RoomAssetRepository(db.assetDao())
     val tags: TagRepository = RoomTagRepository(db.nfcTagDao())
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
+    val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
     /** Produces the bytes of a v1 backup; where they go is the caller's choice (a SAF document). */
     val exportBackup: ExportBackup =

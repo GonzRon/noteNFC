@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.core.testing
 
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
+import com.loosecannon.notenfc.core.model.AssetStatus
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.LinkId
 import com.loosecannon.notenfc.core.model.PayloadFormat
@@ -12,6 +13,9 @@ import com.loosecannon.notenfc.core.ports.AssetRepository
 import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 
 /** A fake store that can hand back a closure restoring its state at the moment of the call. */
 interface Rollbackable {
@@ -57,18 +61,20 @@ class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, Asset>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("asset")
+    private val version = MutableStateFlow(0)
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
         set(value) { rig.failOnUpsert = value }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
 
     override suspend fun upsert(asset: Asset) {
         rig.check()
         rows[asset.id.value] = asset
+        version.value += 1
     }
 
     override suspend fun get(id: AssetId): Asset? = rows[id.value]
@@ -78,27 +84,35 @@ class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
         return rows.values.toList()
     }
 
-    override suspend fun delete(id: AssetId) { rows.remove(id.value) }
+    override suspend fun delete(id: AssetId) { rows.remove(id.value); version.value += 1 }
 
-    override suspend fun deleteAll() { rows.clear() }
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeAll(): Flow<List<Asset>> = version.map {
+        rows.values.sortedWith(
+            compareBy({ if (it.status == AssetStatus.ACTIVE) 0 else 1 }, { it.name.lowercase() }),
+        )
+    }
 }
 
 class InMemoryTagRepository : TagRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, TagBinding>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("tag")
+    private val version = MutableStateFlow(0)
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
         set(value) { rig.failOnUpsert = value }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
 
     override suspend fun upsert(tag: TagBinding) {
         rig.check()
         rows[tag.id.value] = tag
+        version.value += 1
     }
 
     override suspend fun get(id: TagId): TagBinding? = rows[id.value]
@@ -117,27 +131,37 @@ class InMemoryTagRepository : TagRepository, Rollbackable, Witnessed {
         return rows.values.toList()
     }
 
-    override suspend fun delete(id: TagId) { rows.remove(id.value) }
+    override suspend fun delete(id: TagId) { rows.remove(id.value); version.value += 1 }
 
-    override suspend fun deleteAll() { rows.clear() }
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>> = version.map {
+        rows.values.filter { (it.target as? TagTarget.AssetTarget)?.assetId == assetId }
+    }
+
+    override fun observeForLink(linkId: LinkId): Flow<List<TagBinding>> = version.map {
+        rows.values.filter { (it.target as? TagTarget.LinkTarget)?.linkId == linkId }
+    }
 }
 
 class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, ExternalLink>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("link")
+    private val version = MutableStateFlow(0)
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
         set(value) { rig.failOnUpsert = value }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy) }
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
     }
 
     override suspend fun upsert(link: ExternalLink) {
         rig.check()
         rows[link.id.value] = link
+        version.value += 1
     }
 
     override suspend fun get(id: LinkId): ExternalLink? = rows[id.value]
@@ -152,9 +176,17 @@ class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {
         return rows.values.toList()
     }
 
-    override suspend fun delete(id: LinkId) { rows.remove(id.value) }
+    override suspend fun delete(id: LinkId) { rows.remove(id.value); version.value += 1 }
 
-    override suspend fun deleteAll() { rows.clear() }
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+
+    override fun observeAll(): Flow<List<ExternalLink>> = version.map {
+        rows.values.sortedBy { it.label.lowercase() }
+    }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>> = version.map {
+        rows.values.filter { it.assetId == assetId }.sortedBy { it.label.lowercase() }
+    }
 }
 
 /**

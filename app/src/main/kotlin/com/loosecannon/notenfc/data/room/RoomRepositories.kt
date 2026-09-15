@@ -17,6 +17,8 @@ import com.loosecannon.notenfc.data.room.dao.AssetDao
 import com.loosecannon.notenfc.data.room.dao.ExternalLinkDao
 import com.loosecannon.notenfc.data.room.dao.NfcTagDao
 import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * D4 §3 requires `CHECK(NOT (asset_id IS NOT NULL AND link_id IS NOT NULL))`. Room has no CHECK
@@ -35,6 +37,7 @@ class RoomAssetRepository(private val dao: AssetDao) : AssetRepository {
     override suspend fun all(): List<Asset> = dao.all().map { it.toDomain() }
     override suspend fun delete(id: AssetId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()
+    override fun observeAll(): Flow<List<Asset>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
 }
 
 class RoomTagRepository(private val dao: NfcTagDao) : TagRepository {
@@ -53,6 +56,12 @@ class RoomTagRepository(private val dao: NfcTagDao) : TagRepository {
     override suspend fun all(): List<TagBinding> = dao.all().map { it.toDomain() }
     override suspend fun delete(id: TagId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>> =
+        dao.observeForAsset(assetId.value).map { list -> list.map { it.toDomain() } }
+
+    override fun observeForLink(linkId: LinkId): Flow<List<TagBinding>> =
+        dao.observeForLink(linkId.value).map { list -> list.map { it.toDomain() } }
 }
 
 class RoomLinkRepository(private val dao: ExternalLinkDao) : LinkRepository {
@@ -66,6 +75,10 @@ class RoomLinkRepository(private val dao: ExternalLinkDao) : LinkRepository {
     override suspend fun all(): List<ExternalLink> = dao.all().map { it.toDomain() }
     override suspend fun delete(id: LinkId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()
+    override fun observeAll(): Flow<List<ExternalLink>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
+
+    override fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>> =
+        dao.observeForAsset(assetId.value).map { list -> list.map { it.toDomain() } }
 }
 
 class RoomUnitOfWork(private val db: AppDatabase) : UnitOfWork {

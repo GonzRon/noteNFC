@@ -7,6 +7,7 @@ import com.loosecannon.notenfc.core.model.LinkId
 import com.loosecannon.notenfc.core.model.PayloadFormat
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
+import kotlinx.coroutines.flow.Flow
 
 interface AssetRepository {
     suspend fun upsert(asset: Asset)
@@ -14,6 +15,7 @@ interface AssetRepository {
     suspend fun all(): List<Asset>
     suspend fun delete(id: AssetId)
     suspend fun deleteAll()
+    fun observeAll(): Flow<List<Asset>>
 }
 
 interface TagRepository {
@@ -25,6 +27,8 @@ interface TagRepository {
     suspend fun all(): List<TagBinding>
     suspend fun delete(id: TagId)
     suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>>
+    fun observeForLink(linkId: LinkId): Flow<List<TagBinding>>
 }
 
 interface LinkRepository {
@@ -35,4 +39,6 @@ interface LinkRepository {
     suspend fun all(): List<ExternalLink>
     suspend fun delete(id: LinkId)
     suspend fun deleteAll()
+    fun observeAll(): Flow<List<ExternalLink>>
+    fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>>
 }
