@@ -46,6 +46,7 @@
         <!-- Share a note link → save it → write it to a tag → back to the caller. -->
         <activity
             android:name="com.loosecannon.notenfc.ui.interim.ShareLinkActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
             android:excludeFromRecents="true">
             <intent-filter>

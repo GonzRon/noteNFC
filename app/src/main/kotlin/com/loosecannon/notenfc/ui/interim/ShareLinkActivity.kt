@@ -26,7 +26,8 @@ class ShareLinkActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val text = if (intent.action == Intent.ACTION_SEND) intent.getStringExtra(Intent.EXTRA_TEXT) else null
+        // A CharSequence, not a String: apps that share styled text put a `Spanned` in here.
+        val text = if (intent.action == Intent.ACTION_SEND) intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() else null
         val uri = LinkLaunchPolicy.extractUri(text)
         if (uri == null) {
             Toast.makeText(this, "No link found in the shared text.", Toast.LENGTH_LONG).show()

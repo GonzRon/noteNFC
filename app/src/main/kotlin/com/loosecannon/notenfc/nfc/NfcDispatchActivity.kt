@@ -60,7 +60,14 @@ class NfcDispatchActivity : Activity() {
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
 
     private fun handle(intent: Intent) {
-        val payload = payloadOf(intent)
+        // A third-party app can aim any extras at an exported activity; on pre-33 devices the
+        // untyped `getParcelableArrayExtra` unparcels whatever it is handed, so a hostile or simply
+        // wrong bundle throws here rather than returning null. Treat it as "nothing to resolve".
+        val payload = try {
+            payloadOf(intent)
+        } catch (e: Exception) {
+            null
+        }
         if (payload == null) {
             Toast.makeText(this, "Nothing to resolve.", Toast.LENGTH_SHORT).show()
             finish()
@@ -126,10 +133,14 @@ class NfcDispatchActivity : Activity() {
 
     private fun launch(link: ExternalLink) {
         scope.launch {
-            when (val out = graph.openLink.run(link.id)) {
-                is OpenLink.Outcome.Launch -> { LinkLauncher.open(this@NfcDispatchActivity, out.uri); finish() }
-                is OpenLink.Outcome.Refused -> status.text = "Link refused: ${out.reason}\n\n${link.uri}"
-                is OpenLink.Outcome.Missing -> status.text = "The link this tag pointed at no longer exists."
+            try {
+                when (val out = graph.openLink.run(link.id)) {
+                    is OpenLink.Outcome.Launch -> { LinkLauncher.open(this@NfcDispatchActivity, out.uri); finish() }
+                    is OpenLink.Outcome.Refused -> status.text = "Link refused: ${out.reason}\n\n${link.uri}"
+                    is OpenLink.Outcome.Missing -> status.text = "The link this tag pointed at no longer exists."
+                }
+            } catch (e: Exception) {
+                status.text = "Could not open the link: ${e.javaClass.simpleName}: ${e.message}"
             }
         }
     }
