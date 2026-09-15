@@ -233,16 +233,19 @@ after application.
 |---|---|---|
 | `measurement_definition` | id, asset_id, key, label, unit, value_type, decimals INTEGER, range_low REAL NULL, range_high REAL NULL, is_meter INTEGER, sort_order INTEGER, archived_at INTEGER NULL, created_at, updated_at | FK asset CASCADE; `UNIQUE(asset_id, key)`; index asset_id |
 | `event_profile` | id, asset_id, name, event_kind, default_title, template_key NULL, sort_order, archived_at NULL, created_at, updated_at | FK asset CASCADE; index asset_id |
-| `profile_field` | id, profile_id, definition_id, required INTEGER, sort_order | FK profile CASCADE, FK definition CASCADE; `UNIQUE(profile_id, definition_id)` |
-| `profile_consumable` | id, profile_id, name, default_quantity REAL NULL, unit, sort_order | FK profile CASCADE |
-| `asset_event` | id, asset_id, kind, title, profile_id NULL, occurred_on TEXT, occurred_time TEXT NULL, tz_id, notes, source, source_ref NULL, created_at, updated_at | FK asset CASCADE; FK profile SET NULL; index `(asset_id, occurred_on DESC, created_at DESC)`; `UNIQUE(source, source_ref)` |
+| `profile_field` | id, profile_id, definition_id, required INTEGER, sort_order | FK profile CASCADE, FK definition CASCADE; `UNIQUE(profile_id, definition_id)`; index definition_id |
+| `profile_consumable` | id, profile_id, name, default_quantity REAL NULL, unit, sort_order | FK profile CASCADE; index profile_id |
+| `asset_event` | id, asset_id, kind, title, profile_id NULL, occurred_on TEXT, occurred_time TEXT NULL, tz_id, notes, source, source_ref NULL, created_at, updated_at | FK asset CASCADE; FK profile SET NULL; index `(asset_id, occurred_on DESC, created_at DESC)`; `UNIQUE(source, source_ref)`; index profile_id |
 | `measurement` | id, event_id, definition_id, value_num REAL NULL, value_text TEXT NULL, unit, sort_order | FK event CASCADE; FK definition **RESTRICT**; index `(definition_id, event_id)`, index event_id |
 | `consumable_usage` | id, event_id, name, quantity REAL, unit, sort_order | FK event CASCADE; index event_id |
 
 `AppDatabase` version 2, `MIGRATION_1_2` hand-written (`ALTER TABLE asset ADD COLUMN`, seven
-`CREATE TABLE`, the indexes), `app/schemas/.../2.json` committed. Migration test on the JVM with
-`androidx.room3.testing.SQLiteDriverMigrationTestHelper` over `BundledSQLiteDriver`: create v1 from
-the exported schema, insert an asset/tag/link, migrate, validate, and assert the rows survived.
+`CREATE TABLE`, the indexes), `app/schemas/.../2.json` committed. Migration test on the JVM over
+`BundledSQLiteDriver`: create v1, insert an asset/tag/link, migrate, validate, and assert the rows
+survived. It builds v1 by executing the statements in the exported `app/schemas/.../1.json` rather
+than through `androidx.room3.testing.SQLiteDriverMigrationTestHelper`, because at Room 3.0.3 that
+helper is Android-only (it lives in the `room-testing` Android artifact and wants an instrumented
+context), so it cannot run in a JVM unit test.
 The event DAO loads an aggregate with `@Transaction` + `@Relation` (or two queries inside the
 UoW) and returns events newest-first by the §4.1 order expressed in SQL
 (`ORDER BY occurred_on DESC, COALESCE(occurred_time,'00:00') DESC, created_at DESC, id DESC`);

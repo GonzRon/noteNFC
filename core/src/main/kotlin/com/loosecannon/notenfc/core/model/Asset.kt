@@ -9,6 +9,7 @@ data class Asset(
     val category: String = "",
     val notes: String = "",
     val status: AssetStatus = AssetStatus.ACTIVE,
+    val templateKey: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )

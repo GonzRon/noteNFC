@@ -24,6 +24,9 @@ push deep — around the original one-tap flow, which is still the spine:
 - **Assets** — a list you can filter to include archived ones, an asset screen built around the
   identity plate (category, name, description, tags and links), a create/edit form, and archive
   rather than delete.
+- **Log maintenance** — log maintenance events with typed readings and materials used; current
+  readings and a service record per asset. Five starter templates (hot tub, power equipment, UPS,
+  RO water, generic) seed the readings and the quick actions; nothing about them is hard-coded.
 - **Write a tag** — share a note's external link (Joplin *Copy external link*, an Obsidian or
   Logseq URI, or any `https://` page) to noteNFC and you get a card naming the kind of link and
   showing the URI; write it to a blank tag and you are back in the notes app. The writer reads

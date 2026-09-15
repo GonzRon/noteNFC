@@ -1,5 +1,6 @@
 package com.loosecannon.notenfc.core.backup
 
+import com.loosecannon.notenfc.core.model.shapeMatches
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
@@ -10,19 +11,22 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Backup format v1: a ZIP holding exactly two entries.
+ * Backup format v2: a ZIP holding exactly two entries.
  *
  * ```
  * manifest.json   { formatVersion, appVersion, schemaVersion, createdAt, counts, dataSha256 }
- * data.json       { assets: [...], nfcTags: [...], externalLinks: [...] }
+ * data.json       { assets: [...], nfcTags: [...], externalLinks: [...],
+ *                    measurementDefinitions: [...], eventProfiles: [...], assetEvents: [...] }
  * ```
  *
- * IDs are written verbatim, lists are sorted by id, and the manifest carries the SHA-256 of the
- * data entry, so the same input always produces the same bytes and an edited file is refused.
- * JDK ZIP + JDK SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
+ * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
+ * and the manifest carries the SHA-256 of the data entry, so the same input always produces the
+ * same bytes and an edited file is refused. A format-1 file (the three original lists only) still
+ * decodes: the new lists default to empty. JDK ZIP + JDK SHA-256 + kotlinx-serialization only; no
+ * Android types anywhere in here.
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 1
+    const val FORMAT_VERSION = 2
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -31,15 +35,42 @@ object BackupCodec {
         encodeDefaults = true
     }
 
-    fun encode(data: BackupData, appVersion: String, schemaVersion: Int, createdAt: Long): ByteArray {
+    fun encode(data: BackupData, appVersion: String, schemaVersion: Int, createdAt: Long): ByteArray =
+        encode(data, appVersion, schemaVersion, createdAt, FORMAT_VERSION)
+
+    /**
+     * [formatVersion] escape hatch exists only so tests can seal a manifest that claims an older
+     * format than this codec writes by default (`formatOneFileStillDecodes`). Production callers
+     * use the four-arg overload above, which always stamps [FORMAT_VERSION].
+     */
+    internal fun encode(
+        data: BackupData,
+        appVersion: String,
+        schemaVersion: Int,
+        createdAt: Long,
+        formatVersion: Int,
+    ): ByteArray {
         val sorted = BackupData(
             assets = data.assets.sortedBy { it.id },
             nfcTags = data.nfcTags.sortedBy { it.id },
             externalLinks = data.externalLinks.sortedBy { it.id },
+            measurementDefinitions = data.measurementDefinitions.sortedBy { it.id },
+            eventProfiles = data.eventProfiles.sortedBy { it.id }.map { profile ->
+                profile.copy(
+                    fields = profile.fields.sortedBy { it.sortOrder },
+                    consumables = profile.consumables.sortedBy { it.sortOrder },
+                )
+            },
+            assetEvents = data.assetEvents.sortedBy { it.id }.map { event ->
+                event.copy(
+                    measurements = event.measurements.sortedBy { it.sortOrder },
+                    consumables = event.consumables.sortedBy { it.sortOrder },
+                )
+            },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
         val manifest = BackupManifest(
-            formatVersion = FORMAT_VERSION,
+            formatVersion = formatVersion,
             appVersion = appVersion,
             schemaVersion = schemaVersion,
             createdAt = createdAt,
@@ -47,6 +78,13 @@ object BackupCodec {
                 "assets" to sorted.assets.size,
                 "nfcTags" to sorted.nfcTags.size,
                 "externalLinks" to sorted.externalLinks.size,
+                "measurementDefinitions" to sorted.measurementDefinitions.size,
+                "eventProfiles" to sorted.eventProfiles.size,
+                "assetEvents" to sorted.assetEvents.size,
+                "profileFields" to sorted.eventProfiles.sumOf { it.fields.size },
+                "profileConsumables" to sorted.eventProfiles.sumOf { it.consumables.size },
+                "measurements" to sorted.assetEvents.sumOf { it.measurements.size },
+                "consumableUsages" to sorted.assetEvents.sumOf { it.consumables.size },
             ),
             dataSha256 = sha256Hex(dataBytes),
         )
@@ -95,10 +133,13 @@ object BackupCodec {
         data.assets.forEach { it.toDomain() }
         data.externalLinks.forEach { it.toDomain() }
         data.nfcTags.forEach { it.toDomain() }
+        data.measurementDefinitions.forEach { it.toDomain() }
+        data.eventProfiles.forEach { it.toDomain() }
+        data.assetEvents.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
-        // replays the three insert loops in one transaction: a duplicate id or a reference to a
-        // row that is not in the file would only fail down there, on the foreign keys, with the
+        // replays the insert loops in one transaction: a duplicate id or a reference to a row
+        // that is not in the file would only fail down there, on the foreign keys, with the
         // user's data already gone.
         validateGraph(data)
 
@@ -132,6 +173,100 @@ object BackupCodec {
                 )
             }
         }
+
+        // --- journal tables --------------------------------------------------------------------
+
+        uniqueIds("measurementDefinitions", data.measurementDefinitions.map { it.id })
+        val definitionsById = data.measurementDefinitions.associateBy { it.id }
+        data.measurementDefinitions.forEach { definition ->
+            if (definition.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "measurementDefinitions: definition ${definition.id} points at asset " +
+                        "${definition.assetId}, which is not in assets",
+                )
+            }
+        }
+
+        uniqueIds("eventProfiles", data.eventProfiles.map { it.id })
+        val profileAssetIds = data.eventProfiles.associate { it.id to it.assetId }
+        val profileFieldIds = mutableListOf<String>()
+        val profileConsumableIds = mutableListOf<String>()
+        data.eventProfiles.forEach { profile ->
+            if (profile.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "eventProfiles: profile ${profile.id} points at asset ${profile.assetId}, " +
+                        "which is not in assets",
+                )
+            }
+            profile.fields.forEach { field ->
+                profileFieldIds += field.id
+                val definition = definitionsById[field.definitionId]
+                    ?: throw BackupCorrupt(
+                        "eventProfiles: profile ${profile.id} field ${field.id} references " +
+                            "definition ${field.definitionId}, which is not in measurementDefinitions",
+                    )
+                if (definition.assetId != profile.assetId) {
+                    throw BackupCorrupt(
+                        "eventProfiles: profile ${profile.id} field ${field.id} references " +
+                            "definition ${field.definitionId} from a different asset",
+                    )
+                }
+            }
+            profile.consumables.forEach { consumable -> profileConsumableIds += consumable.id }
+        }
+        uniqueIds("profileFields", profileFieldIds)
+        uniqueIds("profileConsumables", profileConsumableIds)
+
+        uniqueIds("assetEvents", data.assetEvents.map { it.id })
+        val measurementIds = mutableListOf<String>()
+        val consumableUsageIds = mutableListOf<String>()
+        data.assetEvents.forEach { event ->
+            if (event.assetId !in assetIds) {
+                throw BackupCorrupt(
+                    "assetEvents: event ${event.id} points at asset ${event.assetId}, " +
+                        "which is not in assets",
+                )
+            }
+            if (event.profileId != null) {
+                val profileAssetId = profileAssetIds[event.profileId]
+                    ?: throw BackupCorrupt(
+                        "assetEvents: event ${event.id} points at profile ${event.profileId}, " +
+                            "which is not in eventProfiles",
+                    )
+                if (profileAssetId != event.assetId) {
+                    throw BackupCorrupt(
+                        "assetEvents: event ${event.id} references profile ${event.profileId} " +
+                            "from a different asset",
+                    )
+                }
+            }
+            event.measurements.forEach { measurement ->
+                measurementIds += measurement.id
+                val definition = definitionsById[measurement.definitionId]
+                    ?: throw BackupCorrupt(
+                        "assetEvents: measurement ${measurement.id} references definition " +
+                            "${measurement.definitionId}, which is not in measurementDefinitions",
+                    )
+                if (definition.assetId != event.assetId) {
+                    throw BackupCorrupt(
+                        "assetEvents: measurement ${measurement.id} references definition " +
+                            "${measurement.definitionId} from a different asset",
+                    )
+                }
+                // The definition's valueType was already proven nameable in the enum-check pass
+                // above, so toDomain() here cannot throw; it is only how we get at the enum.
+                val valueType = definition.toDomain().valueType
+                if (!measurement.toDomain().shapeMatches(valueType)) {
+                    throw BackupCorrupt(
+                        "assetEvents: measurement ${measurement.id} does not match definition " +
+                            "${definition.id}'s value shape for $valueType",
+                    )
+                }
+            }
+            event.consumables.forEach { consumable -> consumableUsageIds += consumable.id }
+        }
+        uniqueIds("measurements", measurementIds)
+        uniqueIds("consumableUsages", consumableUsageIds)
     }
 
     private fun uniqueIds(table: String, ids: List<String>): Set<String> {

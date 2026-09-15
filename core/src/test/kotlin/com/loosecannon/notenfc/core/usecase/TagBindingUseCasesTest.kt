@@ -15,7 +15,9 @@ import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.IdGenerator
 import com.loosecannon.notenfc.core.testing.FakeUnitOfWork
 import com.loosecannon.notenfc.core.testing.InMemoryAssetRepository
+import com.loosecannon.notenfc.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.notenfc.core.testing.InMemoryLinkRepository
+import com.loosecannon.notenfc.core.testing.InMemoryProfileRepository
 import com.loosecannon.notenfc.core.testing.InMemoryTagRepository
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -35,7 +37,10 @@ class TagBindingUseCasesTest {
     private val clock = Clock { 7_000L }
     private val bind = BindTag(tags, assets, links, uow, ids, clock)
     private val provision = ProvisionTag(tags, assets, links, uow, ids, clock)
-    private val create = CreateAsset(assets, uow, ids, clock)
+    private val defs = InMemoryDefinitionRepository()
+    private val profiles = InMemoryProfileRepository()
+    private val applyTemplate = ApplyTemplate(defs, profiles, assets, uow, ids, clock)
+    private val create = CreateAsset(assets, uow, ids, clock, applyTemplate)
 
     private val scanned = TagId("123e4567-e89b-12d3-a456-426614174000")
     private val a1 = TagTarget.AssetTarget(AssetId("a1"))

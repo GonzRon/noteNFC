@@ -17,6 +17,7 @@ class AssetDaoTest {
         category = "cat",
         notes = "",
         status = "ACTIVE",
+        templateKey = null,
         createdAt = 1_000L,
         updatedAt = 2_000L,
     )

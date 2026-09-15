@@ -1,0 +1,100 @@
+package com.loosecannon.notenfc.core.usecase
+
+import com.loosecannon.notenfc.core.journal.Template
+import com.loosecannon.notenfc.core.model.AssetId
+import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.EventProfile
+import com.loosecannon.notenfc.core.model.MeasurementDefinition
+import com.loosecannon.notenfc.core.model.ProfileConsumable
+import com.loosecannon.notenfc.core.model.ProfileField
+import com.loosecannon.notenfc.core.model.ProfileId
+import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.Clock
+import com.loosecannon.notenfc.core.ports.DefinitionRepository
+import com.loosecannon.notenfc.core.ports.IdGenerator
+import com.loosecannon.notenfc.core.ports.ProfileRepository
+import com.loosecannon.notenfc.core.ports.UnitOfWork
+
+/** [CreateAsset] passed a `templateKey` that [com.loosecannon.notenfc.core.journal.SeedTemplates] doesn't know. */
+class UnknownTemplate(key: String) : IllegalArgumentException("no template $key")
+
+sealed interface ApplyResult {
+    /** The asset already has definitions or profiles of its own; nothing was touched. */
+    data object AlreadySetUp : ApplyResult
+    data class Applied(val definitions: List<MeasurementDefinition>, val profiles: List<EventProfile>) : ApplyResult
+}
+
+/**
+ * Seeds an asset's definitions and profiles from a starter [Template], once. An asset that
+ * already has any definitions or profiles of its own is left alone (§7: a template is starter
+ * data, applying it twice must not duplicate or clobber rows a person may have already edited).
+ */
+class ApplyTemplate(
+    private val definitions: DefinitionRepository,
+    private val profiles: ProfileRepository,
+    private val assets: AssetRepository,
+    private val uow: UnitOfWork,
+    private val ids: IdGenerator,
+    private val clock: Clock,
+) {
+    suspend fun run(assetId: AssetId, template: Template): ApplyResult = uow.write {
+        applyInTransaction(assetId, template)
+    }
+
+    /**
+     * The work itself, without opening its own transaction. [FakeUnitOfWork][com.loosecannon.notenfc.core.testing.FakeUnitOfWork]'s
+     * `write` is not safely re-entrant (a nested call double-counts commits and can reset the
+     * transaction witness before the outer block finishes), so [CreateAsset] — already inside its
+     * own `uow.write` — calls this directly instead of nesting through [run].
+     */
+    internal suspend fun applyInTransaction(assetId: AssetId, template: Template): ApplyResult {
+        val asset = assets.get(assetId) ?: throw NoSuchAsset(assetId)
+        if (definitions.forAsset(assetId).isNotEmpty() || profiles.forAsset(assetId).isNotEmpty()) {
+            return ApplyResult.AlreadySetUp
+        }
+        val now = clock.nowMillis()
+        val defs = template.definitions.mapIndexed { i, d ->
+            MeasurementDefinition(
+                id = DefinitionId(ids.newId()),
+                assetId = assetId,
+                key = d.key,
+                label = d.label,
+                unit = d.unit,
+                valueType = d.valueType,
+                decimals = d.decimals,
+                rangeLow = d.rangeLow,
+                rangeHigh = d.rangeHigh,
+                isMeter = d.isMeter,
+                sortOrder = i,
+                archivedAt = null,
+                createdAt = now,
+                updatedAt = now,
+            )
+        }
+        val byKey = defs.associateBy { it.key }
+        val profs = template.profiles.mapIndexed { i, p ->
+            EventProfile(
+                id = ProfileId(ids.newId()),
+                assetId = assetId,
+                name = p.name,
+                eventKind = p.eventKind,
+                defaultTitle = p.defaultTitle,
+                templateKey = template.key,
+                sortOrder = i,
+                archivedAt = null,
+                createdAt = now,
+                updatedAt = now,
+                fields = p.fields.mapIndexed { j, (key, required) ->
+                    ProfileField(ids.newId(), byKey.getValue(key).id, required, j)
+                },
+                consumables = p.consumables.mapIndexed { j, c ->
+                    ProfileConsumable(ids.newId(), c.name, c.defaultQuantity, c.unit, j)
+                },
+            )
+        }
+        defs.forEach { definitions.upsert(it) }
+        profs.forEach { profiles.upsert(it) }
+        if (asset.templateKey == null) assets.upsert(asset.copy(templateKey = template.key, updatedAt = now))
+        return ApplyResult.Applied(defs, profs)
+    }
+}

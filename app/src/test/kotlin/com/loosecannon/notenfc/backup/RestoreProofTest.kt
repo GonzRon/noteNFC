@@ -2,26 +2,36 @@ package com.loosecannon.notenfc.backup
 
 import com.loosecannon.notenfc.core.backup.BackupCorrupt
 import com.loosecannon.notenfc.core.model.Asset
+import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.EventKind
+import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.LinkId
 import com.loosecannon.notenfc.core.model.LinkKind
+import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.PayloadFormat
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.core.ports.Clock
+import com.loosecannon.notenfc.core.usecase.ConsumableInput
+import com.loosecannon.notenfc.core.usecase.EventCommand
 import com.loosecannon.notenfc.core.usecase.ExportBackup
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.ImportReport
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
+import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
+import com.loosecannon.notenfc.data.room.RoomEventRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
+import com.loosecannon.notenfc.data.room.RoomProfileRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
 import com.loosecannon.notenfc.data.room.inMemoryDb
+import com.loosecannon.notenfc.testing.FakeGraph
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -42,21 +52,33 @@ class RestoreProofTest {
         val assets = RoomAssetRepository(db.assetDao())
         val tags = RoomTagRepository(db.nfcTagDao())
         val links = RoomLinkRepository(db.externalLinkDao())
+        val definitions = RoomDefinitionRepository(db.definitionDao())
+        val profiles = RoomProfileRepository(db.profileDao())
+        val events = RoomEventRepository(db.eventDao())
         val uow = RoomUnitOfWork(db)
-        val export = ExportBackup(assets, tags, links, uow, Clock { FIXED_NOW }, "test", SCHEMA_VERSION)
-        val import = ImportBackupReplace(assets, tags, links, uow)
+        val export = ExportBackup(
+            assets, tags, links, definitions, profiles, events, uow,
+            Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
+        )
+        val import = ImportBackupReplace(assets, tags, links, definitions, profiles, events, uow)
     }
 
     private data class Snapshot(
         val assets: List<Asset>,
         val tags: List<TagBinding>,
         val links: List<ExternalLink>,
+        val definitions: List<MeasurementDefinition>,
+        val profiles: List<EventProfile>,
+        val events: List<AssetEvent>,
     )
 
     private suspend fun snapshot(g: Graph): Snapshot = Snapshot(
         assets = g.assets.all().sortedBy { it.id.value },
         tags = g.tags.all().sortedBy { it.id.value },
         links = g.links.all().sortedBy { it.id.value },
+        definitions = g.definitions.all().sortedBy { it.id.value },
+        profiles = g.profiles.all().sortedBy { it.id.value },
+        events = g.events.all().sortedBy { it.id.value },
     )
 
     private fun graphOver(db: AppDatabase) = Graph(db)
@@ -189,7 +211,13 @@ class RestoreProofTest {
 
             // Same ids, same names, same targets, same links — the whole graph, compared whole.
             assertEquals(before, after)
-            assertEquals(ImportReport(assets = 2, tags = 3, links = 2, formatVersion = 1), report)
+            assertEquals(
+                ImportReport(
+                    formatVersion = 2, assets = 2, tags = 3, links = 2,
+                    definitions = 0, profiles = 0, events = 0,
+                ),
+                report,
+            )
 
             // And the relationships survive through the FK columns, not only through the id strings.
             assertEquals(1, g2.tags.forAsset(before.assets[0].id).size)
@@ -280,7 +308,13 @@ class RestoreProofTest {
 
             // 2. A valid backup replaces everything: none of the local rows survive.
             val report = g.import.run(backup)
-            assertEquals(ImportReport(assets = 2, tags = 3, links = 2, formatVersion = 1), report)
+            assertEquals(
+                ImportReport(
+                    formatVersion = 2, assets = 2, tags = 3, links = 2,
+                    definitions = 0, profiles = 0, events = 0,
+                ),
+                report,
+            )
             val after = snapshot(g)
             assertTrue(
                 "no local row may survive a replace import",
@@ -296,8 +330,80 @@ class RestoreProofTest {
         }
     }
 
+    /**
+     * Phase 2A's half of the same proof. The journal is seeded the way the app itself would seed
+     * it — a template applied by [com.loosecannon.notenfc.core.usecase.CreateAsset], an event
+     * logged through [com.loosecannon.notenfc.core.usecase.LogEvent] — so the rows under test are
+     * rows the production path actually produces, children and their ids included. Then the whole
+     * seven-table graph goes out to a backup and comes back into an empty database unchanged.
+     */
+    @Test
+    fun theJournalSurvivesTheSameRoundTrip() = runTest {
+        val before: Snapshot
+        val bytes: ByteArray
+        val g1 = FakeGraph()
+        try {
+            val spa = g1.createAsset.run(name = "Hot tub", templateKey = "hot_tub")
+            val waterTest = g1.profiles.forAsset(spa.id).first { it.name == "Water test" }
+            g1.logEvent.run(
+                EventCommand(
+                    assetId = spa.id,
+                    profileId = waterTest.id,
+                    kind = waterTest.eventKind,
+                    title = "",
+                    occurredOn = "2026-09-14",
+                    occurredTime = "08:30",
+                    tzId = "UTC",
+                    notes = "after the storm",
+                    values = waterTest.fields.associate { it.definitionId to "7.4" },
+                    consumables = listOf(ConsumableInput("Chlorine", "2", "tab")),
+                ),
+            )
+            bytes = g1.exportBackup.run()
+            before = snapshot(graphOver(g1.db))
+        } finally {
+            g1.close()
+        }
+
+        assertTrue("the template must have seeded definitions", before.definitions.isNotEmpty())
+        assertTrue("the template must have seeded profiles", before.profiles.isNotEmpty())
+        assertEquals(1, before.events.size)
+        assertTrue("the event must carry its children", before.events.single().measurements.isNotEmpty())
+
+        val db2 = inMemoryDb()
+        try {
+            val g2 = graphOver(db2)
+            assertTrue("the new database must start empty", snapshot(g2).events.isEmpty())
+
+            val report = g2.import.run(bytes)
+            assertEquals(
+                ImportReport(
+                    formatVersion = 2,
+                    assets = 1,
+                    tags = 0,
+                    links = 0,
+                    definitions = before.definitions.size,
+                    profiles = before.profiles.size,
+                    events = 1,
+                ),
+                report,
+            )
+            // All seven tables, compared whole: ids, child ids, foreign keys, snapshot units.
+            assertEquals(before, snapshot(g2))
+
+            // And the journal reads back through its own relationship queries, not only `all()`.
+            val spa = before.assets.single()
+            assertEquals(before.definitions, g2.definitions.forAsset(spa.id).sortedBy { it.id.value })
+            assertEquals(before.profiles, g2.profiles.forAsset(spa.id).sortedBy { it.id.value })
+            assertEquals(before.events, g2.events.forAsset(spa.id))
+            assertEquals("hot_tub", spa.templateKey)
+        } finally {
+            db2.close()
+        }
+    }
+
     private companion object {
         const val FIXED_NOW = 1_757_000_000_000L
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 }

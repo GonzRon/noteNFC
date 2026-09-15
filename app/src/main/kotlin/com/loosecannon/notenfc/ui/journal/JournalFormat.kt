@@ -1,0 +1,120 @@
+package com.loosecannon.notenfc.ui.journal
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.loosecannon.notenfc.core.journal.RangeState
+import com.loosecannon.notenfc.core.model.AssetEvent
+import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.EventProfile
+import com.loosecannon.notenfc.core.model.Measurement
+import com.loosecannon.notenfc.core.model.MeasurementDefinition
+import com.loosecannon.notenfc.core.model.ValueType
+import com.loosecannon.notenfc.ui.components.NoteNfcIcons
+import com.loosecannon.notenfc.ui.theme.NoteNfcSemanticColors
+import com.loosecannon.notenfc.ui.theme.StatusColor
+import java.util.Locale
+
+/**
+ * How the journal reads on screen: a definition's target, a stored value at the precision its
+ * definition asks for, the exact state words of spec §10, and the one-line summary the service
+ * record puts under an event's title.
+ *
+ * All pure but for the two that name a theme colour or a glyph, so the wording is pinned by a
+ * plain JUnit test rather than by a screenshot.
+ */
+
+/** The three-way dash of D12 §9: a real interval, one bound, or nothing to compare against. */
+fun formatTarget(definition: MeasurementDefinition): String {
+    val low = definition.rangeLow
+    val high = definition.rangeHigh
+    return when {
+        low != null && high != null -> "${bound(low, definition)}–${bound(high, definition)}"
+        low != null -> "≥ ${bound(low, definition)}"
+        high != null -> "≤ ${bound(high, definition)}"
+        else -> "No target"
+    }
+}
+
+/** Null when there is nothing logged for the definition yet; the row then shows an em dash. */
+fun formatValue(measurement: Measurement?, definition: MeasurementDefinition): String? {
+    val m = measurement ?: return null
+    return when (definition.valueType) {
+        // The label names the question ("Passed"), so the value only ever answers it (spec §7).
+        ValueType.BOOLEAN -> if (m.valueNum == 1.0) "Yes" else "No"
+        ValueType.TEXT -> m.valueText
+        ValueType.NUMBER -> m.valueNum?.let { bound(it, definition) }
+    }
+}
+
+fun stateLabel(state: RangeState): String = when (state) {
+    RangeState.LOW -> "LOW"
+    RangeState.IN_RANGE -> "IN RANGE"
+    RangeState.HIGH -> "HIGH"
+    RangeState.NO_TARGET -> "NO TARGET SET"
+}
+
+fun stateColors(state: RangeState, colors: NoteNfcSemanticColors): StatusColor = when (state) {
+    RangeState.LOW -> colors.measurementLow
+    RangeState.IN_RANGE -> colors.measurementInRange
+    RangeState.HIGH -> colors.measurementHigh
+    RangeState.NO_TARGET -> colors.measurementNoTarget
+}
+
+/**
+ * Colour is never the only carrier (D12 §5): every state has a word and a glyph too. Composable
+ * because [NoteNfcIcons] resolves its vectors out of resources.
+ */
+@Composable
+fun stateIcon(state: RangeState): ImageVector = when (state) {
+    RangeState.LOW -> NoteNfcIcons.ArrowDownward
+    RangeState.IN_RANGE -> Icons.Outlined.Check
+    RangeState.HIGH -> NoteNfcIcons.ArrowUpward
+    RangeState.NO_TARGET -> Icons.Outlined.Info
+}
+
+/**
+ * "Water test" is what the profile is called; "Log water test" is what the button does. Only
+ * decapitalized when the second character is itself lowercase, so an acronym like "TDS test" or
+ * "UPS check" is not mangled into "tDS test" / "uPS check".
+ */
+fun quickActionLabel(profile: EventProfile): String {
+    val name = profile.name
+    val label = if (name.length > 1 && name[1].isLowerCase()) name.replaceFirstChar { it.lowercase() } else name
+    return "Log $label"
+}
+
+/**
+ * The ledger's detail line: what this entry was, in one line. Readings first because that is what
+ * a maintenance record is looked up for, then what was put in, then whatever the user wrote.
+ */
+fun eventDetailLine(event: AssetEvent, definitions: Map<DefinitionId, MeasurementDefinition>): String {
+    val readings = event.measurements
+        .sortedBy { it.sortOrder }
+        .mapNotNull { m ->
+            val def = definitions[m.definitionId] ?: return@mapNotNull null
+            val value = formatValue(m, def) ?: return@mapNotNull null
+            listOf(def.label, value, m.unit).filter { it.isNotBlank() }.joinToString(" ")
+        }
+    if (readings.isNotEmpty()) return readings.take(MAX_READINGS_IN_LINE).joinToString(" · ")
+
+    event.consumables.minByOrNull { it.sortOrder }?.let { used ->
+        return listOf(used.name, plain(used.quantity), used.unit).filter { it.isNotBlank() }.joinToString(" ")
+    }
+    return event.notes.lineSequence().firstOrNull()?.trim().orEmpty()
+}
+
+/** Three readings is what fits on one line on a phone without the title having to shrink. */
+private const val MAX_READINGS_IN_LINE = 3
+
+/** Locale-fixed so a comma decimal separator never reaches the mono column (D12 §6). */
+private fun bound(value: Double, definition: MeasurementDefinition): String =
+    String.format(Locale.US, "%.${definition.decimals.coerceAtLeast(0)}f", value)
+
+/** A consumable has no definition behind it, so its quantity keeps only the decimals it needs. */
+private fun plain(value: Double): String {
+    val whole = value.toLong()
+    return if (value == whole.toDouble()) whole.toString() else value.toString()
+}

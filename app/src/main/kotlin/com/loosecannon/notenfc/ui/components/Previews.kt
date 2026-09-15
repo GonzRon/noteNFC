@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.loosecannon.notenfc.core.journal.RangeState
 import com.loosecannon.notenfc.ui.theme.NoteNfcSemanticColors
 import com.loosecannon.notenfc.ui.theme.NoteNfcTheme
 import com.loosecannon.notenfc.ui.theme.StatusColor
@@ -155,5 +156,26 @@ private fun ActionGridPreview() {
             ),
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+/**
+ * The instrument panel of D12 §9, one row per state plus the row a definition shows before
+ * anything has been logged against it. The values are illustrative, not anyone's water.
+ */
+@LightDarkPreview
+@Composable
+private fun InstrumentRowPreview() {
+    PreviewFrame {
+        SectionHeader(title = "Current readings")
+        InstrumentList(count = 5) { index ->
+            when (index) {
+                0 -> InstrumentRow("pH", "7.2–7.8", "8.1", "", RangeState.HIGH)
+                1 -> InstrumentRow("Free chlorine", "1.0–3.0", "0.8", "ppm", RangeState.LOW)
+                2 -> InstrumentRow("Alkalinity", "80–120", "110", "ppm", RangeState.IN_RANGE)
+                3 -> InstrumentRow("Water temperature", "No target", "102", "°F", RangeState.NO_TARGET)
+                else -> InstrumentRow("Calcium hardness", "150–250", null, "ppm", null)
+            }
+        }
     }
 }

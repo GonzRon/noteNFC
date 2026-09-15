@@ -1,10 +1,16 @@
 package com.loosecannon.notenfc.core.ports
 
 import com.loosecannon.notenfc.core.model.Asset
+import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
+import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.EventId
+import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.LinkId
+import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.PayloadFormat
+import com.loosecannon.notenfc.core.model.ProfileId
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import kotlinx.coroutines.flow.Flow
@@ -41,4 +47,33 @@ interface LinkRepository {
     suspend fun deleteAll()
     fun observeAll(): Flow<List<ExternalLink>>
     fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>>
+}
+
+interface DefinitionRepository {
+    suspend fun upsert(d: MeasurementDefinition)
+    suspend fun get(id: DefinitionId): MeasurementDefinition?
+    suspend fun forAsset(assetId: AssetId): List<MeasurementDefinition>
+    suspend fun all(): List<MeasurementDefinition>
+    suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<MeasurementDefinition>>
+}
+
+interface ProfileRepository {   // aggregate: upsert replaces fields and consumables
+    suspend fun upsert(p: EventProfile)
+    suspend fun get(id: ProfileId): EventProfile?
+    suspend fun forAsset(assetId: AssetId): List<EventProfile>
+    suspend fun all(): List<EventProfile>
+    suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<EventProfile>>
+}
+
+interface EventRepository {     // aggregate: upsert replaces measurements and consumables
+    suspend fun upsert(e: AssetEvent)
+    suspend fun get(id: EventId): AssetEvent?
+    suspend fun forAsset(assetId: AssetId): List<AssetEvent>
+    suspend fun all(): List<AssetEvent>
+    suspend fun delete(id: EventId)
+    suspend fun deleteAll()
+    fun observeForAsset(assetId: AssetId): Flow<List<AssetEvent>>   // newest first by §4.1
+    fun observe(id: EventId): Flow<AssetEvent?>
 }

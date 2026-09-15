@@ -20,6 +20,8 @@ import com.loosecannon.notenfc.ui.asset.AssetEditScreen
 import com.loosecannon.notenfc.ui.asset.AssetsScreen
 import com.loosecannon.notenfc.ui.backup.BackupScreen
 import com.loosecannon.notenfc.ui.dashboard.DashboardScreen
+import com.loosecannon.notenfc.ui.journal.EventDetailScreen
+import com.loosecannon.notenfc.ui.journal.EventEntryScreen
 import com.loosecannon.notenfc.ui.links.LinkDetailScreen
 import com.loosecannon.notenfc.ui.links.LinksScreen
 import com.loosecannon.notenfc.ui.scan.ScanScreen
@@ -96,6 +98,10 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         onWriteTag = { backStack.add(Route.WriteTag("asset", it, null)) },
                         onOpenLinks = { backStack.add(Route.Links) },
                         onBackup = { backStack.add(Route.Backup) },
+                        onLogEvent = { asset, profile ->
+                            backStack.add(Route.EventEntry(asset, profile, null))
+                        },
+                        onOpenEvent = { backStack.add(Route.EventDetail(it)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -108,6 +114,26 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                             backStack.removeLastOrNull()
                             if (key.id == null) backStack.add(Route.AssetDetail(id))
                         },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<Route.EventEntry> { key ->
+                    EventEntryScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        profileId = key.profileId,
+                        eventId = key.eventId,
+                        onDone = { backStack.removeLastOrNull() },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<Route.EventDetail> { key ->
+                    EventDetailScreen(
+                        graph = graph,
+                        eventId = key.id,
+                        // Edit is the same route in edit mode: the event names its own profile, so
+                        // the entry screen does not need one handed to it.
+                        onEdit = { asset, event -> backStack.add(Route.EventEntry(asset, null, event)) },
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }

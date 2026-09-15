@@ -13,6 +13,11 @@ sealed interface Route : NavKey {
     @Serializable data object Assets : Route
     @Serializable data class AssetDetail(val id: String) : Route
     @Serializable data class AssetEdit(val id: String?) : Route
+
+    /** New when [eventId] is null; [profileId] null is a free-form entry with no profile behind it. */
+    @Serializable data class EventEntry(val assetId: String, val profileId: String?, val eventId: String?) : Route
+    @Serializable data class EventDetail(val id: String) : Route
+
     @Serializable data object Links : Route
     @Serializable data class LinkDetail(val id: String) : Route
     @Serializable data object Scan : Route

@@ -16,7 +16,7 @@ class NfcTagDaoTest {
 
     private fun asset(id: String) = AssetEntity(
         id = id, name = "Asset $id", description = "", category = "", notes = "",
-        status = "ACTIVE", createdAt = 1L, updatedAt = 1L,
+        status = "ACTIVE", templateKey = null, createdAt = 1L, updatedAt = 1L,
     )
 
     private fun link(id: String, assetId: String? = null) = ExternalLinkEntity(
