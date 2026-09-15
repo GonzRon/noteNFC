@@ -22,7 +22,7 @@ NDEF message
               byte 0       format version = 0x01
               byte 1       flags          = 0x00 (reserved, must be 0)
               bytes 2..17  tag id, RFC 4122 byte order (16 bytes)
-  record 1: Android Application Record for com.looseCannon.noteNFC
+  record 1: Android Application Record for com.loosecannon.notenfc (the applicationId, D13 §4)
 ```
 
 - Unknown version byte (> `0x01`) → "written by a newer noteNFC; update the app"; **never parsed**.
@@ -38,7 +38,7 @@ NDEF message
 TagPayload = V1(tagId) | LegacyMd5(key) | Foreign(summary) | Malformed(reason) | NewerVersion(n)
 ```
 
-`LegacyKey.compute` is preserved verbatim in `:core` (`MD5(text)[0:8]`, UTF-8, lower-case hex) and pinned by a test with a known vector taken from the current implementation.
+> Policy update (D13, 2026-09-14): `LegacyKey` was removed in Phase 1B; the MD5 vectors remain in D1/D6 as protocol documentation.
 
 ### The resolver (D6 §4)
 

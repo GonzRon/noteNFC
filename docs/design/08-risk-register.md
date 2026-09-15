@@ -25,7 +25,7 @@ verified after every completion.
 | Id | Spike | Question | Needed before |
 |---|---|---|---|
 | S1 | Toolchain | Does AGP 9.4 + built-in Kotlin + KSP 2 + **Room 3.0.x** (`androidx.room3`, Room Gradle plugin `schemaDirectory`, bundled SQLite driver for JVM tests, migration test helper) + Compose BOM 2026.08 + Navigation 3 1.1.x configure, compile, and run a DAO test on the JVM? Fallbacks: Room 2.8.5 (only on a concrete deficiency), Navigation-Compose 2.x, AGP 8.13. | Phase 0 |
-| S2 | NFC on the target phone | Reader mode write + read-back on NTAG213/215; behaviour when the tag already has content; `Ndef.maxSize`; OEM handling of `FLAG_READER_SKIP_NDEF_CHECK`. | Phase 1B |
+| S2 | NFC on the target phone | Reader mode write + read-back on NTAG213/215; behaviour when the tag already has content; `Ndef.maxSize`; ~~OEM handling of `FLAG_READER_SKIP_NDEF_CHECK`~~ (resolved in Phase 1B: the flag must not be set for NDEF work at all). | Phase 1B |
 | S3 | Todoist link tappability | Is `notenfc://…` (plain and as a markdown link) tappable in Todoist for Android? If not, the description carries a fallback instruction and the case for App Links (R-4) strengthens. | Phase 5 |
 | S4 | Reminder delivery on the device | Does `setAndAllowWhileIdle` at 09:00 fire within an acceptable window on the user's OEM under Doze/battery saver? Does the backstop worker run within 12 h? | Phase 3 |
 | S5 | SAF tree providers | Which installed providers (Drive, OneDrive, Dropbox, Nextcloud, local) appear in `ACTION_OPEN_DOCUMENT_TREE` and support `createDocument` on the user's phone. | Phase 4 |

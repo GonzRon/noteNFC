@@ -3,7 +3,6 @@ package com.loosecannon.notenfc.core.nfc
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertContentEquals
 
 class NdefCodecTest {
     private fun legacy(payload: String, type: String = NdefCodec.LEGACY_TYPE) =
@@ -28,12 +27,5 @@ class NdefCodecTest {
     @Test fun uriRecordIsForeign() {
         val uri = NdefRecordData(tnf = 0x01, type = byteArrayOf('U'.code.toByte()), payload = byteArrayOf(0x01) + "example.com".toByteArray())
         assertIs<TagPayload.Foreign>(NdefCodec.decode(listOf(uri)))
-    }
-    @Test fun encodeLegacyRoundTrips() {
-        val rec = NdefCodec.encodeLegacy("63b37acf")
-        assertEquals(NdefCodec.TNF_EXTERNAL_TYPE, rec.tnf)
-        assertContentEquals(NdefCodec.LEGACY_TYPE.toByteArray(Charsets.US_ASCII), rec.type)
-        assertContentEquals("63b37acf".toByteArray(Charsets.US_ASCII), rec.payload)
-        assertEquals(TagPayload.LegacyMd5("63b37acf"), NdefCodec.decode(listOf(rec)))
     }
 }

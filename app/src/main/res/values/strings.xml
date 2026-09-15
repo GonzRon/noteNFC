@@ -1,5 +1,12 @@
 <resources>
     <string name="app_name">noteNFC</string>
-    <string name="share_a_note_in_joplin_to_this_app">Share a Joplin Note Link to this app.</string>
-    <string name="scan_an_nfc_tag_to_link_it_to_your_document">Scan an NFC Tag to link it to your document.</string>
+    <string name="write_title">Write a noteNFC tag</string>
+    <string name="write_lock">Lock the tag after writing (permanent — it can never be rewritten)</string>
+    <string name="write_done">Done</string>
+    <string name="dispatch_title">noteNFC tag</string>
+    <string name="dispatch_close">Close</string>
+    <string name="tools_title">noteNFC</string>
+    <string name="tools_hint">Hold a tag to the phone to scan it, or write a new one.</string>
+    <string name="tools_write">Write a new tag…</string>
+    <string name="tools_footer">Interim Phase 1B screen. Share a note link from Joplin/Obsidian/Logseq to noteNFC to save it and write it to a tag. The debug build also has a Backup screen.</string>
 </resources>

@@ -146,8 +146,7 @@ None of these is an Android app-signing keystore for noteNFC:
   an Android keystore.
 
 A grep for `fillmate` (the release cert's CN, see below) across `~/Documents` found
-only an unrelated archived project
-(`<an unrelated archived project>`) and this project's own
+only an unrelated archived project outside this repository and this project's own
 design docs — a lead for where the original `fillMateAndroid` keystore might live (another
 machine), not evidence that it's present here.
 
