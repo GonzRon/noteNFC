@@ -392,7 +392,7 @@ Signer #1 certificate SHA-256 digest: 0902d3b0f826381905c6d8254fdaf36756924d80da
 No personal path or username anywhere in the tree:
 
 ```
-git grep -nIiE '/home/[a-z]+|lcstyle' -- . ':!.superpowers'
+git grep -nIiE '/home/[a-z]+|<the owner's username>' -- . ':!.superpowers'
 ```
 
 → two hits, and both are the command quoting itself: this document's own §9 above, and
