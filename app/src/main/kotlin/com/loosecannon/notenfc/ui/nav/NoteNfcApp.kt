@@ -77,10 +77,22 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         onBack = { backStack.removeLastOrNull() },
                         onEdit = { backStack.add(Route.AssetEdit(it)) },
                         onWriteTag = { backStack.add(Route.WriteTag("asset", it, null)) },
+                        onOpenLinks = { backStack.add(Route.Links) },
+                        onBackup = { backStack.add(Route.Backup) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
-                    AssetEditScreen(graph = graph, assetId = key.id, onDone = { backStack.removeLastOrNull() })
+                    AssetEditScreen(
+                        graph = graph,
+                        assetId = key.id,
+                        // A new asset opens on its own detail screen and the form leaves the stack:
+                        // backing out of the asset should not land back on the form that made it.
+                        onDone = { id ->
+                            backStack.removeLastOrNull()
+                            if (key.id == null) backStack.add(Route.AssetDetail(id))
+                        },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
                 }
                 entry<Route.Links> {
                     LinksScreen(

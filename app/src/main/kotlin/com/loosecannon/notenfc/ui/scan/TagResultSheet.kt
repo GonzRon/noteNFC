@@ -17,6 +17,10 @@ import com.loosecannon.notenfc.ui.nav.Route
  *
  * Phase 1C Task 4 ships the route and its callbacks only; the body arrives with the screen's own
  * task, which replaces this file rather than moving it.
+ *
+ * @param key the scanned tag's identifier — but only while [format] names a payload format we
+ *   wrote. When `format == "NONE"` there is no identifier to show and `key` carries a prose reason
+ *   the tag could not be read, so nothing may present it as an id or look it up as one.
  */
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)

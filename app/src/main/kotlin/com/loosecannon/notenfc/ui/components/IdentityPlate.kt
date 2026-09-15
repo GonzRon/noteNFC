@@ -39,6 +39,7 @@ fun IdentityPlate(
     name: String?,
     cells: List<Pair<String, PlateValue>>,
     icon: ImageVector,
+    badge: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -48,7 +49,7 @@ fun IdentityPlate(
         modifier = modifier,
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     text = category.uppercase(),
                     // G1 §1.1: the plate's category eyebrow is SemiBold; ordinary metadata
@@ -57,6 +58,9 @@ fun IdentityPlate(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
+                // An archived (or retired) asset says so beside the eyebrow (G1 §1.1); an active
+                // one shows nothing at all, because "normal" needs no badge.
+                badge?.invoke()
                 Icon(
                     imageVector = icon,
                     contentDescription = null,

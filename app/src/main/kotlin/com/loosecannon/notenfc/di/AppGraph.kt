@@ -11,6 +11,7 @@ import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.ports.UuidGenerator
+import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.BindTag
 import com.loosecannon.notenfc.core.usecase.CreateAsset
 import com.loosecannon.notenfc.core.usecase.ExportBackup
@@ -19,6 +20,7 @@ import com.loosecannon.notenfc.core.usecase.OpenLink
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.ResolveTag
 import com.loosecannon.notenfc.core.usecase.SaveLink
+import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
@@ -66,6 +68,10 @@ class AppGraph(context: Context) {
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock)
     val saveLink: SaveLink = SaveLink(links, uow, ids, clock)
     val openLink: OpenLink = OpenLink(links, uow, clock)
+
+    // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
+    val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
+    val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
 
     private companion object {
         const val DB_NAME = "notenfc.db"

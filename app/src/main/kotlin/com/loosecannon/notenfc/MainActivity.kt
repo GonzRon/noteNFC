@@ -46,13 +46,25 @@ class MainActivity : ComponentActivity() {
         }
         // A restored instance already has its back stack; re-pushing the launch intent would
         // duplicate the destination the user is looking at.
-        if (savedInstanceState == null) routeFrom(intent)?.let { deepLinks.tryEmit(it) }
+        if (savedInstanceState == null) safeRouteFrom(intent)?.let { deepLinks.tryEmit(it) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        routeFrom(intent)?.let { deepLinks.tryEmit(it) }
+        safeRouteFrom(intent)?.let { deepLinks.tryEmit(it) }
+    }
+
+    /**
+     * The launcher activity is exported, so any app can aim any extras at it; on pre-33 devices
+     * reading them unparcels whatever it is handed, and a hostile or simply wrong bundle throws
+     * here rather than returning null. Treat it as "no route", exactly as the NFC trampoline does:
+     * a bad intent from someone else must not take the app down on the way up.
+     */
+    private fun safeRouteFrom(intent: Intent): Route? = try {
+        routeFrom(intent)
+    } catch (e: Exception) {
+        null
     }
 
     /**
