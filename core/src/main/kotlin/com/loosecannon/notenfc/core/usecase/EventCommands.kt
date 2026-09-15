@@ -160,7 +160,9 @@ internal suspend fun buildEvent(
 
     suspend fun consider(defId: DefinitionId, required: Boolean) {
         handled += defId
-        val definition = definitions.get(defId) ?: return
+        // A profile field whose definition no longer resolves can't be measured; a required one
+        // is still missing a value, so report it rather than silently dropping the field.
+        val definition = definitions.get(defId) ?: run { if (required) problems += FieldProblem.Required(defId); return }
         val raw = cmd.values[defId]?.trim()
         if (raw.isNullOrBlank()) {
             if (required) problems += FieldProblem.Required(defId)

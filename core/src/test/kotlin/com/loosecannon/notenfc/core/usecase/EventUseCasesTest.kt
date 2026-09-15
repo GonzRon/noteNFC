@@ -21,7 +21,7 @@ class EventUseCasesTest {
 
     private val apply = ApplyTemplate(defs, profiles, assets, uow, ids, clock)
     private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock)
-    private val updateEvent = UpdateEvent(events, defs, profiles, uow, clock)
+    private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock)
     private val deleteEvent = DeleteEvent(events, uow)
 
     private suspend fun asset(id: String, name: String): Asset =
@@ -166,6 +166,38 @@ class EventUseCasesTest {
         assertEquals(7.5, updatedPh.valueNum)
         assertEquals(1_000L, updated.createdAt)
         assertEquals(2_000L, updated.updatedAt)
+    }
+
+    @Test fun updateMintsIdsForNewChildrenFromTheInjectedGenerator() = runTest {
+        val assetId = seedHotTub()
+        val treatment = profileId(assetId, "Treatment")
+        val phId = defId(assetId, "ph")
+        val clId = defId(assetId, "free_chlorine")
+
+        val logged = logEvent.run(cmd(assetId, profileId = treatment, values = mapOf(phId to "7.4")))
+        assertEquals(1, logged.measurements.size)
+        val phMeasurementId = logged.measurements.single().id
+
+        val updated = updateEvent.run(
+            logged.id,
+            cmd(
+                assetId, profileId = treatment,
+                values = mapOf(phId to "7.4", clId to "1.0"),
+                consumables = listOf(ConsumableInput("Chlorine", "1", "oz")),
+            ),
+        )
+
+        val sequentialId = Regex("^id-\\d+$")
+        val updatedPh = updated.measurements.first { it.definitionId == phId }
+        val newCl = updated.measurements.first { it.definitionId == clId }
+        assertEquals(phMeasurementId, updatedPh.id)
+        assertTrue(sequentialId.matches(newCl.id), "expected an id from the injected generator, got ${newCl.id}")
+        assertNotEquals(phMeasurementId, newCl.id)
+        assertEquals(1, updated.consumables.size)
+        assertTrue(
+            sequentialId.matches(updated.consumables[0].id),
+            "expected an id from the injected generator, got ${updated.consumables[0].id}",
+        )
     }
 
     @Test fun updateUnknownEventFails() = runTest {

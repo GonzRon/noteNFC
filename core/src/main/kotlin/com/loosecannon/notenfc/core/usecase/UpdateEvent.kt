@@ -5,9 +5,9 @@ import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
+import com.loosecannon.notenfc.core.ports.IdGenerator
 import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
-import com.loosecannon.notenfc.core.ports.UuidGenerator
 
 /**
  * Edits an existing [AssetEvent] in place through the same validation path as [LogEvent]. An edit
@@ -17,15 +17,15 @@ import com.loosecannon.notenfc.core.ports.UuidGenerator
  * `createdAt`, `source` and `sourceRef` are carried over from the stored row; `updatedAt` is set
  * to now. One `uow.write`.
  *
- * No [com.loosecannon.notenfc.core.ports.IdGenerator] is injected here — an edit only ever needs
- * a fresh id for a measurement or consumable line that has no counterpart in the stored event,
- * which [buildEvent] covers with [UuidGenerator] directly.
+ * [ids] is only ever consulted for a measurement or consumable line that has no counterpart in
+ * the stored event — an edit that keeps a field keeps that field's id.
  */
 class UpdateEvent(
     private val events: EventRepository,
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
     private val uow: UnitOfWork,
+    private val ids: IdGenerator,
     private val clock: Clock,
 ) {
     suspend fun run(id: EventId, cmd: EventCommand): AssetEvent = uow.write {
@@ -36,7 +36,7 @@ class UpdateEvent(
             )
         }
         val profile = resolveOwnedProfile(cmd, definitions, profiles)
-        val event = buildEvent(cmd, definitions, profile, existing, UuidGenerator, clock.nowMillis())
+        val event = buildEvent(cmd, definitions, profile, existing, ids, clock.nowMillis())
         events.upsert(event)
         event
     }
