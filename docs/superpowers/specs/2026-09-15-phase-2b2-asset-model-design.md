@@ -51,6 +51,16 @@ data class Asset(
 val Asset.isRetired get() = retiredOn != null
 ```
 
+**Purchase price ↔ minor units.** `purchasePriceMinor` is an integer count of the currency's
+minor unit. Conversion has one owner, `core.model.Money`: `fractionDigits(code)` =
+`java.util.Currency.getInstance(code).defaultFractionDigits` (a code that does not resolve, or
+that reports a negative digit count, is `BadCurrency` whenever a price is present);
+`parse(text, code): Long?` accepts `"123.45"`, `"123"`, `"1,234.5"` (grouping stripped, `.`
+decimal), refuses more fractional digits than the currency has, and scales by `10^digits`;
+`format(minor, code)` renders with exactly that many digits and the ISO code (`123.45 USD`,
+`5000 JPY`). A price without a currency is a validation problem (`CurrencyRequired`); a currency
+without a price is allowed.
+
 `AssetStatus.RETIRED` is removed. No app version ever wrote it (there was no code path), so a
 backup carrying it is treated as any unknown enum name: `BackupCorrupt`.
 
@@ -155,6 +165,15 @@ decode. Validation: `parentAssetId` resolves in the file, `AssetTree.parentsFirs
 cycle), currency shape, season rules, dates parse. **Restore order:** import inserts assets in
 `parentsFirst` order regardless of the file's list order; a test imports a deliberately shuffled
 file (children listed before parents) and asserts success and identical ids.
+
+**Destructive full-replace deletion (single strategy).** With a RESTRICT self-FK, an unordered
+or repeated `DELETE … WHERE parent_asset_id IS NOT NULL` can meet a child while its grandchild
+still references it. Every full wipe of assets — the replace import, the debug Wipe, the test
+`clearInstall` — deletes rows **children-first** by walking `AssetTree.parentsFirst(all).asReversed()`
+and deleting each id individually inside the one transaction. The Room `AssetRepository.deleteAll`
+implements exactly that (the adapter reuses the core authority; no ad hoc SQL), and
+`ImportBackupReplace` relies on it. Proof: a three-level tree (root → child → grandchild) survives
+export → wipe → import, and `deleteAll` on that tree succeeds.
 
 ## 11. Deviations recorded
 
