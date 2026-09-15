@@ -131,7 +131,7 @@ default; Season — "Year-round" switch, else two month-day pickers), PURCHASE (
 In service date, Price + Currency [A-Z]{3} defaulted once from the device locale where Android
 resolves one, Vendor), WARRANTY (Expires on, Notes), NOTES, and on a new asset only, TEMPLATE
 (as today, with the hint rule). Dates via a date picker writing ISO strings. Problems under fields
-(`AssetValidation`: name required; currency shape; price ≥ 0; dates parse; season both-or-neither
+(`AssetValidation`: name required; currency resolvable through `java.util.Currency` when a price is present, else the three-letter shape, and a price without a currency refused; price ≥ 0 and within the currency's fraction digits; dates parse; season both-or-neither
 and valid; cycle → snackbar naming the parent).
 
 **Asset detail**: plate cells become CATEGORY / MODEL (manufacturer + model) / SERIAL / LOCATION /
@@ -162,7 +162,7 @@ and `nfc_tag`/`external_link`/journal tables keep referencing `asset` by name). 
 
 **Backup format 4.** `AssetDto` gains the fields with defaults; `FORMAT_VERSION = 4`; formats 1–3
 decode. Validation: `parentAssetId` resolves in the file, `AssetTree.parentsFirst` succeeds (no
-cycle), currency shape, season rules, dates parse. **Restore order:** import inserts assets in
+cycle), currency and price shape via `Money`, season rules, dates parse. **Restore order:** import inserts assets in
 `parentsFirst` order regardless of the file's list order; a test imports a deliberately shuffled
 file (children listed before parents) and asserts success and identical ids.
 
@@ -189,12 +189,13 @@ export → wipe → import, and `deleteAll` on that tree succeeds.
 **JVM `:core`.** `AssetTreeTest` (cycle via self, direct, transitive; pre-existing cycle
 detected; `parentsFirst` roots first with shuffled input; descendants), `SeasonTest` (ordinary,
 wrapping, one-day, boundaries inclusive, Feb 29 in leap and non-leap years, both-or-neither,
-bad dates), `AssetUseCasesTest` additions (update with parent; cycle refused; unknown parent;
+bad dates), `MoneyTest` (parse/format round trip for a 2-digit and a 0-digit currency; too many
+fraction digits refused; unresolvable code refused when a price is present), `AssetUseCasesTest` additions (update with parent; cycle refused; unknown parent;
 delete refused with children; retire/unretire; validation problems), `CategorySuggestionsTest`
 (catalog, hints), `BackupCodecTest` (format 3 decodes; format 4 round trip; parent unknown;
 cycle; shuffled import order), `BackupUseCasesTest` (shuffled file imports).
 **JVM `:app`.** `Migration3To4Test`, `Migration1To4Test`, `AssetDaoTest` (RESTRICT on parent),
-`RestoreProofTest` (tree survives), `AssetViewModelsTest` (form sections, hint rule incl.
+`RestoreProofTest` (a three-level tree survives export → wipe → import), `RoomRepositoriesTest` (`deleteAll` on root → child → grandchild succeeds children-first), `AssetViewModelsTest` (form sections, hint rule incl.
 "explicit template not overridden", picker excludes descendants, components with out-of-range
 counts, season badge from an injected today), `NavigationSmokeTest` updated (two tabs).
 **Instrumented (automated).** `AssetModelDeviceProofTest`: parent with two children → COMPONENTS
