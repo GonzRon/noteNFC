@@ -62,7 +62,10 @@ class AssetViewModelsTest {
         assertEquals(listOf("Pool pump"), vm.state.first { it.items.isNotEmpty() }.items.map(Asset::name))
 
         graph.archiveAsset.run(pump.id)
-        assertFalse(vm.state.first { it.items.isEmpty() }.showArchived)
+        val hidden = vm.state.first { it.items.isEmpty() }
+        assertFalse(hidden.showArchived)
+        // The empty list still knows why it is empty, so the screen can say so.
+        assertEquals(1, hidden.archivedCount)
 
         vm.toggleArchived()
         val shown = vm.state.first { it.items.isNotEmpty() }
@@ -90,17 +93,26 @@ class AssetViewModelsTest {
 
     @Test fun savingABlankNameFailsAndWritesNothing() = runTest {
         val vm = AssetEditViewModel(graph.assets, graph.createAsset, graph.updateAsset, null)
+        val saved = mutableListOf<AssetId>()
+        backgroundScope.launch { vm.saved.collect { saved += it } }
         vm.onName("   ")
         vm.onCategory("Water")
 
-        assertTrue(vm.save().isFailure)
+        vm.save()
+        vm.state.first { !it.saving }
         assertTrue(vm.state.value.nameError)
         assertTrue(graph.assets.all().isEmpty())
+        assertTrue(saved.isEmpty())
 
         vm.onName("Hot tub")
         assertFalse(vm.state.value.nameError)
-        val id = vm.save().getOrThrow()
-        assertEquals("Hot tub", graph.assets.get(id)!!.name)
+        vm.save()
+        // The second tap lands in the same frame as the first: the in-flight guard drops it, so
+        // one asset exists afterwards, not two.
+        vm.save()
+        vm.state.first { !it.saving }
+        assertEquals(listOf("Hot tub"), graph.assets.all().map(Asset::name))
+        assertEquals(graph.assets.all().single().id, saved.single())
     }
 
     @Test fun missingIsTrueForAnUnknownId() = runTest {

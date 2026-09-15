@@ -18,15 +18,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.ui.theme.ControlShape
-import kotlinx.coroutines.launch
 
 /**
  * Create ([assetId] null) or edit one asset: four outlined fields on the 6dp control corner
@@ -44,8 +43,9 @@ fun AssetEditScreen(
     val model: AssetEditViewModel =
         viewModel(key = assetId ?: "new") { AssetEditViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-    val save: () -> Unit = { scope.launch { model.save().onSuccess { id -> onDone(id.value) } } }
+
+    // The save itself belongs to the ViewModel; this only listens for where it says to go next.
+    LaunchedEffect(model) { model.saved.collect { id -> onDone(id.value) } }
 
     Scaffold(
         topBar = {
@@ -57,7 +57,7 @@ fun AssetEditScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = save, enabled = !state.saving) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = !state.saving) { Text("Save") }
                 },
             )
         },
@@ -108,7 +108,7 @@ fun AssetEditScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Button(
-                onClick = save,
+                onClick = model::save,
                 enabled = !state.saving,
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),

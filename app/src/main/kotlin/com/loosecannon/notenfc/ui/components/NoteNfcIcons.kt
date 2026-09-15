@@ -25,4 +25,5 @@ object NoteNfcIcons {
     val CloudOff: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_cloud_off)
     val DeleteForever: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_delete_forever)
     val Speed: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_speed)
+    val Backup: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_backup)
 }

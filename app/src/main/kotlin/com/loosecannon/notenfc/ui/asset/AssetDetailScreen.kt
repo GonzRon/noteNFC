@@ -15,7 +15,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -133,7 +132,7 @@ fun AssetDetailScreen(
                     ActionSpec("Write tag", NoteNfcIcons.NfcTag, outlined = true) { onWriteTag(assetId) },
                     ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) },
                     ActionSpec("Links", NoteNfcIcons.Description, outlined = false, onClick = onOpenLinks),
-                    ActionSpec("Backup", Icons.Outlined.Share, outlined = false, onClick = onBackup),
+                    ActionSpec("Backup", NoteNfcIcons.Backup, outlined = false, onClick = onBackup),
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )

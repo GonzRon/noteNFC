@@ -18,6 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -73,12 +74,29 @@ fun AssetsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             if (state.items.isEmpty()) {
+                // "Nothing here" and "nothing here because the chip is off" are different facts,
+                // and telling someone the first while the second is true is how they conclude
+                // their assets are gone. The offer to look is part of the sentence.
+                val onlyArchivedLeft = !state.showArchived && state.archivedCount > 0
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    QuietLine("No assets yet")
-                    Button(onClick = onNewAsset, shape = ControlShape) { Text("Add asset") }
+                    QuietLine(
+                        if (onlyArchivedLeft) {
+                            "No active assets · ${state.archivedCount} archived"
+                        } else {
+                            "No assets yet"
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onNewAsset, shape = ControlShape) { Text("Add asset") }
+                        if (onlyArchivedLeft) {
+                            OutlinedButton(onClick = model::toggleArchived, shape = ControlShape) {
+                                Text("Show archived")
+                            }
+                        }
+                    }
                 }
             } else {
                 LazyColumn {

@@ -15,9 +15,12 @@ import com.loosecannon.notenfc.core.usecase.AssetNameRequired
 import com.loosecannon.notenfc.core.usecase.CreateAsset
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.di.AppGraph
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -37,6 +40,8 @@ private const val SUBSCRIPTION_GRACE_MS = 5_000L
 data class AssetsState(
     val items: List<Asset> = emptyList(),
     val showArchived: Boolean = false,
+    /** How many rows the chip is hiding, so an empty list can say why it is empty. */
+    val archivedCount: Int = 0,
 )
 
 /**
@@ -54,6 +59,7 @@ class AssetsViewModel(assets: AssetRepository) : ViewModel() {
         AssetsState(
             items = if (archived) rows else rows.filter { it.status == AssetStatus.ACTIVE },
             showArchived = archived,
+            archivedCount = rows.count { it.status != AssetStatus.ACTIVE },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), AssetsState())
 
@@ -131,6 +137,13 @@ class AssetEditViewModel(
     private val _state = MutableStateFlow(AssetEditState(editing = id != null))
     val state: StateFlow<AssetEditState> = _state.asStateFlow()
 
+    /**
+     * One shot per successful save. A buffer of one and no replay: the screen that started the
+     * save is told where to go, and a screen that comes back later is not told again.
+     */
+    private val _saved = MutableSharedFlow<AssetId>(replay = 0, extraBufferCapacity = 1)
+    val saved: SharedFlow<AssetId> = _saved.asSharedFlow()
+
     init {
         if (id != null) {
             viewModelScope.launch {
@@ -153,21 +166,30 @@ class AssetEditViewModel(
     fun onNotes(value: String) = _state.update { it.copy(notes = value) }
 
     /**
-     * Saves, and says which asset the caller should now show. A failure leaves the form exactly as
-     * the user typed it; only [AssetNameRequired] marks the field, because any other failure is not
-     * something a different name would fix.
+     * Saves, and then names the asset the screen should show, once, on [saved]. A failure leaves
+     * the form exactly as the user typed it; only [AssetNameRequired] marks the field, because no
+     * other failure is something a different name would fix.
+     *
+     * The write runs in `viewModelScope`, not in the screen's composition scope: a rotation
+     * halfway through must not abandon it with `saving` stuck true. The guard is set before the
+     * first suspension, so two taps inside one frame create one asset, not two.
      */
-    suspend fun save(): Result<AssetId> {
-        val form = _state.value
+    fun save() {
+        if (_state.value.saving) return
         _state.update { it.copy(saving = true) }
-        val result = runCatching {
-            if (id == null) {
-                createAsset.run(form.name, form.category, form.description, form.notes).id
-            } else {
-                updateAsset.run(id, form.name, form.category, form.description, form.notes).id
+        viewModelScope.launch {
+            val form = _state.value
+            val result = runCatching {
+                if (id == null) {
+                    createAsset.run(form.name, form.category, form.description, form.notes).id
+                } else {
+                    updateAsset.run(id, form.name, form.category, form.description, form.notes).id
+                }
             }
+            _state.update {
+                it.copy(saving = false, nameError = result.exceptionOrNull() is AssetNameRequired)
+            }
+            result.getOrNull()?.let { _saved.tryEmit(it) }
         }
-        _state.update { it.copy(saving = false, nameError = result.exceptionOrNull() is AssetNameRequired) }
-        return result
     }
 }
