@@ -32,7 +32,7 @@ import com.loosecannon.notenfc.data.room.entities.ProfileFieldEntity
         MeasurementEntity::class,
         ConsumableUsageEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

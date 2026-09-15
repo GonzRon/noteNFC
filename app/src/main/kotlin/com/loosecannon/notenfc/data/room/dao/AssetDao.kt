@@ -39,6 +39,17 @@ interface AssetDao {
     @Query("DELETE FROM asset WHERE id = :id")
     suspend fun delete(id: String)
 
-    @Query("DELETE FROM asset")
-    suspend fun deleteAll()
+    /**
+     * Deletes the given ids, in the given order, in one transaction. There is deliberately no
+     * `DELETE FROM asset` on this DAO: since v4 `parent_asset_id` is a RESTRICT self-foreign-key,
+     * and an unordered bulk delete can meet a child while its own grandchild still references it.
+     * The order is the caller's to choose, and only one caller chooses it —
+     * `RoomAssetRepository.deleteAll`, which walks `AssetTree.parentsFirst(all).asReversed()`
+     * (spec §10). Row order inside a statement is not something SQLite promises, so the wipe is
+     * one statement per row rather than a single `DELETE ... WHERE id IN (...)`.
+     */
+    @Transaction
+    suspend fun deleteAllInOrder(ids: List<String>) {
+        for (id in ids) delete(id)
+    }
 }

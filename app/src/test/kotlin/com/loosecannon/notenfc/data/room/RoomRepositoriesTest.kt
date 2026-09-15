@@ -64,6 +64,63 @@ class RoomRepositoriesTest {
         }
     }
 
+    /**
+     * The children-first wipe (spec §10). With `parent_asset_id` RESTRICT, an unordered delete of
+     * a three-level tree meets the middle row while the leaf still points at it and is refused, so
+     * this is not a test of "does `deleteAll` work" but of the *order* it deletes in. Nothing here
+     * names that order: it comes out of `AssetTree.parentsFirst(...).asReversed()` inside the
+     * repository, which is the only place in the app that decides it.
+     */
+    @Test
+    fun deleteAllRemovesAThreeLevelTreeChildrenFirst() = runTest {
+        val db = inMemoryDb()
+        try {
+            val repo = RoomAssetRepository(db.assetDao())
+            // Inserted parents-first, because the foreign key has to resolve on the way in too.
+            repo.upsert(asset("a-root", "Tractor"))
+            repo.upsert(asset("a-child", "Mower deck").copy(parentAssetId = AssetId("a-root")))
+            repo.upsert(asset("a-grand", "Blade").copy(parentAssetId = AssetId("a-child")))
+            assertEquals(3, repo.all().size)
+
+            repo.deleteAll()
+
+            assertEquals(emptyList<Asset>(), repo.all())
+        } finally {
+            db.close()
+        }
+    }
+
+    /** The whole v4 asset record — every new column — out to the table and back unchanged. */
+    @Test
+    fun theFullAssetRecordRoundTripsThroughTheMappers() = runTest {
+        val db = inMemoryDb()
+        try {
+            val repo = RoomAssetRepository(db.assetDao())
+            repo.upsert(asset("a-root", "Tractor"))
+            val full = asset("a-full", "Mower deck").copy(
+                manufacturer = "John Deere",
+                model = "48C",
+                serialNumber = "SN-0001",
+                purchaseOn = "2024-04-01",
+                inServiceOn = "2024-04-08",
+                purchasePriceMinor = 129_999L,
+                currency = "USD",
+                vendor = "Green Acres",
+                location = "barn, second bay",
+                warrantyExpiresOn = "2026-04-01",
+                warrantyNotes = "receipt in the folder",
+                retiredOn = "2026-09-01",
+                parentAssetId = AssetId("a-root"),
+                seasonStartMmdd = "04-15",
+                seasonEndMmdd = "10-31",
+            )
+            repo.upsert(full)
+            assertEquals(full, repo.get(AssetId("a-full")))
+        } finally {
+            db.close()
+        }
+    }
+
     @Test
     fun tagWithAssetTargetRoundTrips() = runTest {
         val db = inMemoryDb()

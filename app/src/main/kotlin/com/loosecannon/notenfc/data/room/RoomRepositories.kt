@@ -4,6 +4,7 @@ import androidx.room3.withReadTransaction
 import androidx.room3.withWriteTransaction
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
+import com.loosecannon.notenfc.core.model.AssetTree
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.LinkId
 import com.loosecannon.notenfc.core.model.PayloadFormat
@@ -36,7 +37,24 @@ class RoomAssetRepository(private val dao: AssetDao) : AssetRepository {
     override suspend fun get(id: AssetId): Asset? = dao.byId(id.value)?.toDomain()
     override suspend fun all(): List<Asset> = dao.all().map { it.toDomain() }
     override suspend fun delete(id: AssetId) = dao.delete(id.value)
-    override suspend fun deleteAll() = dao.deleteAll()
+
+    /**
+     * The single wipe strategy (spec §10). `parent_asset_id` is a RESTRICT self-foreign-key, so a
+     * wipe has to delete children before their parents; the order comes from the core authority —
+     * `parentsFirst` reversed *is* children-first — rather than from ad hoc SQL that would have to
+     * re-derive the hierarchy in a `WHERE` clause and would still not control row order within a
+     * statement. Every full wipe lands here: the replace import, the debug Wipe, the
+     * instrumentation's `clearInstall`.
+     *
+     * `deleteAllInOrder` is a `@Transaction` DAO method, so the deletes commit or roll back
+     * together even if a caller opens no transaction of its own; the callers that exist today all
+     * run inside `UnitOfWork.write`, and Room nests that.
+     */
+    override suspend fun deleteAll() {
+        val childrenFirst = AssetTree.parentsFirst(dao.all().map { it.toDomain() }).asReversed()
+        dao.deleteAllInOrder(childrenFirst.map { it.id.value })
+    }
+
     override fun observeAll(): Flow<List<Asset>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
 }
 

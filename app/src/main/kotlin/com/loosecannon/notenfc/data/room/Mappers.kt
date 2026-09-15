@@ -18,6 +18,9 @@ import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
 // Enums are stored as TEXT holding the Kotlin enum name (D4 conventions); `valueOf` rejects
 // anything else at the repository boundary.
 
+// `status` goes through `AssetStatus.valueOf`, and v4 knows only ACTIVE and ARCHIVED: RETIRED is
+// gone from the enum, `MIGRATION_3_4` rewrote any stored one, and retirement is `retired_on` now
+// (spec §7). Anything else in the column is a corrupt row and throws, as it always did.
 fun AssetEntity.toDomain(): Asset = Asset(
     id = AssetId(id),
     name = name,
@@ -28,6 +31,21 @@ fun AssetEntity.toDomain(): Asset = Asset(
     templateKey = templateKey,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    manufacturer = manufacturer,
+    model = model,
+    serialNumber = serialNumber,
+    purchaseOn = purchaseOn,
+    inServiceOn = inServiceOn,
+    purchasePriceMinor = purchasePriceMinor,
+    currency = currency,
+    vendor = vendor,
+    location = location,
+    warrantyExpiresOn = warrantyExpiresOn,
+    warrantyNotes = warrantyNotes,
+    retiredOn = retiredOn,
+    parentAssetId = parentAssetId?.let(::AssetId),
+    seasonStartMmdd = seasonStartMmdd,
+    seasonEndMmdd = seasonEndMmdd,
 )
 
 fun Asset.toEntity(): AssetEntity = AssetEntity(
@@ -40,6 +58,21 @@ fun Asset.toEntity(): AssetEntity = AssetEntity(
     templateKey = templateKey,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    manufacturer = manufacturer,
+    model = model,
+    serialNumber = serialNumber,
+    purchaseOn = purchaseOn,
+    inServiceOn = inServiceOn,
+    purchasePriceMinor = purchasePriceMinor,
+    currency = currency,
+    vendor = vendor,
+    location = location,
+    warrantyExpiresOn = warrantyExpiresOn,
+    warrantyNotes = warrantyNotes,
+    retiredOn = retiredOn,
+    parentAssetId = parentAssetId?.value,
+    seasonStartMmdd = seasonStartMmdd,
+    seasonEndMmdd = seasonEndMmdd,
 )
 
 fun NfcTagEntity.toDomain(): TagBinding = TagBinding(
