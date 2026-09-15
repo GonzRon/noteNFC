@@ -149,7 +149,7 @@ class BackupUseCasesTest {
     private suspend fun populate(f: Fakes) {
         f.assets.upsert(asset("a1", "Furnace"))
         f.assets.upsert(asset("a2", "Mower", AssetStatus.ARCHIVED))
-        f.assets.upsert(asset("a3", "Heater", AssetStatus.RETIRED))
+        f.assets.upsert(asset("a3", "Heater", AssetStatus.ARCHIVED))
         f.links.upsert(link("l1", "a1"))
         f.links.upsert(link("l2", "a2"))
         f.links.upsert(link("l3", null))

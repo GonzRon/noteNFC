@@ -147,9 +147,8 @@ private fun AssetRow(asset: Asset, onClick: () -> Unit) {
     }
 }
 
-/** An active asset says nothing; the other two say what they are, in the neutral family. */
+/** An active asset says nothing; the other says what it is, in the neutral family. */
 internal fun statusLabel(status: AssetStatus): String? = when (status) {
     AssetStatus.ACTIVE -> null
     AssetStatus.ARCHIVED -> "Archived"
-    AssetStatus.RETIRED -> "Retired"
 }

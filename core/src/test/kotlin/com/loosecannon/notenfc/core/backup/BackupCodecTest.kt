@@ -21,7 +21,7 @@ class BackupCodecTest {
         assets = listOf(
             AssetDto("a1", "Furnace", "basement unit", "hvac", "filter 16x25", "ACTIVE", 100L, 200L),
             AssetDto("a2", "Mower", "", "yard", "", "ARCHIVED", 101L, 201L),
-            AssetDto("a3", "Water heater", "40 gal", "plumbing", "", "RETIRED", 102L, 202L),
+            AssetDto("a3", "Water heater", "40 gal", "plumbing", "", "ACTIVE", 102L, 202L),
         ),
         nfcTags = listOf(
             // bound to an asset, legacy payload
@@ -657,7 +657,7 @@ class BackupCodecTest {
                 description = if (rng.nextBoolean()) "" else rng.word(),
                 category = rng.word(),
                 notes = if (rng.nextBoolean()) "" else rng.word(),
-                status = rng.pick(listOf("ACTIVE", "ARCHIVED", "RETIRED")),
+                status = rng.pick(listOf("ACTIVE", "ARCHIVED")),
                 createdAt = rng.nextLong(0, 2_000_000_000_000L),
                 updatedAt = rng.nextLong(0, 2_000_000_000_000L),
             )
