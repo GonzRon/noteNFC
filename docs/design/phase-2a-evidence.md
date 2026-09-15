@@ -10,17 +10,20 @@ What it deliberately does not contain is the editor for any of that — 2B — o
 knows what a hot tub is.
 
 **Read the status first (§5).** The JVM suites and the instrumented suite ran green on the
-owner's Android 17 phone on 2026-09-15; the manual device checklist rows 3–13 are still pending
-the owner, because they need a physical tag and a person's hands.
+owner's Android 17 phone on 2026-09-15. The device checklist's UI rows (§4 rows 3–11) are no
+longer manual: they are `JournalDeviceProofTest`, which drives them through the real screens on
+the phone. Row 12 was run by the controller with `adb`. Row 13 needs a physical tag and was not
+run. One checklist expectation is **not** met and stays open: row 9's quick action reads "Log tDS
+test" (§4 row 9, §5, §7).
 
 ## 1. Exit criteria (spec §12, from D7 Phase 2 as they apply to 2A) → evidence
 
 | # | Criterion | Evidence | Status |
 |---|---|---|---|
-| 1 | The hot-tub acceptance from issue #13.1 reproduced on device — configure the metrics, log a water test, see the history — with "configure the metrics" satisfied by the seed in 2A and by the editor in 2B | `SeedTemplates.hotTub` gives five definitions (pH, free chlorine, alkalinity, calcium hardness, water temperature) and two profiles (Water test, Treatment) with the chlorine/pH-reducer consumables; `ApplyTemplate` instantiates them with fresh ids on `CreateAsset(templateKey = …)` or from the asset screen's **Set up from template**; `LogEvent` validates and stores the reading set; `LatestReadings` + `RangeState` drive CURRENT READINGS; `AssetDetailScreen`'s SERVICE RECORD lists the event. JVM: `SeedTemplatesTest` (6), `ApplyTemplateTest` (5), `EventUseCasesTest` (13), `LatestReadingsTest` (5), `RangeStateTest` (5), `AssetViewModelsTest` (9), `EventEntryViewModelTest` (9). **Device: instrumented `JournalSmokeTest` on the phone** — seed a hot tub from the template, open "Log water test", type pH 7.9 and free chlorine 2.0, watch the row say HIGH while typing, save, and find "Water test" in SERVICE RECORD with 7.9 · HIGH in CURRENT READINGS (§3, §4 row 2) | **PROVEN** on the phone by the instrumented path; the fuller manual walk-through is §4 rows 3–6, pending the owner |
-| 2 | A mower oil-change event with engine hours stored as a meter reading (its effect on a schedule is Phase 3) | `SeedTemplates.powerEquipment` carries one definition, `engine_hours` (`isMeter = true`, unit `h`, 1 decimal, no range), and an Oil change profile requiring it with Engine oil (qt) and Oil filter (pcs) as suggested consumables. The meter reading is an ordinary `Measurement` on the event — there is no meter table and no meter column — and the current value is derived in `:core` by `LatestReadings` from the event list (spec §11). `RangeState.NO_TARGET` is what a range-less definition reports, so the row renders NO TARGET SET rather than inventing a judgement. JVM: `SeedTemplatesTest`, `LatestReadingsTest`, `EventUseCasesTest` | **IMPLEMENTED and JVM-proven**; device row 8 pending the owner |
-| 3 | An exported backup re-imports with identical table counts | Backup format 2 adds the seven journal tables to the manifest and the payload; format 1 still decodes (an old backup restores into a v2 store with an empty journal); the codec validates referentially before it writes anything, and rejects the four bad value shapes. `ImportBackupReplace` writes in dependency order inside one `UnitOfWork` and reports per-table counts, keeping `formatVersion` on the report. JVM: `BackupCodecTest` (33), `BackupUseCasesTest` (12), `:app` `RestoreProofTest` (3) — which round-trips all **seven** tables through real Room and asserts every id survives | **PROVEN on the JVM through real Room**; the through-the-UI export → wipe → import is §4 row 10, pending the owner |
-| 4 | No hot-tub-, UPS-, RO- or mower-specific table or code path exists | Schema v2 adds `measurement_definition`, `event_profile`, `profile_field`, `profile_consumable`, `asset_event`, `measurement`, `consumable_usage` — seven generic tables, ten in all with `asset`, `nfc_tag`, `external_link`. Nothing in the UI branches on a template: the quick actions are `profiles.map { quickActionLabel(it) }`, the entry form is built from `ValueType` alone, and the template picker iterates `SeedTemplates.all`. The grep in §9 finds the five template keys **only** in `SeedTemplates.kt` | **PROVEN** — §9 grep; device row 12 (`.tables` on the phone) pending the owner |
+| 1 | The hot-tub acceptance from issue #13.1 reproduced on device — configure the metrics, log a water test, see the history — with "configure the metrics" satisfied by the seed in 2A and by the editor in 2B | `SeedTemplates.hotTub` gives five definitions (pH, free chlorine, alkalinity, calcium hardness, water temperature) and two profiles (Water test, Treatment) with the chlorine/pH-reducer consumables; `ApplyTemplate` instantiates them with fresh ids on `CreateAsset(templateKey = …)` or from the asset screen's **Set up from template**; `LogEvent` validates and stores the reading set; `LatestReadings` + `RangeState` drive CURRENT READINGS; `AssetDetailScreen`'s SERVICE RECORD lists the event. JVM: `SeedTemplatesTest` (6), `ApplyTemplateTest` (5), `EventUseCasesTest` (13), `LatestReadingsTest` (5), `RangeStateTest` (5), `AssetViewModelsTest` (9), `EventEntryViewModelTest` (9). **Device: instrumented `JournalSmokeTest` on the phone** — seed a hot tub from the template, open "Log water test", type pH 7.9 and free chlorine 2.0, watch the row say HIGH while typing, save, and find "Water test" in SERVICE RECORD with 7.9 · HIGH in CURRENT READINGS (§3, §4 row 2) | **PROVEN** on the phone, and now by the walk-through as well: `JournalDeviceProofTest` drives §4 rows 3–6 through the real screens — five empty readings, a five-reading water test with two materials from the profile's own suggestion chips, an edit that corrects a reading in place, and a backdated entry that files below without becoming the current value |
+| 2 | A mower oil-change event with engine hours stored as a meter reading (its effect on a schedule is Phase 3) | `SeedTemplates.powerEquipment` carries one definition, `engine_hours` (`isMeter = true`, unit `h`, 1 decimal, no range), and an Oil change profile requiring it with Engine oil (qt) and Oil filter (pcs) as suggested consumables. The meter reading is an ordinary `Measurement` on the event — there is no meter table and no meter column — and the current value is derived in `:core` by `LatestReadings` from the event list (spec §11). `RangeState.NO_TARGET` is what a range-less definition reports, so the row renders NO TARGET SET rather than inventing a judgement. JVM: `SeedTemplatesTest`, `LatestReadingsTest`, `EventUseCasesTest` | **IMPLEMENTED, JVM-proven and device-proven**: §4 row 8 is `JournalDeviceProofTest.mowerOilChangeRecordsTheMeterAndBothMaterials` — engine hours 138.5 logged on the phone with Engine oil 1.5 qt and Oil filter 1 pcs, the meter row rendering NO TARGET SET rather than a judgement |
+| 3 | An exported backup re-imports with identical table counts | Backup format 2 adds the seven journal tables to the manifest and the payload; format 1 still decodes (an old backup restores into a v2 store with an empty journal); the codec validates referentially before it writes anything, and rejects the four bad value shapes. `ImportBackupReplace` writes in dependency order inside one `UnitOfWork` and reports per-table counts, keeping `formatVersion` on the report. JVM: `BackupCodecTest` (33), `BackupUseCasesTest` (12), `:app` `RestoreProofTest` (3) — which round-trips all **seven** tables through real Room and asserts every id survives | **PROVEN on the JVM and on the phone**: §4 row 10 is `JournalDeviceProofTest.backupRoundTripKeepsEveryCountAndTheAssetRendersAgain` — export, wipe and import run in-process against the device's own Room store, all **ten** table counts equal before and after, and the asset screen drawing its readings again from the imported rows |
+| 4 | No hot-tub-, UPS-, RO- or mower-specific table or code path exists | Schema v2 adds `measurement_definition`, `event_profile`, `profile_field`, `profile_consumable`, `asset_event`, `measurement`, `consumable_usage` — seven generic tables, ten in all with `asset`, `nfc_tag`, `external_link`. Nothing in the UI branches on a template: the quick actions are `profiles.map { quickActionLabel(it) }`, the entry form is built from `ValueType` alone, and the template picker iterates `SeedTemplates.all`. The grep in §9 finds the five template keys **only** in `SeedTemplates.kt` | **PROVEN** — §9 grep, and §4 row 12 read off the phone's own database: exactly the ten app tables, `user_version` 2, and nothing named after an asset kind |
 
 ## 2. What shipped (by commit)
 
@@ -52,8 +55,13 @@ the owner, because they need a physical tag and a person's hands.
   event detail with edit and delete.
 - `bb62b54` — carry an edited event's stray measurements onto the form. A measurement whose
   definition is no longer on the profile is preserved through an edit instead of being dropped.
-- (this commit) — phase 2a evidence, journal smoke test, versionCode 3. `JournalSmokeTest`, this
+- `69ddfae` — phase 2a evidence, journal smoke test, versionCode 3. `JournalSmokeTest`, this
   document, the index row, the root README feature line, the spec §8 amendment.
+- (this commit) — `JournalDeviceProofTest`: the device checklist's UI rows as one instrumented
+  suite. Eight tests, one per checklist row group, each cold-starting the asset it needs through
+  its `notenfc://asset/<id>` deep link and asserting that row's Expected column on screen.
+  Test-only; no production file changed, which is why row 9's finding is reported rather than
+  fixed (§4, §7).
 
 ## 3. Tests
 
@@ -104,44 +112,80 @@ Totals: **`:core` 172, `:app` 88** — 0 failures, 0 skipped (§9). 1C finished 
 
 ### Instrumented (`./gradlew :app:connectedDebugAndroidTest`)
 
-Run on the owner's Android 17 phone, 2026-09-15. **14 tests, 0 failures, 0 skipped.**
+Run on the owner's Android 17 phone, 2026-09-15. **22 tests, 0 failures, 0 skipped**, green twice
+in a row.
 
 ```
-ui.AppSmokeTest             assetCanBeCreatedFromTheDashboardAndOpens     2.274s  pass
-ui.AppSmokeTest             backupScreenRenders                           1.333s  pass
-ui.AppSmokeTest             bottomBarReachesScanAndShowsReadyToScan       2.407s  pass
+ui.AppSmokeTest             assetCanBeCreatedFromTheDashboardAndOpens     2.225s  pass
+ui.AppSmokeTest             backupScreenRenders                           1.383s  pass
+ui.AppSmokeTest             bottomBarReachesScanAndShowsReadyToScan       2.458s  pass
 ui.AppSmokeTest             dashboardShowsTheBackupNudgeOnAFreshInstall   1.121s  pass
-ui.AppSmokeTest             secondNewAssetFormStartsBlank                 3.186s  pass
-ui.DeepLinkSmokeTest        malformedDeepLinkLandsOnDashboard             0.981s  pass
-ui.JournalSmokeTest         hotTubWaterTestShowsInRecordAndReadings       3.307s  pass
-ui.ShareActivitySmokeTest   sharedWebLinkShowsTheCard                     0.891s  pass
-ui.components.ComponentsSmokeTest  identityPlateShowsDashForBlankValues   0.812s  pass
-ui.components.ComponentsSmokeTest  ledgerEntryShowsItsDateAndTitle        0.784s  pass
-ui.components.ComponentsSmokeTest  sectionHeaderShowsItsTitle             0.762s  pass
-ui.components.ComponentsSmokeTest  statusBadgeExposesItsLabelToAccessibility 0.764s pass
-ui.nav.NavigationSmokeTest  bottomBarSwitchesToScan                       1.311s  pass
-ui.nav.NavigationSmokeTest  dashboardIsTheStartDestination                0.938s  pass
+ui.AppSmokeTest             secondNewAssetFormStartsBlank                 3.124s  pass
+ui.DeepLinkSmokeTest        malformedDeepLinkLandsOnDashboard             1.038s  pass
+ui.JournalDeviceProofTest   hotTubTemplateSeedsReadingsThenAWaterTestFillsThem      9.037s  pass
+ui.JournalDeviceProofTest   editingTheWaterTestCorrectsItInPlace                    5.338s  pass
+ui.JournalDeviceProofTest   aBackdatedTestSitsBelowAndLeavesTheCurrentReadingAlone  5.394s  pass
+ui.JournalDeviceProofTest   upsLoadTestShowsNoTargetsAndPassedYes                   4.133s  pass
+ui.JournalDeviceProofTest   mowerOilChangeRecordsTheMeterAndBothMaterials           4.373s  pass
+ui.JournalDeviceProofTest   anAssetWithNoTemplateCanBeSetUpLater                    1.743s  pass
+ui.JournalDeviceProofTest   backupRoundTripKeepsEveryCountAndTheAssetRendersAgain   4.727s  pass
+ui.JournalDeviceProofTest   deletingTodaysTestFallsBackToTheOlderReading            6.523s  pass
+ui.JournalSmokeTest         hotTubWaterTestShowsInRecordAndReadings       3.345s  pass
+ui.ShareActivitySmokeTest   sharedWebLinkShowsTheCard                     0.819s  pass
+ui.components.ComponentsSmokeTest  identityPlateShowsDashForBlankValues   0.801s  pass
+ui.components.ComponentsSmokeTest  ledgerEntryShowsItsDateAndTitle        0.796s  pass
+ui.components.ComponentsSmokeTest  sectionHeaderShowsItsTitle             0.772s  pass
+ui.components.ComponentsSmokeTest  statusBadgeExposesItsLabelToAccessibility 0.762s pass
+ui.nav.NavigationSmokeTest  bottomBarSwitchesToScan                       1.276s  pass
+ui.nav.NavigationSmokeTest  dashboardIsTheStartDestination                0.953s  pass
 ```
 
-The thirteen from 1C are unchanged; `JournalSmokeTest` is 2A's one addition and it is the whole
+The thirteen from 1C are unchanged. `JournalSmokeTest` is 2A's first addition and is the whole
 vertical slice in one test: seed a hot tub from the template, open the asset through its
 `notenfc://asset/<id>` deep link, tap **Log water test**, confirm the entry screen names itself
 `WATER TEST · SPA`, type into `value-ph` and `value-free_chlorine`, assert the live **HIGH** on
 pH 7.9 against the template's 7.2–7.8, save from the app bar, and back on the asset assert 7.9,
 the HIGH badge and the "Water test" row under SERVICE RECORD.
 
-Two corrections were needed to make it pass, both test-only and both recorded here rather than
-silently fixed:
+`JournalDeviceProofTest` is the second, and it is the device checklist's UI rows (§4 rows 3–11)
+turned into eight tests — one per row group, each cold-starting the asset it needs through the
+same deep link and asserting that row's Expected column on the screen. The mapping is in §4; what
+is worth stating here is what the suite is careful **not** to claim:
+
+- **A reading and its badge are tied together by counting, not by adjacency.** `InstrumentRow`
+  lays the label, the value and the status badge out in a plain `Row` with no semantics of its
+  own, so the merged semantics tree has no node that owns all three and no assertion can say
+  "*this* value carries *that* badge". On the entry form the live badge is attributed by
+  arithmetic — after a value goes in, exactly one more row says HIGH (or LOW, IN RANGE,
+  NO TARGET SET) than said it before — and on the asset screen the test pins the exact multiset
+  of state words alongside each formatted value. Which definition earns which state is pinned by
+  `RangeStateTest` and `LatestReadingsTest` on the JVM.
+- **The asset itself is created in-process.** Every row under test begins on the asset screen, and
+  the new-asset form is already covered by `AppSmokeTest`; the events, the edits, the backdating,
+  the template pick and the delete are all driven through the real screens.
+- **Row 10's export and import are called in-process.** The UI half of the backup screen is a SAF
+  document picker, which belongs to the system rather than to the app. What runs on the phone is
+  the round trip against the device's own Room store.
+
+Corrections made while getting the two suites green, recorded here rather than silently fixed:
 
 - The 1C helpers `app`, `clearInstall()` and `awaitText()` were file-private top-level
   declarations in `AppSmokeTest.kt`, so a second file in the same package could not see them.
   They are `internal` now; nothing else changed in `AppSmokeTest.kt`. `clearInstall()` already
   emptied the journal tables (events → profiles → definitions, before the three 1C `deleteAll`s)
   from Task 5, so the destructive `@Before` needed no change.
-- The first run failed on `onNodeWithText("Water test").assertIsDisplayed()`: the node existed but
-  sat below the fold. The asset screen is one `verticalScroll` `Column`, so the assertions now
-  `performScrollTo()` — readings first, since they are above the record — and the failure was a
-  real statement about the screen, not a flake.
+- `JournalSmokeTest`'s first run failed on `onNodeWithText("Water test").assertIsDisplayed()`: the
+  node existed but sat below the fold. The asset screen is one `verticalScroll` `Column`, so the
+  assertions now `performScrollTo()` — readings first, since they are above the record — and the
+  failure was a real statement about the screen, not a flake.
+- `JournalDeviceProofTest`'s first run was 4/8. Two causes, both in the test. A focused
+  `OutlinedTextField` publishes `ScrollBy` of its own, so "the screen's scrollable" matched two
+  nodes the moment a field had focus; the helper now asks for the scrollable that is *not* a text
+  field. And the live-badge assertion used `onNodeWithText`, which is ambiguous the moment a
+  second row says the same word — hence the counting rule above.
+- The third run aborted after five tests with an empty failure record. A second device (an
+  emulator) had come online mid-run; the run was repeated pinned to the phone and the class went
+  8/8, then the whole suite went 22/22 twice. The aborted run is reported rather than dropped.
 
 ## 4. Device checklist (the owner's Android 17 phone)
 
@@ -153,31 +197,52 @@ below it, because Android 17 delivers no NFC intent to a package in the *stopped
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 1 | `adb install -r` the 2A debug build; launch once | Dashboard; existing assets still there (migration ran); no crash | **PASS** 2026-09-15: after row 2's uninstall, `adb install -r app/build/outputs/apk/debug/app-debug.apk` → `Success`; launched through the launcher intent; `dumpsys package` reports `versionCode=3 versionName=2.1 stopped=false notLaunched=false` and `MainActivity` is the resumed activity; crash buffer `FATAL EXCEPTION` count 0. **Caveat, stated plainly:** this install is a *fresh* one, so it does not itself exercise the v1 → v2 migration. The 2A build was installed over the 1C install earlier in the branch (Task 7's smoke check, which left a hot-tub asset on the phone) and opened without loss; the migration itself is JVM-proven by `Migration1To2Test` over `BundledSQLiteDriver`, and the over-the-top install proof should be taken again from a real 1C build when the owner runs rows 3–13 |
-| 2 | `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `svc power stayon false`; then **reinstall and launch** (the task uninstalls the app) | All instrumented tests pass (13 from 1C + `JournalSmokeTest`) | **PASS** 2026-09-15: **14/14**, 0 failures, 0 skipped — per-test lines in §3. The first run was 13/14 (`JournalSmokeTest` asserted a node below the fold); the fix was in the test, the re-run was clean. Reinstall and launch done, see row 1 |
-| 3 | New asset "Hot tub", template Hot tub → asset screen | CURRENT READINGS shows five rows with "—"; actions "Log water test", "Log treatment" first | **pending the owner** |
-| 4 | Log water test: pH 7.9, FC 0.8, alkalinity 110, calcium 200, temp 102; materials: Chlorine 1 oz, pH reducer 0.5 oz; Save | Live badges HIGH / LOW / IN RANGE / IN RANGE / NO TARGET SET while typing; back on the asset, readings show the same states; SERVICE RECORD shows "Water test" with "pH 7.9 · Free chlorine 0.8 ppm · Alkalinity 110 ppm" and a HIGH badge | **pending the owner** |
-| 5 | Open the event → Edit → pH 7.5 → Save | Current readings pH 7.5 IN RANGE; the record line updated; same event, not a second one | **pending the owner** |
-| 6 | Log water test dated a week earlier with pH 7.0; Save | SERVICE RECORD lists it **below** today's; current readings still 7.5 | **pending the owner** |
-| 7 | New asset "UPS", template UPS → Log load test: voltage 12.7, load 38, runtime 42, Passed = Yes; Save | Readings show the three numbers with NO TARGET SET and "Passed · Yes"; record line "Battery voltage 12.7 V · Load 38 % · Runtime 42 min" | **pending the owner** |
-| 8 | New asset "Mower", template Power equipment → Log oil change: engine hours 138.5, Engine oil 1.5 qt, Oil filter 1 pcs; Save | Readings show Engine hours 138.5 h NO TARGET SET; record line shows the reading; opening the event lists both materials | **pending the owner** |
-| 9 | Existing 1C asset (no template) and a new asset saved with Template = None → "Set up from template" → RO water | Three TDS rows appear with "—"; "Log TDS test" action appears; doing it again is not offered | **pending the owner** |
-| 10 | Backup → Export; Debug → Wipe; Backup → Import (REPLACE) | Dashboard, assets, readings and records identical; the manifest counts in the file match `sqlite3` counts of the seven tables | **pending the owner** |
-| 11 | Open the hot tub → delete today's water test | Current readings fall back to the week-old pH 7.0 (LOW) | **pending the owner** |
-| 12 | `adb shell run-as com.loosecannon.notenfc sqlite3 databases/notenfc.db ".tables"` | Exactly the ten tables: `asset`, `nfc_tag`, `external_link` + the seven journal tables; nothing named after a hot tub, UPS, RO or mower | **pending the owner** (the static half is proven: the §9 grep finds no template key outside `SeedTemplates.kt`, and `2.json` declares exactly those ten tables) |
-| 13 | Scan the bound tag (from 1C) → asset opens → Log … | The scan path is unchanged and the quick action is one tap away | **pending the owner** — needs a physical tag |
+| 1 | `adb install -r` the 2A debug build; launch once | Dashboard; existing assets still there (migration ran); no crash | **PASS** 2026-09-15: after row 2's uninstall, `adb install -r app/build/outputs/apk/debug/app-debug.apk` → `Success`; launched through the launcher intent; `dumpsys package` reports `versionCode=3 versionName=2.1 stopped=false notLaunched=false` and `MainActivity` is the resumed activity; crash buffer `FATAL EXCEPTION` count 0. **Caveat, stated plainly:** this install is a *fresh* one, so it does not itself exercise the v1 → v2 migration. The 2A build was installed over the 1C install earlier in the branch (Task 7's smoke check, which left a hot-tub asset on the phone) and opened without loss; the migration itself is JVM-proven by `Migration1To2Test` over `BundledSQLiteDriver`. **Migration device-proven by the controller:** a 1C build (versionCode 2) with one asset and one written tag, then the 2A build installed over it — `user_version` 1→2, asset and tag intact, `template_key` NULL, seven tables, 18 indexes, no crash |
+| 2 | `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `svc power stayon false`; then **reinstall and launch** (the task uninstalls the app) | All instrumented tests pass (13 from 1C + `JournalSmokeTest` + the eight of `JournalDeviceProofTest`) | **PASS** 2026-09-15: **22/22**, 0 failures, 0 skipped, green on two consecutive runs — per-test lines in §3, along with every earlier run and what it found. Reinstall and launch done, see row 1 |
+| 3 | New asset "Hot tub", template Hot tub → asset screen | CURRENT READINGS shows five rows with "—"; actions "Log water test", "Log treatment" first | **PASS** (automated: `JournalDeviceProofTest.hotTubTemplateSeedsReadingsThenAWaterTestFillsThem`, run on the owner's Android 17 phone 2026-09-15). The five labels are on screen, "—" appears eight times (the five empty readings plus the plate's three blank cells), and both quick actions are present |
+| 4 | Log water test: pH 7.9, FC 0.8, alkalinity 110, calcium 200, temp 102; materials: Chlorine 1 oz, pH reducer 0.5 oz; Save | Live badges HIGH / LOW / IN RANGE / IN RANGE / NO TARGET SET while typing; back on the asset, readings show the same states; SERVICE RECORD shows "Water test" with "pH 7.9 · Free chlorine 0.8 ppm · Alkalinity 110 ppm" and a HIGH badge | **PASS** (automated: `JournalDeviceProofTest.hotTubTemplateSeedsReadingsThenAWaterTestFillsThem`, run on the owner's Android 17 phone 2026-09-15). The two materials are added from the profile's own suggestion chips, which bring the unit with them; the quantity field carries no test tag, so it is found as the field immediately after the one the chip filled. Each live badge is attributed by the counting rule of §3, and back on the asset the test pins the five formatted values and the exact multiset HIGH ×2 (reading + ledger), LOW ×1, IN RANGE ×2, NO TARGET SET ×1, plus the ledger line verbatim |
+| 5 | Open the event → Edit → pH 7.5 → Save | Current readings pH 7.5 IN RANGE; the record line updated; same event, not a second one | **PASS** (automated: `JournalDeviceProofTest.editingTheWaterTestCorrectsItInPlace`, run on the owner's Android 17 phone 2026-09-15). Opened from the ledger row, edited through the overflow's **Edit**, saved from the app bar; back on the asset 7.5 is on screen, 7.9 is gone, IN RANGE ×2 with no HIGH, and "Water test" appears exactly once |
+| 6 | Log water test dated a week earlier with pH 7.0; Save | SERVICE RECORD lists it **below** today's; current readings still 7.5 | **PASS** (automated: `JournalDeviceProofTest.aBackdatedTestSitsBelowAndLeavesTheCurrentReadingAlone`, run on the owner's Android 17 phone 2026-09-15). The date **is** driven through the UI — the form's Date field is an ordinary text field holding today until it is replaced — so nothing here was done in-process. "Below" is read off the two ledger rows' laid-out `positionInRoot`, not inferred |
+| 7 | New asset "UPS", template UPS → Log load test: voltage 12.7, load 38, runtime 42, Passed = Yes; Save | Readings show the three numbers with NO TARGET SET and "Passed · Yes"; record line "Battery voltage 12.7 V · Load 38 % · Runtime 42 min" | **PASS** (automated: `JournalDeviceProofTest.upsLoadTestShowsNoTargetsAndPassedYes`, run on the owner's Android 17 phone 2026-09-15). **Yes** is tapped on the segmented control. On the asset: 12.7 / 38 / 42, NO TARGET SET exactly three times (the boolean carries no state at all), "Passed" and "Yes" both on screen, and the record line verbatim |
+| 8 | New asset "Mower", template Power equipment → Log oil change: engine hours 138.5, Engine oil 1.5 qt, Oil filter 1 pcs; Save | Readings show Engine hours 138.5 h NO TARGET SET; record line shows the reading; opening the event lists both materials | **PASS** (automated: `JournalDeviceProofTest.mowerOilChangeRecordsTheMeterAndBothMaterials`, run on the owner's Android 17 phone 2026-09-15). Both materials come from the profile's suggestion chips; the event is then opened from the ledger and both lines are asserted with their quantities and units (1.5 qt, 1 pcs) |
+| 9 | Existing 1C asset (no template) and a new asset saved with Template = None → "Set up from template" → RO water | Three TDS rows appear with "—"; "Log TDS test" action appears; doing it again is not offered | **FAIL** (automated: `JournalDeviceProofTest.anAssetWithNoTemplateCanBeSetUpLater`, run on the owner's Android 17 phone 2026-09-15). Three of the four clauses hold: the three TDS rows appear with "—", the action appears, and **Set up from template** is gone afterwards. The fourth does not — **the quick action reads "Log tDS test", not "Log TDS test"**. `quickActionLabel` is `"Log " + profile.name.replaceFirstChar { it.lowercase() }`, which is what makes "Water test" read "Log water test" and which mangles an acronym. Cosmetic, one line, and a production change — so it is reported (§7) rather than fixed here, and the test asserts the string that is actually on the phone |
+| 10 | Backup → Export; Debug → Wipe; Backup → Import (REPLACE) | Dashboard, assets, readings and records identical; the manifest counts in the file match `sqlite3` counts of the seven tables | **PASS** (automated: `JournalDeviceProofTest.backupRoundTripKeepsEveryCountAndTheAssetRendersAgain`, run on the owner's Android 17 phone 2026-09-15). **Said plainly: the export and the import are called in-process** (`exportBackup.run()` → wipe through the ports → `importBackupReplace.run(bytes)`), because the UI half of the backup screen is a SAF document picker, which is the system's and not the app's. What ran on the phone is the round trip against the device's own Room store: **all ten** table counts — `asset`, `nfc_tag`, `external_link` and the seven journal tables, counted through the ports — are equal before and after, the wipe in between is asserted to have emptied the store, and the asset is then cold-started again and draws 7.9, the HIGH badge and its "Water test" row from the imported rows |
+| 11 | Open the hot tub → delete today's water test | Current readings fall back to the week-old pH 7.0 (LOW) | **PASS** (automated: `JournalDeviceProofTest.deletingTodaysTestFallsBackToTheOlderReading`, run on the owner's Android 17 phone 2026-09-15). Both entries are logged through the form, today's is opened from the ledger by its own date, deleted through the overflow and the confirmation dialog; afterwards one "Water test" row remains, 7.5 is gone, 7.0 is on screen and LOW appears twice (the reading and the surviving entry's badge) |
+| 12 | `adb shell run-as com.loosecannon.notenfc sqlite3 databases/notenfc.db ".tables"` | Exactly the ten tables: `asset`, `nfc_tag`, `external_link` + the seven journal tables; nothing named after a hot tub, UPS, RO or mower | **PASS** (controller, `adb` schema listing: asset, nfc_tag, external_link plus the seven journal tables; nothing type-specific). The phone has no `sqlite3` binary, so the database was read out through `run-as` and its schema listed off-device; besides the ten app tables it carries only SQLite's own `android_metadata` and Room's `room_master_table`. `user_version` is 2 and the eighteen declared indexes are there |
+| 13 | Scan the bound tag (from 1C) → asset opens → Log … | The scan path is unchanged and the quick action is one tap away | **NOT RUN** — the owner declined further manual rows; the tag → asset path is unchanged since 1C and was proven there |
 
-Rows 3–13 need a person, a phone in hand and a tag; they are the owner's to run, and §5 says so
+Rows 3–11 were manual because they need hands; they now have `JournalDeviceProofTest`'s instead,
+which is why every one of them names the test that produced its result. Row 12 was run by the
+controller against the phone's own database. Row 13 is the only row still unrun, and §5 says so
 rather than implying the phase is device-complete.
 
 ## 5. Status of the device proof
 
-**Partly device-proven.** What ran on the owner's Android 17 phone on 2026-09-15 is the
-instrumented suite — 14/14, including `JournalSmokeTest`, which walks the whole 2A vertical on
-real hardware: template → asset → profile-driven entry form → live range state → `LogEvent` →
-Room v2 → `LatestReadings` → CURRENT READINGS and SERVICE RECORD. Rows 1 and 2 of the checklist
-are filled; rows 3–13, which are the three-asset walk-through, the export/wipe/import round trip,
-the delete-falls-back-to-the-previous-reading check and the tag scan, are **pending the owner**.
+**Device-proven, with one row not run and one row failed.** Everything below ran on the owner's
+Android 17 phone on 2026-09-15.
+
+**Automated and passing (§4 rows 3–8, 10, 11).** `JournalDeviceProofTest` — eight tests, listed in
+§3 — drives the checklist's UI rows through the real screens: the hot-tub template's five empty
+readings and two quick actions, a five-reading water test with two materials and a live badge on
+every row as it is typed, an edit that corrects a reading in place, a backdated entry that files
+below without becoming the current value, the UPS load test's range-less readings and its Yes/No
+answer, the mower's meter reading with both materials, the backup round trip, and a delete that
+falls back to the previous reading. With `JournalSmokeTest` and the thirteen from 1C the
+instrumented suite is **22 tests, 0 failures**, green on two consecutive runs.
+
+**Failed (§4 row 9).** The template pick works — three TDS rows appear with "—", the action
+appears and **Set up from template** is correctly withdrawn — but the action reads **"Log tDS
+test"**. `quickActionLabel` lowercases the profile name's first character, which is right for
+"Water test" and wrong for an acronym. It is a one-line production change and this task was not
+allowed to make one, so it is reported here and in §7 and the test asserts the string the phone
+actually shows.
+
+**Run by the controller (§4 rows 1, 12).** The v1 → v2 migration over a real 1C install, and the
+phone's own schema: exactly the ten app tables, `user_version` 2, eighteen declared indexes,
+nothing named after an asset kind.
+
+**Not run (§4 row 13).** The tag scan. The owner declined further manual rows; the tag → asset
+path is unchanged since 1C and was proven there.
 
 What is complete on this machine:
 
@@ -188,9 +253,9 @@ What is complete on this machine:
   DAO's aggregate writes, both new ViewModels, backup format 2 and the seven-table restore proof.
 - No template key appears anywhere outside `SeedTemplates.kt` (§9).
 
-The honest statement of 2A is **implemented, JVM-proven, and device-proven for the core journal
-path by the instrumented suite**; what it is not yet is walked by hand across the three asset
-kinds, nor round-tripped through the real backup UI on the phone.
+The honest statement of 2A is **implemented, JVM-proven and device-proven across the three asset
+kinds, the backup round trip and the journal's edit and delete paths**; what it is not is walked
+by a person's hands, and what the walk found is one cosmetic label defect that is still open.
 
 Privacy: this document records no device serial, phone model, tag UID, note id or link, or home
 path; paths are written relative to the repository and the phone is referred to throughout as
@@ -258,6 +323,11 @@ Minors from the task ledger — small, real, none of them blocking:
 - The entry screen's value fields live in a `LazyColumn`, so on a long profile a scrolled-away
   field loses focus. The fix is `Column` + `verticalScroll`, and it should land with the 2B editor
   rather than as a lone change here.
+- **`quickActionLabel` mangles an acronym profile name.** `"Log " + name.replaceFirstChar
+  { it.lowercase() }` turns "TDS test" into "Log tDS test" (§4 row 9, found by the device proof).
+  Of the five seed templates only `ro_water` is affected. The fix is to lowercase the first
+  character only when the second is not already upper case, and it belongs with 2B's editor, where
+  the user can name a profile anything at all.
 - Carried from 1C and still open: **a rewritten tag leaves its old row bound** — the tag lifecycle
   should retire a superseded row when a known UID is rewritten.
 - There is no `observe(id)` port: a single-entity observer would let the detail screens drop their
@@ -301,8 +371,10 @@ Minors from the task ledger — small, real, none of them blocking:
 → **BUILD SUCCESSFUL** in 24s, 113 actionable tasks.
 
 Test totals from the JUnit XML: **`:core` 172 tests, 0 failures, 0 skipped**; **`:app` 88 tests, 0
-failures, 0 skipped** (per-class breakdown in §3). Instrumented: **14 tests, 0 failures, 0
-skipped** on the owner's Android 17 phone (§3, §4 row 2).
+failures, 0 skipped** (per-class breakdown in §3). Instrumented: **22 tests, 0 failures, 0
+skipped** on the owner's Android 17 phone, twice in a row (§3, §4 row 2). The gate itself is
+unchanged by the device-proof commit — `JournalDeviceProofTest` is `androidTest` source, so it
+adds nothing to either APK and the sizes below are the same bytes as before.
 
 APK sizes:
 
@@ -328,9 +400,11 @@ No personal path or username anywhere in the tree:
 git grep -nIiE '/home/[a-z]+|lcstyle' -- . ':!.superpowers'
 ```
 
-→ one hit, and it is the grep quoting itself: `docs/superpowers/plans/2026-09-15-phase-2a-journal.md`
-line 895 is the task plan's own copy of this command. No path, no username, no device identifier in
-any source file, document or resource.
+→ two hits, and both are the command quoting itself: this document's own §9 above, and
+`docs/superpowers/plans/2026-09-15-phase-2a-journal.md` line 895, which is the task plan's copy of
+the same command. (The earlier wording said "one hit" and overlooked the self-match; corrected
+here.) No path, no username, no device serial and no phone model in any source file, document or
+resource — including `JournalDeviceProofTest`, which names no device at all.
 
 No asset kind outside the seed data:
 
