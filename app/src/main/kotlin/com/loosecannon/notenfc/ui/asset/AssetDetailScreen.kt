@@ -1,5 +1,6 @@
 package com.loosecannon.notenfc.ui.asset
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,11 +11,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,7 +25,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,16 +42,27 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.notenfc.core.journal.RangeState
+import com.loosecannon.notenfc.core.journal.Reading
+import com.loosecannon.notenfc.core.journal.SeedTemplates
+import com.loosecannon.notenfc.core.journal.classify
 import com.loosecannon.notenfc.core.model.Asset
+import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
+import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.PayloadFormat
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagStatus
+import com.loosecannon.notenfc.core.model.ValueType
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.ui.components.ActionGrid
 import com.loosecannon.notenfc.ui.components.ActionSpec
 import com.loosecannon.notenfc.ui.components.IdentityPlate
+import com.loosecannon.notenfc.ui.components.InstrumentList
+import com.loosecannon.notenfc.ui.components.InstrumentRow
 import com.loosecannon.notenfc.ui.components.LedgerEntry
 import com.loosecannon.notenfc.ui.components.LedgerList
 import com.loosecannon.notenfc.ui.components.NoteNfcIcons
@@ -53,15 +70,24 @@ import com.loosecannon.notenfc.ui.components.PlateValue
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.components.SectionHeader
 import com.loosecannon.notenfc.ui.components.StatusBadge
+import com.loosecannon.notenfc.ui.journal.eventDetailLine
+import com.loosecannon.notenfc.ui.journal.formatTarget
+import com.loosecannon.notenfc.ui.journal.formatValue
+import com.loosecannon.notenfc.ui.journal.quickActionLabel
+import com.loosecannon.notenfc.ui.journal.stateColors
+import com.loosecannon.notenfc.ui.journal.stateIcon
+import com.loosecannon.notenfc.ui.journal.stateLabel
 import com.loosecannon.notenfc.ui.theme.NoteNfcTheme
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * One asset, as the Apollo Service Binder draws it (D12 §8, G1 §1.1): identity plate, quick
- * actions, then sections separated by hairline rules. Phase 1C has no schedules and no events, so
- * the status block is replaced by one quiet line and the ledger's first real use is the tag list.
+ * One asset, as the Apollo Service Binder draws it (D12 §8, G1 §1.1): identity plate, the current
+ * readings, quick actions, then the service record and the reference sections, separated by
+ * hairline rules. There are still no schedules, so the status block is one quiet line; everything
+ * else on the screen is the journal of spec §10.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,17 +99,23 @@ fun AssetDetailScreen(
     onWriteTag: (String) -> Unit,
     onOpenLinks: () -> Unit,
     onBackup: () -> Unit,
+    onLogEvent: (assetId: String, profileId: String) -> Unit,
+    onOpenEvent: (eventId: String) -> Unit,
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
+    val snackbars = remember { SnackbarHostState() }
+    var pickingTemplate by remember { mutableStateOf(false) }
 
     // A deep link, a restored back stack or a replacing import can name an asset that is not there
     // any more. Leaving is the honest answer; an empty plate would pretend it still exists.
     LaunchedEffect(missing) { if (missing) onBack() }
+    LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
 
     val asset = state?.asset
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
                 title = {
@@ -116,6 +148,15 @@ fun AssetDetailScreen(
             QuietLine("Loading…", Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
+        if (pickingTemplate) {
+            TemplatePicker(
+                onDismiss = { pickingTemplate = false },
+                onPick = { key ->
+                    pickingTemplate = false
+                    model.setUpFromTemplate(key)
+                },
+            )
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -123,19 +164,26 @@ fun AssetDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             AssetPlate(current.asset, current.tags, current.links)
+            ReadingsSection(current.readings)
             Spacer(Modifier.height(10.dp))
-            // No schedules in 1C, so nothing can be due: one quiet line, never a red one (G1 §1.1).
+            // No schedules in 2A, so nothing can be due: one quiet line, never a red one (G1 §1.1).
             QuietLine("No schedule yet")
             Spacer(Modifier.height(14.dp))
             ActionGrid(
-                actions = listOf(
-                    ActionSpec("Write tag", NoteNfcIcons.NfcTag, outlined = true) { onWriteTag(assetId) },
-                    ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) },
-                    ActionSpec("Links", NoteNfcIcons.Description, outlined = false, onClick = onOpenLinks),
-                    ActionSpec("Backup", NoteNfcIcons.Backup, outlined = false, onClick = onBackup),
+                actions = detailActions(
+                    assetId = assetId,
+                    profiles = current.profiles,
+                    bare = current.definitions.isEmpty() && current.profiles.isEmpty(),
+                    onLogEvent = onLogEvent,
+                    onEdit = onEdit,
+                    onWriteTag = onWriteTag,
+                    onOpenLinks = onOpenLinks,
+                    onBackup = onBackup,
+                    onSetUp = { pickingTemplate = true },
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
+            ServiceRecordSection(current.events, current.definitions, onOpenEvent)
             TagsSection(current.tags)
             LinksSection(current.links)
             NotesSection(current.asset.notes)
@@ -143,6 +191,142 @@ fun AssetDetailScreen(
         }
     }
 }
+
+/**
+ * Quick actions first, because logging is what someone standing next to the machine came to do
+ * (spec §10); the four utility actions keep the order 1C gave them. "Set up from template" only
+ * appears while the asset has nothing to log against — once it has, the template is refused
+ * anyway, and an action that cannot work is worse than no action.
+ */
+@Composable
+private fun detailActions(
+    assetId: String,
+    profiles: List<EventProfile>,
+    bare: Boolean,
+    onLogEvent: (String, String) -> Unit,
+    onEdit: (String) -> Unit,
+    onWriteTag: (String) -> Unit,
+    onOpenLinks: () -> Unit,
+    onBackup: () -> Unit,
+    onSetUp: () -> Unit,
+): List<ActionSpec> {
+    val ledger = NoteNfcIcons.History
+    val nfc = NoteNfcIcons.NfcTag
+    val documents = NoteNfcIcons.Description
+    val backup = NoteNfcIcons.Backup
+    return buildList {
+        profiles.forEach { profile ->
+            add(
+                ActionSpec(quickActionLabel(profile), ledger, outlined = false) {
+                    onLogEvent(assetId, profile.id.value)
+                },
+            )
+        }
+        add(ActionSpec("Write tag", nfc, outlined = true) { onWriteTag(assetId) })
+        add(ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) })
+        add(ActionSpec("Links", documents, outlined = false, onClick = onOpenLinks))
+        add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
+        if (bare) add(ActionSpec("Set up from template", Icons.Outlined.Add, outlined = true, onClick = onSetUp))
+    }
+}
+
+/** The five seeds by name. A template is starter data, so the dialog explains nothing further. */
+@Composable
+private fun TemplatePicker(onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set up from template") },
+        text = {
+            Column {
+                SeedTemplates.all.forEach { template ->
+                    Text(
+                        text = template.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(template.key) }
+                            .padding(vertical = 12.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Absent, not empty, when the asset has no definitions: there is no instrument panel to show. */
+@Composable
+private fun ReadingsSection(readings: List<Reading>) {
+    if (readings.isEmpty()) return
+    SectionHeader(title = "Current readings")
+    InstrumentList(count = readings.size) { index ->
+        val reading = readings[index]
+        InstrumentRow(
+            label = reading.definition.label,
+            target = formatTarget(reading.definition),
+            value = formatValue(reading.measurement, reading.definition),
+            // The measurement's unit is a snapshot of the definition's at entry (§4): show what
+            // was actually measured in, and fall back to the definition only for an empty row.
+            unit = reading.measurement?.unit ?: reading.definition.unit,
+            state = reading.state,
+        )
+    }
+}
+
+/** The chronological ledger of D12 §8 — a maintenance record, newest first, never a feed. */
+@Composable
+private fun ServiceRecordSection(
+    events: List<AssetEvent>,
+    definitions: List<MeasurementDefinition>,
+    onOpenEvent: (String) -> Unit,
+) {
+    SectionHeader(title = "Service record")
+    if (events.isEmpty()) {
+        QuietLine("No service recorded yet")
+        return
+    }
+    val byId: Map<DefinitionId, MeasurementDefinition> = definitions.associateBy { it.id }
+    LedgerList(count = events.size) { index ->
+        val event = events[index]
+        val (day, month, year) = event.occurredOn.asLedgerDate()
+        val flagged = outOfRange(event, byId)
+        LedgerEntry(
+            day = day,
+            month = month,
+            year = year,
+            title = event.title,
+            detail = eventDetailLine(event, byId).takeIf { it.isNotBlank() },
+            badge = flagged?.let { state ->
+                {
+                    StatusBadge(
+                        label = stateLabel(state),
+                        colors = stateColors(state, NoteNfcTheme.semanticColors),
+                        icon = stateIcon(state),
+                    )
+                }
+            },
+            modifier = Modifier.clickable { onOpenEvent(event.id.value) },
+        )
+    }
+}
+
+/**
+ * The ledger badge says something only when a reading in the entry is outside its target — an
+ * in-range entry is the normal case and does not need decorating (D12 §5).
+ */
+private fun outOfRange(
+    event: AssetEvent,
+    definitions: Map<DefinitionId, MeasurementDefinition>,
+): RangeState? = event.measurements
+    .sortedBy { it.sortOrder }
+    .firstNotNullOfOrNull { m ->
+        val definition = definitions[m.definitionId] ?: return@firstNotNullOfOrNull null
+        if (definition.valueType != ValueType.NUMBER) return@firstNotNullOfOrNull null
+        val value = m.valueNum ?: return@firstNotNullOfOrNull null
+        classify(value, definition.rangeLow, definition.rangeHigh)
+            .takeIf { it == RangeState.LOW || it == RangeState.HIGH }
+    }
 
 @Composable
 private fun DetailOverflow(
@@ -297,4 +481,15 @@ private fun Long.asPlateDate(): String = zoned().format(plateDate)
 private fun Long.asLedgerDate(): Triple<String, String, String> {
     val at = zoned()
     return Triple(at.format(ledgerDay), at.format(ledgerMonth), at.format(ledgerYear))
+}
+
+/**
+ * An event is dated by the calendar day it happened on, not by when the row was written, so the
+ * ledger splits `occurredOn` rather than a millisecond instant. A string the domain would have
+ * refused is shown verbatim rather than dropped.
+ */
+private fun String.asLedgerDate(): Triple<String, String, String> {
+    val date = runCatching { LocalDate.parse(this) }.getOrNull()
+        ?: return Triple(this, "", "")
+    return Triple(date.format(ledgerDay), date.format(ledgerMonth), date.format(ledgerYear))
 }

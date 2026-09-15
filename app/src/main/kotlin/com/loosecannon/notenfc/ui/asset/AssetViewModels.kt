@@ -2,14 +2,25 @@ package com.loosecannon.notenfc.ui.asset
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.notenfc.core.journal.LatestReadings
+import com.loosecannon.notenfc.core.journal.Reading
+import com.loosecannon.notenfc.core.journal.SeedTemplates
 import com.loosecannon.notenfc.core.model.Asset
+import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
+import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.DefinitionRepository
+import com.loosecannon.notenfc.core.ports.EventRepository
 import com.loosecannon.notenfc.core.ports.LinkRepository
+import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
+import com.loosecannon.notenfc.core.usecase.ApplyResult
+import com.loosecannon.notenfc.core.usecase.ApplyTemplate
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.AssetNameRequired
 import com.loosecannon.notenfc.core.usecase.CreateAsset
@@ -71,34 +82,73 @@ data class AssetDetailState(
     val asset: Asset,
     val tags: List<TagBinding> = emptyList(),
     val links: List<ExternalLink> = emptyList(),
+    val definitions: List<MeasurementDefinition> = emptyList(),
+    /** Unarchived only, in `sortOrder`: these are the quick actions the screen offers. */
+    val profiles: List<EventProfile> = emptyList(),
+    /** Newest first (§4.1), as the repository returns them. */
+    val events: List<AssetEvent> = emptyList(),
+    /** Derived from [definitions] and [events] on every emission, never stored (§4.2). */
+    val readings: List<Reading> = emptyList(),
 )
 
 /**
  * One asset and the rows that point at it. [missing] is separate from [state] because "not loaded
  * yet" and "gone" both read as a null state, and only the second one should send the user back —
  * a deep link or a restored back stack can name an asset a backup import has since replaced.
+ *
+ * Six flows feed the state and `combine` takes five, so the journal's three are folded into one
+ * first. `readings` is computed here rather than stored: editing or deleting an event changes the
+ * answer on the next emission with no cache to invalidate.
  */
 class AssetDetailViewModel(
     assets: AssetRepository,
     tags: TagRepository,
     links: LinkRepository,
+    definitions: DefinitionRepository,
+    profiles: ProfileRepository,
+    events: EventRepository,
     private val archiveAsset: ArchiveAsset,
+    private val applyTemplate: ApplyTemplate,
     private val id: AssetId,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, id: String) :
-        this(graph.assets, graph.tags, graph.links, graph.archiveAsset, AssetId(id))
+    constructor(graph: AppGraph, id: String) : this(
+        graph.assets, graph.tags, graph.links,
+        graph.definitions, graph.profiles, graph.events,
+        graph.archiveAsset, graph.applyTemplate, AssetId(id),
+    )
 
     private val asset = assets.observeAll().map { rows -> rows.firstOrNull { it.id == id } }
 
+    private val journal = combine(
+        definitions.observeForAsset(id),
+        profiles.observeForAsset(id),
+        events.observeForAsset(id),
+    ) { defs, profileRows, eventRows -> Journal(defs, profileRows, eventRows) }
+
     val state: StateFlow<AssetDetailState?> =
-        combine(asset, tags.observeForAsset(id), links.observeForAsset(id)) { row, tagRows, linkRows ->
-            row?.let { AssetDetailState(asset = it, tags = tagRows, links = linkRows) }
+        combine(asset, tags.observeForAsset(id), links.observeForAsset(id), journal) { row, tagRows, linkRows, j ->
+            row?.let {
+                AssetDetailState(
+                    asset = it,
+                    tags = tagRows,
+                    links = linkRows,
+                    definitions = j.definitions,
+                    // An archived profile keeps its history but stops offering a quick action.
+                    profiles = j.profiles.filter { p -> p.archivedAt == null },
+                    events = j.events,
+                    readings = LatestReadings.of(j.definitions, j.events),
+                )
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), null)
 
     val missing: StateFlow<Boolean> = asset
         .map { it == null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), false)
+
+    /** Anything the screen should say out loud but has no room for: one line, shown once. */
+    private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     fun archive() {
         viewModelScope.launch { archiveAsset.run(id) }
@@ -107,6 +157,33 @@ class AssetDetailViewModel(
     fun unarchive() {
         viewModelScope.launch { archiveAsset.unarchive(id) }
     }
+
+    /**
+     * Seeds this asset from one of the starter templates. The state flow carries the result, so
+     * nothing is echoed back on success; the two ways it can do nothing are worth a line each.
+     */
+    fun setUpFromTemplate(key: String) {
+        viewModelScope.launch {
+            val template = SeedTemplates.byKey(key)
+            if (template == null) {
+                _messages.tryEmit("That template is not available.")
+                return@launch
+            }
+            val outcome = runCatching { applyTemplate.run(id, template) }
+            when {
+                outcome.isFailure -> _messages.tryEmit("Could not set up this asset.")
+                outcome.getOrNull() is ApplyResult.AlreadySetUp ->
+                    _messages.tryEmit("This asset is already set up.")
+            }
+        }
+    }
+
+    /** The three journal flows as one value, so the outer `combine` stays inside its five slots. */
+    private data class Journal(
+        val definitions: List<MeasurementDefinition>,
+        val profiles: List<EventProfile>,
+        val events: List<AssetEvent>,
+    )
 }
 
 /**
@@ -121,6 +198,8 @@ data class AssetEditState(
     val editing: Boolean = false,
     val nameError: Boolean = false,
     val saving: Boolean = false,
+    /** New assets only. null is "None · set up later", the default; Generic is a choice (§7). */
+    val templateKey: String? = null,
 )
 
 /** Create ([id] null) or edit one asset. The blank-name rule lives in the use cases, not here. */
@@ -165,6 +244,9 @@ class AssetEditViewModel(
     fun onDescription(value: String) = _state.update { it.copy(description = value) }
     fun onNotes(value: String) = _state.update { it.copy(notes = value) }
 
+    /** null selects "None · set up later"; the asset can still be set up from its own screen. */
+    fun onTemplate(key: String?) = _state.update { it.copy(templateKey = key) }
+
     /**
      * Saves, and then names the asset the screen should show, once, on [saved]. A failure leaves
      * the form exactly as the user typed it; only [AssetNameRequired] marks the field, because no
@@ -181,7 +263,7 @@ class AssetEditViewModel(
             val form = _state.value
             val result = runCatching {
                 if (id == null) {
-                    createAsset.run(form.name, form.category, form.description, form.notes).id
+                    createAsset.run(form.name, form.category, form.description, form.notes, form.templateKey).id
                 } else {
                     updateAsset.run(id, form.name, form.category, form.description, form.notes).id
                 }

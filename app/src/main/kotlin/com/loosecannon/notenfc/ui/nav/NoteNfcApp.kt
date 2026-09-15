@@ -96,6 +96,10 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         onWriteTag = { backStack.add(Route.WriteTag("asset", it, null)) },
                         onOpenLinks = { backStack.add(Route.Links) },
                         onBackup = { backStack.add(Route.Backup) },
+                        onLogEvent = { asset, profile ->
+                            backStack.add(Route.EventEntry(asset, profile, null))
+                        },
+                        onOpenEvent = { backStack.add(Route.EventDetail(it)) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->

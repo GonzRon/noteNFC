@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.ui.asset
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -10,8 +11,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -24,7 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.notenfc.core.journal.SeedTemplates
 import com.loosecannon.notenfc.di.AppGraph
+import com.loosecannon.notenfc.ui.components.SectionHeader
+import com.loosecannon.notenfc.ui.theme.BadgeShape
 import com.loosecannon.notenfc.ui.theme.ControlShape
 
 /**
@@ -91,6 +97,11 @@ fun AssetEditScreen(
                 shape = ControlShape,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // Editing an existing asset shows no template row: a template is starter data, and
+            // an asset that has been in use has rows of its own that it must not clobber (§7).
+            if (!state.editing) {
+                TemplateRow(selected = state.templateKey, onSelect = model::onTemplate)
+            }
             OutlinedTextField(
                 value = state.description,
                 onValueChange = model::onDescription,
@@ -118,3 +129,40 @@ fun AssetEditScreen(
         }
     }
 }
+
+/**
+ * The five seeds plus None, as chips rather than a dropdown: six short options are quicker to
+ * read side by side than behind a menu, and the default has to be visibly the selected one.
+ */
+@Composable
+private fun TemplateRow(selected: String?, onSelect: (String?) -> Unit) {
+    val options = listOf<Pair<String?, String>>(NONE to "None · set up later") +
+        SeedTemplates.all.map { it.key to it.name }
+    Column {
+        SectionHeader(title = "Template")
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            options.forEach { (key, label) ->
+                FilterChip(
+                    selected = key == selected,
+                    onClick = { onSelect(key) },
+                    label = { Text(label) },
+                    shape = BadgeShape,
+                )
+            }
+        }
+        Text(
+            text = "Starts the asset with its readings and quick actions. " +
+                "Choose None to decide on the asset later.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
+/** "None · set up later" is the absence of a template key, not a template called none. */
+private val NONE: String? = null
