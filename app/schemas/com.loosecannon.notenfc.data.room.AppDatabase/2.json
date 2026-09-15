@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "f7e5a7aeab94c65408ee308049360fd2",
+    "identityHash": "bfaaff6c57b437cf8c31ae86bc92dfd3",
     "entities": [
       {
         "tableName": "asset",
@@ -575,6 +575,15 @@
             ],
             "orders": [],
             "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_profile_field_profile_id_definition_id` ON `${TABLE_NAME}` (`profile_id`, `definition_id`)"
+          },
+          {
+            "name": "index_profile_field_definition_id",
+            "unique": false,
+            "columnNames": [
+              "definition_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_profile_field_definition_id` ON `${TABLE_NAME}` (`definition_id`)"
           }
         ],
         "foreignKeys": [
@@ -648,6 +657,17 @@
             "id"
           ]
         },
+        "indices": [
+          {
+            "name": "index_profile_consumable_profile_id",
+            "unique": false,
+            "columnNames": [
+              "profile_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_profile_consumable_profile_id` ON `${TABLE_NAME}` (`profile_id`)"
+          }
+        ],
         "foreignKeys": [
           {
             "table": "event_profile",
@@ -773,6 +793,15 @@
             ],
             "orders": [],
             "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_event_source_source_ref` ON `${TABLE_NAME}` (`source`, `source_ref`)"
+          },
+          {
+            "name": "index_asset_event_profile_id",
+            "unique": false,
+            "columnNames": [
+              "profile_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_asset_event_profile_id` ON `${TABLE_NAME}` (`profile_id`)"
           }
         ],
         "foreignKeys": [
@@ -972,7 +1001,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f7e5a7aeab94c65408ee308049360fd2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'bfaaff6c57b437cf8c31ae86bc92dfd3')"
     ]
   }
 }

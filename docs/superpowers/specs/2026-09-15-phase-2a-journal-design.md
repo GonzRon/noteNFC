@@ -233,9 +233,9 @@ after application.
 |---|---|---|
 | `measurement_definition` | id, asset_id, key, label, unit, value_type, decimals INTEGER, range_low REAL NULL, range_high REAL NULL, is_meter INTEGER, sort_order INTEGER, archived_at INTEGER NULL, created_at, updated_at | FK asset CASCADE; `UNIQUE(asset_id, key)`; index asset_id |
 | `event_profile` | id, asset_id, name, event_kind, default_title, template_key NULL, sort_order, archived_at NULL, created_at, updated_at | FK asset CASCADE; index asset_id |
-| `profile_field` | id, profile_id, definition_id, required INTEGER, sort_order | FK profile CASCADE, FK definition CASCADE; `UNIQUE(profile_id, definition_id)` |
-| `profile_consumable` | id, profile_id, name, default_quantity REAL NULL, unit, sort_order | FK profile CASCADE |
-| `asset_event` | id, asset_id, kind, title, profile_id NULL, occurred_on TEXT, occurred_time TEXT NULL, tz_id, notes, source, source_ref NULL, created_at, updated_at | FK asset CASCADE; FK profile SET NULL; index `(asset_id, occurred_on DESC, created_at DESC)`; `UNIQUE(source, source_ref)` |
+| `profile_field` | id, profile_id, definition_id, required INTEGER, sort_order | FK profile CASCADE, FK definition CASCADE; `UNIQUE(profile_id, definition_id)`; index definition_id |
+| `profile_consumable` | id, profile_id, name, default_quantity REAL NULL, unit, sort_order | FK profile CASCADE; index profile_id |
+| `asset_event` | id, asset_id, kind, title, profile_id NULL, occurred_on TEXT, occurred_time TEXT NULL, tz_id, notes, source, source_ref NULL, created_at, updated_at | FK asset CASCADE; FK profile SET NULL; index `(asset_id, occurred_on DESC, created_at DESC)`; `UNIQUE(source, source_ref)`; index profile_id |
 | `measurement` | id, event_id, definition_id, value_num REAL NULL, value_text TEXT NULL, unit, sort_order | FK event CASCADE; FK definition **RESTRICT**; index `(definition_id, event_id)`, index event_id |
 | `consumable_usage` | id, event_id, name, quantity REAL, unit, sort_order | FK event CASCADE; index event_id |
 

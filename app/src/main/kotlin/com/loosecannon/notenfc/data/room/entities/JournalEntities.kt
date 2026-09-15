@@ -84,7 +84,10 @@ data class EventProfileEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index(value = ["profile_id", "definition_id"], unique = true)],
+    indices = [
+        Index(value = ["profile_id", "definition_id"], unique = true),
+        Index("definition_id"),
+    ],
 )
 data class ProfileFieldEntity(
     @PrimaryKey val id: String,
@@ -104,6 +107,7 @@ data class ProfileFieldEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
+    indices = [Index("profile_id")],
 )
 data class ProfileConsumableEntity(
     @PrimaryKey val id: String,
@@ -136,6 +140,7 @@ data class ProfileConsumableEntity(
             orders = [Index.Order.ASC, Index.Order.DESC, Index.Order.DESC],
         ),
         Index(value = ["source", "source_ref"], unique = true),
+        Index("profile_id"),
     ],
 )
 data class AssetEventEntity(

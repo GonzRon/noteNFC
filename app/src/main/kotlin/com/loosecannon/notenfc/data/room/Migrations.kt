@@ -41,7 +41,13 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
             "CREATE UNIQUE INDEX IF NOT EXISTS `index_profile_field_profile_id_definition_id` ON `profile_field` (`profile_id`, `definition_id`)",
         )
         connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_profile_field_definition_id` ON `profile_field` (`definition_id`)",
+        )
+        connection.execSQL(
             "CREATE TABLE IF NOT EXISTS `profile_consumable` (`id` TEXT NOT NULL, `profile_id` TEXT NOT NULL, `name` TEXT NOT NULL, `default_quantity` REAL, `unit` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`profile_id`) REFERENCES `event_profile`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_profile_consumable_profile_id` ON `profile_consumable` (`profile_id`)",
         )
         connection.execSQL(
             "CREATE TABLE IF NOT EXISTS `asset_event` (`id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `title` TEXT NOT NULL, `profile_id` TEXT, `occurred_on` TEXT NOT NULL, `occurred_time` TEXT, `tz_id` TEXT NOT NULL, `notes` TEXT NOT NULL, `source` TEXT NOT NULL, `source_ref` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`profile_id`) REFERENCES `event_profile`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
@@ -51,6 +57,9 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
         )
         connection.execSQL(
             "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_event_source_source_ref` ON `asset_event` (`source`, `source_ref`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_event_profile_id` ON `asset_event` (`profile_id`)",
         )
         connection.execSQL(
             "CREATE TABLE IF NOT EXISTS `measurement` (`id` TEXT NOT NULL, `event_id` TEXT NOT NULL, `definition_id` TEXT NOT NULL, `value_num` REAL, `value_text` TEXT, `unit` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`event_id`) REFERENCES `asset_event`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`definition_id`) REFERENCES `measurement_definition`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
