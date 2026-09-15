@@ -203,7 +203,7 @@ data class AssetDetailState(
     /** The parent for the "Part of <parent>" line, tappable; both null for a root asset (spec §9). */
     val parentId: String? = null,
     val parentName: String? = null,
-    /** This asset's children, by name. Empty means the COMPONENTS section is absent, not empty. */
+    /** This asset's children, by name. The COMPONENTS section always renders, empty or not. */
     val components: List<ComponentRow> = emptyList(),
     /** Today is outside the season window (spec §6) — the one effect the window has in 2B-2. */
     val outOfSeason: Boolean = false,

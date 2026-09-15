@@ -4,6 +4,7 @@ import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetTree
 import com.loosecannon.notenfc.core.model.Money
+import com.loosecannon.notenfc.core.model.isCode
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import com.loosecannon.notenfc.core.model.Season as SeasonWindow
@@ -63,8 +64,6 @@ class AssetCycle(val assetId: AssetId, val parentId: AssetId) :
 class AssetHasChildren(val assetId: AssetId, val children: List<AssetId>) :
     IllegalStateException("asset ${assetId.value} still has ${children.size} child asset(s)")
 
-private val CURRENCY = Regex("""^[A-Z]{3}$""")
-
 /**
  * The single gate both [CreateAsset] and [UpdateAsset] pass through. Returns the trimmed command
  * to store — blank text is `""` and a blank nullable field is `null`, so "cleared" and "never
@@ -82,7 +81,7 @@ fun validateAsset(cmd: AssetCommand, existing: Collection<Asset>, id: AssetId?):
 
     val price = clean.purchasePriceMinor
     val currency = clean.currency
-    if (currency != null && !CURRENCY.matches(currency)) {
+    if (currency != null && !Money.isCode(currency)) {
         problems += AssetProblem.BadCurrency
     } else if (price != null && currency != null && Money.fractionDigits(currency) == null) {
         problems += AssetProblem.BadCurrency        // shaped right but no currency table knows it

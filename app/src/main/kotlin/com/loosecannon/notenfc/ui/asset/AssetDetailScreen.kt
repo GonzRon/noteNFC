@@ -78,7 +78,7 @@ import com.loosecannon.notenfc.ui.components.PlateValue
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.components.SectionHeader
 import com.loosecannon.notenfc.ui.components.StatusBadge
-import com.loosecannon.notenfc.ui.setup.ConfirmDialog
+import com.loosecannon.notenfc.ui.components.TypedConfirmDialog
 import com.loosecannon.notenfc.ui.journal.eventDetailLine
 import com.loosecannon.notenfc.ui.journal.formatTarget
 import com.loosecannon.notenfc.ui.journal.formatValue
@@ -439,12 +439,14 @@ private fun DetailPrompts(
             onReplacement = { onLogOutcome(EventKind.REPLACEMENT.name) },
             onNote = { onLogOutcome(EventKind.NOTE.name) },
         )
-        DetailPrompt.ConfirmDelete -> ConfirmDialog(
+        DetailPrompt.ConfirmDelete -> TypedConfirmDialog(
             title = "Delete $assetName?",
-            body = "Its tags, links, readings and service record go with it. Retire or archive it " +
-                "instead to keep the history.",
-            onDismiss = onDismiss,
+            body = "Type the asset's name to delete it. Its tags, readings and history go with it. " +
+                "There is no automatic snapshot yet.",
+            expected = assetName,
+            confirmLabel = "Delete",
             onConfirm = onDelete,
+            onDismiss = onDismiss,
         )
         is DetailPrompt.DeleteRefused -> AlertDialog(
             onDismissRequest = onDismiss,

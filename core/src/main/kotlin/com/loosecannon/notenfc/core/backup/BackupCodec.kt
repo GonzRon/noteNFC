@@ -6,6 +6,7 @@ import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.Money
 import com.loosecannon.notenfc.core.model.Season
+import com.loosecannon.notenfc.core.model.isCode
 import com.loosecannon.notenfc.core.model.shapeMatches
 import com.loosecannon.notenfc.core.usecase.isIsoDate
 import java.io.ByteArrayInputStream
@@ -39,8 +40,6 @@ object BackupCodec {
     const val FORMAT_VERSION = 4
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
-
-    private val CURRENCY = Regex("""^[A-Z]{3}$""")
 
     private val json = Json {
         prettyPrint = true
@@ -184,7 +183,7 @@ object BackupCodec {
         data.assets.forEach { asset ->
             val currency = asset.currency
             val price = asset.purchasePriceMinor
-            if (currency != null && !CURRENCY.matches(currency)) {
+            if (currency != null && !Money.isCode(currency)) {
                 throw BackupCorrupt("assets: asset ${asset.id} has a malformed currency \"$currency\"")
             }
             if (price != null && currency == null) {

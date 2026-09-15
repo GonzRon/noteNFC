@@ -58,3 +58,8 @@ object Money {
         return result
     }
 }
+
+/** Three upper-case letters — the shape of an ISO 4217 code, not whether one exists (that's [Money.fractionDigits]). */
+fun Money.isCode(code: String): Boolean = CURRENCY_SHAPE.matches(code)
+
+private val CURRENCY_SHAPE = Regex("""^[A-Z]{3}$""")

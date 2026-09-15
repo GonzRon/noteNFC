@@ -76,6 +76,24 @@ Nine commits, 5 425 insertions across 63 files.
 - **`53f9cac` — navigation.** `TopLevelRoutes` drops to two; `Route.Scan` becomes a Settings
   utility; the README and the smoke tests follow.
 
+**Fix wave (final whole-branch review, one commit).** Three findings, all small — none blocking.
+Production files touched:
+
+- `app/src/main/kotlin/.../ui/components/TypedConfirmDialog.kt` — new. A typed-name confirm dialog,
+  same shape as the backup screen's REPLACE dialog: an `OutlinedTextField`, a `typed` state, confirm
+  enabled only on an exact match against `expected`.
+- `app/src/main/kotlin/.../ui/asset/AssetDetailScreen.kt` — `DetailPrompt.ConfirmDelete` now renders
+  `TypedConfirmDialog` (`expected` = the asset's own name) instead of the plain `ConfirmDialog`; the
+  children-first refusal dialog is unchanged.
+- `app/src/main/kotlin/.../ui/asset/AssetViewModels.kt` — `AssetDetailState.components` KDoc fixed:
+  the COMPONENTS section always renders now, not absent when empty (ruling 12 already shipped the
+  behaviour; only the comment was stale).
+- `core/src/main/kotlin/.../core/model/Money.kt` — new `fun Money.isCode(code: String): Boolean`,
+  the single owner of the `^[A-Z]{3}$` currency-shape check.
+- `core/src/main/kotlin/.../core/usecase/AssetCommands.kt` and
+  `core/src/main/kotlin/.../core/backup/BackupCodec.kt` — both drop their own private `CURRENCY`
+  regex and call `Money.isCode` instead; no behaviour change.
+
 ## 3. Tests
 
 ### JVM (`./gradlew :core:test :app:testDebugUnitTest`)
@@ -98,7 +116,7 @@ Nine commits, 5 425 insertions across 63 files.
 | `:core` | `LinkLaunchPolicyTest` | 9 |
 | `:core` | `LinkUseCasesTest` | 9 |
 | `:core` | `MeasurementShapeTest` | 3 |
-| `:core` | `MoneyTest` | 7 |
+| `:core` | `MoneyTest` | 8 |
 | `:core` | `NdefCodecTest` | 8 |
 | `:core` | `NdefCodecV1Test` | 14 |
 | `:core` | `OverwritePolicyTest` | 8 |
@@ -136,8 +154,9 @@ Nine commits, 5 425 insertions across 63 files.
 | `:app` | `TagUseCasesRoomTest` | 3 |
 | `:app` | `TagWriteControllerTest` | 6 |
 
-Totals from the JUnit XML: **`:core` 272 tests, 0 failures, 0 skipped**; **`:app` 158 tests, 0
-failures, 0 skipped**. 2B-1 finished at `:core` 225 / `:app` 128, so 2B-2 added **47 and 30**.
+Totals from the JUnit XML: **`:core` 273 tests, 0 failures, 0 skipped**; **`:app` 158 tests, 0
+failures, 0 skipped**. 2B-1 finished at `:core` 225 / `:app` 128, so 2B-2 added **48 and 30** — 47
+in the branch itself, plus `MoneyTest.isCodeChecksShapeOnly` in the final-review fix wave (§9).
 
 ### Instrumented (`./gradlew :app:connectedDebugAndroidTest`)
 
@@ -222,7 +241,7 @@ appears anywhere in this repository (§9).
 | 2 | `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `svc power stayon false`; then **reinstall and launch** (the task uninstalls the app) | All instrumented tests pass (28 from 1C, 2A and 2B-1 plus the eight of `AssetModelDeviceProofTest` and `NavigationSmokeTest`'s third) | **PASS** 2026-09-15: **37/37**, 0 failures, 0 skipped — per-test lines in §3, together with the five stale expectations the first run found and the one ambiguity in the new suite. Reinstall and launch done: `versionCode=5 versionName=2.3 stopped=false notLaunched=false`, `MainActivity` resumed, `FATAL EXCEPTION` count 0 |
 | 3 | Parent "Solar system" with components "Inverter" and "Battery bank" → the parent's COMPONENTS names both; the component's screen reads "Part of Solar system"; tapping that line opens the parent | Both names under COMPONENTS on the parent; "Part of Solar system" on the child; the tap lands on the parent | **PASS** (automated: `AssetModelDeviceProofTest.aParentListsItsComponentsAndEachComponentNamesTheParent`, run on the owner's Android 17 phone 2026-09-15). The parent is asserted to have no "Part of" line of its own, and after the tap the child's line is gone while the parent's COMPONENTS is on screen — so the navigation really moved rather than the same screen redrawing |
 | 4 | Edit "Battery bank" → **Part of** = Inverter → **Save**; then open Solar system's own "Part of" picker | Inverter's COMPONENTS lists Battery bank; the picker offered to Solar system contains no descendant of it — no "Inverter" | **PASS** (automated: `AssetModelDeviceProofTest.aComponentIsReparentedUnderItsSiblingAndNoDescendantIsOffered`, same run). The reparent is done **through the picker on the phone**: the "Part of" dropdown is opened, "Inverter" chosen, the app bar's Save tapped, and the component then reads "Part of Inverter" with "Part of Solar system" gone. Tapping up lands on Inverter, whose COMPONENTS lists Battery bank; tapping up again lands on Solar system, and its own picker — opened, and proven open by a second clickable "None" appearing beside the anchor's — offers **neither** "Inverter" (its child) **nor** "Battery bank" (its grandchild). The one move that could create a cycle is not on the menu |
-| 5 | Solar system → overflow **Delete** → confirm; then overflow **Archive**; then the Assets list | The delete is refused and the dialog names both components; nothing is written; after the archive the two children are still active, with no ARCHIVED badge on either | **PASS** (automated: `AssetModelDeviceProofTest.deletingAParentIsRefusedByNameAndArchivingItLeavesTheChildrenActive`, same run). Past the neutral confirmation ("Delete Solar system?"), the refusal reads **"Components first"** and one node carries both **"Inverter"** and **"Battery bank"**; after OK the parent and both components are still on screen. The archive then takes the parent alone: the default Assets list shows Inverter and Battery bank with **zero** "ARCHIVED" nodes and no "Solar system" at all, and with **Show archived** on, the badge count is exactly **1** and it belongs to the row that also says "Solar system" |
+| 5 | Solar system → overflow **Delete** → type the asset's name → confirm; then overflow **Archive**; then the Assets list | The delete is refused and the dialog names both components; nothing is written; after the archive the two children are still active, with no ARCHIVED badge on either | **PASS** (automated: `AssetModelDeviceProofTest.deletingAParentIsRefusedByNameAndArchivingItLeavesTheChildrenActive`, same run, updated in the final-review fix wave). Past the neutral confirmation ("Delete Solar system?"), the test now types **"Solar system"** into the `TypedConfirmDialog`'s field before Delete is tappable at all — the button is disabled on an empty or partial match — then the refusal reads **"Components first"** and one node carries both **"Inverter"** and **"Battery bank"**; after OK the parent and both components are still on screen. The archive then takes the parent alone: the default Assets list shows Inverter and Battery bank with **zero** "ARCHIVED" nodes and no "Solar system" at all, and with **Show archived** on, the badge count is exactly **1** and it belongs to the row that also says "Solar system" |
 | 6 | An asset whose season window is two days wide starting thirty days from today, and another whose window runs from yesterday to tomorrow | OUT OF SEASON on the first asset's screen and on its Assets row; no badge on the second | **PASS** (automated: `AssetModelDeviceProofTest.anOutOfSeasonWindowBadgesTheAssetAndItsRowWhileAnInSeasonOneDoesNot`, same run). Both windows are computed in the test from the phone's own `LocalDate.now()`, so this row is date-independent rather than pinned to 2026-09-15. Said plainly: **`today` is not injected** — `AppGraph.clock` is a `val` over `System.currentTimeMillis()` and 2B-2 added no seam for a fake one, so the proof is arithmetic on the real calendar day instead. On the list the badge is attributed to its row by the row's own merged node (`AssetListRow` is a `clickable` Row), and the total badge count on the list is **1** |
 | 7 | New asset → Category "RO system" → look at the template row; then tap **Hot tub** by hand → Category "Generator" → look again | RO water selected by the hint; Hot tub still selected after the category change, and Power equipment not selected | **PASS** (automated: `AssetModelDeviceProofTest.aCategoryHintPreSelectsATemplateButNeverOverridesAnExplicitChoice`, same run). Both categories are chosen **out of the suggestion menu on the phone**, which is also what closes it; the chips are asserted with `assertIsSelected` / `assertIsNotSelected`, not by colour |
 | 8 | New asset with **Price** "1,234.5" and **Currency** USD → Save | The asset's DETAILS section reads "1234.50 USD" | **PASS** (automated: `AssetModelDeviceProofTest.aGroupedPriceIsStoredAsMinorUnitsAndShownAtTheCurrencysPrecision`, same run). Typed with a grouping comma and one decimal place, stored as 123450 minor units, and rendered back at the currency's own two digits by `Money.format` — the number on screen is not the text that was typed |
@@ -353,6 +372,13 @@ Every ruling recorded in the SDD ledger, in plain words.
     report.
 16. **The README bullet was rewritten wider than one sentence.** The old Assets bullet described
     the bottom bar as it was; a one-word edit would have left it wrong. Accepted.
+17. **Asset delete now requires typing the asset's name; the automatic snapshot D4 §13 mentions
+    still waits for Phase 3R.** The final whole-branch review found that spec §5's "existing typed
+    confirmation flow" did not exist — asset deletion reused the plain 2B-1 `ConfirmDialog`, same as
+    a reading or an action delete. `TypedConfirmDialog` (`ui/components/TypedConfirmDialog.kt`) adds
+    the typed-name gate, same shape as the backup screen's REPLACE dialog; the children-first
+    refusal dialog is unchanged. The automatic pre-delete snapshot D4 §13 also names is a bigger
+    piece of work than a typed field — something to restore from — and stays deferred to Phase 3R.
 
 ## 7. Deferred
 
@@ -483,3 +509,43 @@ Neither template picker names a key — both iterate `SeedTemplates.all` — no 
 equipment-type column, and no screen, query or branch asks what kind of thing an asset is. Exit
 criterion 7 holds. (`app/src/androidTest` names `hot_tub` and `ro_water` when it seeds the asset a
 test needs, which is a test choosing a fixture, not the app branching on one.)
+
+### Fix wave gate (final whole-branch review)
+
+Same gate, re-run after the one-commit fix wave (typed delete confirmation, the stale KDoc, the
+duplicated currency regex — §2, §6 ruling 17):
+
+```
+./gradlew :core:test :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
+```
+
+→ **BUILD SUCCESSFUL**. Then, from clean:
+
+```
+./gradlew clean :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease \
+    :app:compileDebugAndroidTestKotlin
+```
+
+→ **BUILD SUCCESSFUL**, 113 actionable tasks, 15s. Test totals from the JUnit XML: **`:core` 273
+tests, 0 failures, 0 skipped** (272 + `MoneyTest.isCodeChecksShapeOnly`); **`:app` 158 tests, 0
+failures, 0 skipped** (unchanged — the fix wave's only test-code change is instrumented, not JVM).
+
+APK sizes:
+
+```
+-rw-r--r--. 13575589  app/build/outputs/apk/debug/app-debug.apk
+-rw-r--r--.  9790254  app/build/outputs/apk/release/app-release.apk
+```
+
+(debug ≈ 13257 KiB, up exactly 16 KiB from 13559205 for `TypedConfirmDialog` and its call site;
+release is byte-identical to the pre-wave build — R8 shrinks the swapped-in text field and enabled
+gate to the same size class as what it replaced.)
+
+Instrumented, on the owner's Android phone, ANDROID_SERIAL pinned: `svc power stayon usb` →
+`./gradlew :app:connectedDebugAndroidTest` → `svc power stayon false`. **37/37, 0 failures, 0
+skipped** — the same 37 as the branch gate; scenario (c)
+(`deletingAParentIsRefusedByNameAndArchivingItLeavesTheChildrenActive`) now types the asset's name
+into the confirm dialog before tapping Delete (§4 row 5). Reinstalled with `adb install -r` and
+launched once afterwards (AGP uninstalls when the instrumented task finishes): `versionCode=5
+versionName=2.3`, `stopped=false notLaunched=false`, `MainActivity` resumed, `FATAL EXCEPTION`
+count **0**. No serial, phone model or codename written to any file in this wave.

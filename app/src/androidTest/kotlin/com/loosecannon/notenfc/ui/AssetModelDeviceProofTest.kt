@@ -158,6 +158,7 @@ class AssetModelDeviceProofTest {
             rule.onNodeWithText("Delete").performClick()
 
             rule.awaitText("Delete Solar system?")
+            rule.field("Type Solar system to confirm").performTextInput("Solar system")
             rule.onNodeWithText("Delete").performClick()
 
             // Refused, with both components named in the one line the dialog shows.

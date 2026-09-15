@@ -49,4 +49,14 @@ class MoneyTest {
         assertFailsWith<IllegalArgumentException> { Money.format(-1L, "JPY") }
         assertEquals("0.00 USD", Money.format(0L, "USD"))
     }
+
+    @Test fun isCodeChecksShapeOnly() {
+        // Three upper-case letters — a real currency is not required, and neither is it refused.
+        assertEquals(true, Money.isCode("USD"))
+        assertEquals(true, Money.isCode("ZZZ"))   // shaped right, unresolvable — that's fractionDigits' call
+        assertEquals(false, Money.isCode("usd"))
+        assertEquals(false, Money.isCode("US"))
+        assertEquals(false, Money.isCode("USDD"))
+        assertEquals(false, Money.isCode(""))
+    }
 }
