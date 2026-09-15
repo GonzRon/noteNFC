@@ -100,8 +100,12 @@ internal val KEY_PATTERN = Regex("^[a-z][a-z0-9_]{0,39}\$")
  * `_`, trimmed of `_`, prefixed `k_` when it would otherwise start with a digit, and cut to
  * [MAX_KEY_LENGTH]. Returns "" for a label with nothing slug-able in it at all, which the caller
  * reports as [DefinitionProblem.BadKey] rather than inventing a name.
+ *
+ * Public because the definition editor previews the key it is about to generate while the user has
+ * not typed one (spec §9): the preview and the key [SaveDefinition] actually mints for a blank
+ * `key` come from this one function, so the two can never drift apart.
  */
-internal fun slugify(label: String): String {
+fun slugify(label: String): String {
     val collapsed = label.lowercase()
         .map { if (it in 'a'..'z' || it in '0'..'9') it else '_' }
         .joinToString("")

@@ -72,7 +72,11 @@ fun LedgerEntry(
     }
 }
 
-/** Stacks [LedgerEntry] rows with the 1dp `outlineVariant` rule between them and none around. */
+/**
+ * Stacks rows with the 1dp `outlineVariant` rule between them and none around — the ledger idiom
+ * of G1 §1.1. [LedgerEntry] is what it usually stacks; any row that belongs in a ruled list, such
+ * as the setup screen's readings and actions, uses it for the same rule.
+ */
 @Composable
 fun LedgerList(count: Int, modifier: Modifier = Modifier, entry: @Composable (Int) -> Unit) {
     Column(modifier = modifier) {

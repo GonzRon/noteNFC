@@ -28,6 +28,8 @@ import com.loosecannon.notenfc.ui.scan.ScanScreen
 import com.loosecannon.notenfc.ui.scan.TagResultSheet
 import com.loosecannon.notenfc.ui.scan.WriteTagScreen
 import com.loosecannon.notenfc.ui.settings.SettingsScreen
+import com.loosecannon.notenfc.ui.setup.AssetSetupScreen
+import com.loosecannon.notenfc.ui.setup.DefinitionEditScreen
 import kotlinx.coroutines.flow.SharedFlow
 
 /**
@@ -115,6 +117,30 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                             backStack.removeLastOrNull()
                             if (key.id == null) backStack.add(Route.AssetDetail(id))
                         },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<Route.AssetSetup> { key ->
+                    AssetSetupScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        onBack = { backStack.removeLastOrNull() },
+                        onEditDefinition = { asset, definition ->
+                            backStack.add(Route.DefinitionEdit(asset, definition))
+                        },
+                        onEditProfile = { asset, profile ->
+                            backStack.add(Route.ProfileEdit(asset, profile))
+                        },
+                    )
+                }
+                entry<Route.DefinitionEdit> { key ->
+                    DefinitionEditScreen(
+                        graph = graph,
+                        assetId = key.assetId,
+                        definitionId = key.definitionId,
+                        // Saved, archived or deleted, the editor is done: the setup screen behind
+                        // it is already watching the rows and redraws itself.
+                        onDone = { backStack.removeLastOrNull() },
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
