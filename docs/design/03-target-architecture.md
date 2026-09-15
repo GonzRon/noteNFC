@@ -307,6 +307,10 @@ Tag ──▶ NfcReaderModeSession (in-app Scan/Write screens, enableReaderMode)
   freshly installed, never-launched package gets no NFC dispatch until its first launch (1B
   evidence), but a package that was launched once and then force-stopped (even with its data
   cleared) still gets dispatched (1C evidence row 16). The health screen explains the first case.
+- Normal reads are ambient (manifest NDEF dispatch → `NfcDispatchActivity` → resolver → route);
+  reader mode is reserved for intentional tag operations (write, rebind, rewrite legacy,
+  inspect). No top-level Scan destination is required for reading (D12 §16 correction). With
+  Phase 3, an asset reached by dispatch surfaces its maintenance context (D5 §7A).
 - Unknown-tag resolutions offer: bind to an existing asset/link, create an asset, or (legacy tag)
   bind as-is / rewrite in payload format v1 (D13 §3). Re-link was dropped by D13.
 

@@ -193,6 +193,50 @@ occurrence is computed from the **rule** (FIXED: the series; COMPLETION: the com
 from the postponed date, and the override is cleared. This is exactly the distinction issue #4
 demands and issue #11 restates.
 
+## 7A. Scan-time maintenance context (Phase 3 UX requirement, added 2026-09-15)
+
+An asset-tag scan must be **maintenance-context aware** once scheduling exists. "An asset tag
+opens the asset" stays true, but an asset reached by NFC dispatch immediately evaluates its
+derived schedule state (§1) and surfaces the actionable work. Goal: scan the physical object
+and understand why it needs attention, what needs doing, and record that it was done, with
+minimal friction. The dashboard says what equipment somewhere needs attention; the scan says
+what this thing in front of you needs now.
+
+| State (§1) | Scan behaviour |
+|---|---|
+| OVERDUE, DUE | automatically surface the contextual maintenance sheet/panel on top of the asset |
+| DUE_SOON | prominent on the asset screen; joins the sheet only when other actionable items exist |
+| NO_DATA (meter-based) | surface the missing action itself, e.g. **Log engine hours**, with the last reading, rather than "status unknown" |
+| OK | the normal asset screen |
+| INACTIVE_SEASON, PAUSED | quiet status only, never a prompt |
+
+Rules:
+
+- No actionable schedule → open the asset normally. Standalone link tags keep their immediate
+  launch and never enter this flow (D3 §9).
+- Several actionable schedules → one ranked list (OVERDUE, DUE, DUE_SOON; then by due date),
+  never a sequence of dialogs. Tapping an item exposes its actions.
+- Each item shows enough to decide: title; state word; due date and/or meter threshold; current
+  meter value where relevant; last completion (date and, if an event, its key readings); one
+  concise line on why it is actionable now.
+- Completion follows the schedule's `completion_mode` (§7): `QUICK` offers **Record completed**
+  (minimal completion event, `rebuild`); `FORM` offers the linked event profile through the Phase
+  2A generic journal form so readings, materials and notes are captured; saving that event
+  completes the schedule.
+- **Already done earlier** is first class: completion asks for the event's `occurred_on` (default
+  today) and optional `occurred_time`, so an inspection done Sep 11 and recorded on a Sep 15 scan
+  produces the Sep 11 completion and the correct next due date. A backdated completion is ordinary
+  history; `rebuild` (§5, §9) derives everything from it.
+- Also exposed, semantically distinct per §7: **Review maintenance** (schedule detail, and later
+  the attached procedure/manual), **Snooze** (notification only), **Postpone** (this occurrence).
+  None of these is an alias for completion.
+
+Interaction: `scan → resolve asset → compute actionable context → perform / review / record`,
+not `scan → static asset page`. Acceptance for Phase 3 (D7): scanning the mower with an oil
+change overdue by engine hours shows the sheet with the threshold, the current hours and the
+last completion, and **Log oil change** opens the oil-change profile whose saved event completes
+the schedule; scanning it with no meter reading shows **Log engine hours**.
+
 ## 8. State transitions
 
 ```

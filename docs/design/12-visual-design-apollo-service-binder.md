@@ -1213,9 +1213,18 @@ by every later feature lane.
 
 ## 16. Navigation and window structure (added at G1)
 
-- **Bottom navigation** with three destinations: Dashboard · Assets · Scan (`NavigationBar`,
-  indicator pill squared to 6dp, `secondaryContainer`). Asset detail, ledger and sheets are
-  pushed on top; `notenfc://` deep links land inside this structure (D3 §13).
+- **Bottom navigation** (`NavigationBar`, indicator pill squared to 6dp, `secondaryContainer`).
+  1C shipped Dashboard · Assets · Scan. **Correction (2026-09-15): the Scan tab is not part of
+  the long-term navigation.** Normal tag reading is ambient — tap the tag anywhere, Android's
+  NDEF dispatch opens noteNFC, the resolver routes to the asset, link or contextual offer — so
+  the user never opens the app to "scan". The tab existed because 1B/1C needed a place to
+  exercise the resolver. Remove it at the first phase that touches the bottom bar (2B, or Phase
+  3 when a maintenance destination may take its place); until then it is a utility, not the
+  primary path. Dedicated foreground NFC screens remain only for intentional tag operations —
+  Write tag, Replace/rebind, Rewrite legacy, optional Inspect — because those may modify tag
+  contents and the screen establishes intent; an ambient read never enters write mode. A manual
+  "identify a tag" utility may live under tag tools or Settings. Asset detail, ledger and sheets
+  are pushed on top; `notenfc://` deep links land inside this structure (D3 §13).
 - **Edge-to-edge** (target 36+): the canvas colour runs under the status and navigation bars in
   both themes; app bars and bottom sheets pad by the system insets; no separate status-bar colour.
 - **No FAB** on dashboard or asset detail (§7).
