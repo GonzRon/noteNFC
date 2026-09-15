@@ -420,11 +420,11 @@ Signer #1 certificate SHA-256 digest: 0902d3b0f826381905c6d8254fdaf36756924d80da
 No personal path or username anywhere in the tree:
 
 ```
-git grep -nIiE '/home/[a-z]+|<the owner's username>|Pixel|cheetah' -- . ':!.superpowers'
+git grep -nIiE '/home/[a-z]+|<the owner's username>|<the phone's model and codename>' -- . ':!.superpowers'
 ```
 
 → four hits, and none of them is a leak: `NfcDispatchActivity.kt` line 31 says "every pixel the app
-draws", which the case-insensitive `Pixel` pattern matches, and the other three are this document's
+draws", which the case-insensitive model-name pattern matches, and the other three are this document's
 own §9 — the command quoting itself, plus the two lines of prose that name the pattern in order to
 explain the first hit. No path, no username, no device serial and no phone model in any
 source file, document or resource — including `EditorsDeviceProofTest`, which names no device at
