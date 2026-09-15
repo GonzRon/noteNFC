@@ -101,4 +101,21 @@ class DashboardViewModelTest {
         val state = vm.state.first { it.assets.isNotEmpty() }
         assertEquals(listOf("Mower"), state.assets.map(Asset::name))
     }
+
+    /**
+     * A retired asset is out of service exactly as an archived one is (spec §7), so CURRENT does
+     * not list it — but it is still data a phone change would lose, so the nudge rule is unchanged.
+     */
+    @Test fun dashboardExcludesRetired() = runTest {
+        val pump = graph.createAsset.run("Pool pump", "Water")
+        graph.createAsset.run("Mower", "Yard")
+        graph.retireAsset.retire(pump.id, "2026-04-02")
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.assets.isNotEmpty() }
+        assertEquals(listOf("Mower"), state.assets.map(Asset::name))
+        assertTrue(state.needsBackup)
+    }
 }

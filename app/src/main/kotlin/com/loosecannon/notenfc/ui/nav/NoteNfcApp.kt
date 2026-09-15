@@ -106,12 +106,20 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                             backStack.add(Route.EventEntry(asset, profile, null))
                         },
                         onOpenEvent = { backStack.add(Route.EventDetail(it)) },
+                        // "Part of" and a component row both push the other asset's own screen:
+                        // the hierarchy is navigated, never nested inside one screen (spec §2).
+                        onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                        onAddComponent = { backStack.add(Route.AssetEdit(null, parentId = it)) },
+                        onLogOutcome = { asset, kind ->
+                            backStack.add(Route.EventEntry(asset, null, null, kind = kind))
+                        },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
                     AssetEditScreen(
                         graph = graph,
                         assetId = key.id,
+                        parentId = key.parentId,
                         // A new asset opens on its own detail screen and the form leaves the stack:
                         // backing out of the asset should not land back on the form that made it.
                         onDone = { id ->
@@ -162,6 +170,7 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         eventId = key.eventId,
                         onDone = { backStack.removeLastOrNull() },
                         onBack = { backStack.removeLastOrNull() },
+                        kind = key.kind,
                     )
                 }
                 entry<Route.EventDetail> { key ->

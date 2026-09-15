@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.isRetired
 import com.loosecannon.notenfc.core.ports.AssetRepository
 import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.di.AppGraph
@@ -54,9 +55,12 @@ class DashboardViewModel(
         combine(assets.observeAll(), links.observeAll(), refreshes) { rows, linkRows, _ ->
             val last = prefs.lastBackupAt
             val active = rows.filter { it.status == AssetStatus.ACTIVE }
+            val inService = active.filterNot { it.isRetired }
             DashboardState(
-                // CURRENT is the section for assets in service; archived ones are not in it.
-                assets = active,
+                // CURRENT is the section for assets in service. A retired asset is out of service
+                // exactly as an archived one is (spec §7), so it is not in it either — but it is
+                // still something a backup would lose, which is why the nudge below counts it.
+                assets = inService,
                 // An empty install has nothing to lose, and a nudge over an empty dashboard is
                 // noise: the offer only means something once there is something to survive the
                 // phone change. Links count — a standalone link is data the backup carries too.

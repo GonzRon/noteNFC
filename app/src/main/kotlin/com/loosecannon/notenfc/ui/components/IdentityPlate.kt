@@ -3,6 +3,9 @@ package com.loosecannon.notenfc.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,7 +34,13 @@ data class PlateValue(val text: String, val mono: Boolean = false)
  * The defining Asset Identity Plate of D12 §8: `surfaceContainerLow` behind a 1dp `outlineVariant`
  * outline, 8dp radius, 14dp padding. It reads as a plate because of the outline, not the fill, so
  * it is a bordered `Surface` and never an elevated card (D12 §7 "Borders", "Elevation").
+ *
+ * [cells] is any number of label/value pairs, laid out two to a row: four of them make the 2×2 of
+ * G1 §1.1 and the six of spec §9 make a 2×3. [badges] is a slot rather than a list because an
+ * asset can be several things at once (retired *and* out of season), and each badge is the caller's
+ * own `StatusBadge` in its own family; they wrap under the title instead of crowding the eyebrow.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun IdentityPlate(
     category: String,
@@ -39,7 +48,7 @@ fun IdentityPlate(
     name: String?,
     cells: List<Pair<String, PlateValue>>,
     icon: ImageVector,
-    badge: (@Composable () -> Unit)? = null,
+    badges: (@Composable FlowRowScope.() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -58,9 +67,6 @@ fun IdentityPlate(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                // An archived (or retired) asset says so beside the eyebrow (G1 §1.1); an active
-                // one shows nothing at all, because "normal" needs no badge.
-                badge?.invoke()
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
@@ -74,6 +80,16 @@ fun IdentityPlate(
                     text = name,
                     style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),  // G1 §1.1: friendly name 15sp
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            // An asset that is retired, archived or out of season says so under its own name
+            // (spec §9); an ordinary one shows nothing, because "normal" needs no badge.
+            if (badges != null) {
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    content = badges,
                 )
             }
             Spacer(Modifier.height(10.dp))

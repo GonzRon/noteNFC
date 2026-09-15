@@ -78,8 +78,11 @@ fun AssetEditScreen(
     onBack: () -> Unit,
     parentId: String? = null,
 ) {
-    val model: AssetEditViewModel =
-        viewModel(key = assetId ?: "new") { AssetEditViewModel(graph, assetId, parentId) }
+    // The key carries the parent as well as the id: "+ Add component" on two different parents
+    // must not share one half-filled form, and neither must a plain "Add asset" and a component.
+    val model: AssetEditViewModel = viewModel(key = assetId ?: "new-${parentId ?: "root"}") {
+        AssetEditViewModel(graph, assetId, parentId)
+    }
     val state by model.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
 
@@ -392,9 +395,13 @@ private fun ChoiceField(
     }
 }
 
-/** An ISO date: typed, or picked from a calendar that writes the same `YYYY-MM-DD` text. */
+/**
+ * An ISO date: typed, or picked from a calendar that writes the same `YYYY-MM-DD` text. Internal
+ * rather than private because the retirement dialog of spec §7 asks for a date the same way, and
+ * "how this app asks for a day" should have one owner.
+ */
 @Composable
-private fun DateField(
+internal fun DateField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,

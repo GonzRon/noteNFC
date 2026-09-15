@@ -13,6 +13,7 @@ import com.loosecannon.notenfc.core.model.ProfileId
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagTarget
+import com.loosecannon.notenfc.core.model.isRetired
 import com.loosecannon.notenfc.core.usecase.AssetCommand
 import com.loosecannon.notenfc.core.usecase.EventCommand
 import com.loosecannon.notenfc.testing.FakeGraph
@@ -33,6 +34,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 
 /**
@@ -65,11 +68,12 @@ class AssetViewModelsTest {
         updatedAt = 1L,
     )
 
-    /** The detail model takes nine collaborators; every test wants the same nine off the graph. */
+    /** The detail model takes twelve collaborators; every test wants the same twelve off the graph. */
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
         graph.assets, graph.tags, graph.links,
         graph.definitions, graph.profiles, graph.events,
-        graph.archiveAsset, graph.applyTemplate, id,
+        graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
+        graph.applyTemplate, graph.clock, id,
     )
 
     /**
@@ -82,6 +86,10 @@ class AssetViewModelsTest {
         model.state.first { it.parentChoices.isNotEmpty() }
         return model
     }
+
+    /** A calendar day as this device's epoch millis — what [FakeGraph.now] is moved to. */
+    private fun millisOn(date: String): Long =
+        LocalDate.parse(date).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     private fun waterTest(
         assetId: AssetId,
@@ -102,11 +110,11 @@ class AssetViewModelsTest {
     )
 
     @Test fun theListEmitsAfterACreateAndHidesArchivedRowsUntilTheChipIsOn() = runTest {
-        val vm = AssetsViewModel(graph.assets)
+        val vm = AssetsViewModel(graph.assets, graph.clock)
         backgroundScope.launch { vm.state.collect() }
 
         val pump = graph.createAsset.run("Pool pump", "Water")
-        assertEquals(listOf("Pool pump"), vm.state.first { it.items.isNotEmpty() }.items.map(Asset::name))
+        assertEquals(listOf("Pool pump"), vm.state.first { it.items.isNotEmpty() }.items.map { it.asset.name })
 
         graph.archiveAsset.run(pump.id)
         val hidden = vm.state.first { it.items.isEmpty() }
@@ -117,7 +125,7 @@ class AssetViewModelsTest {
         vm.toggleArchived()
         val shown = vm.state.first { it.items.isNotEmpty() }
         assertTrue(shown.showArchived)
-        assertEquals(AssetStatus.ARCHIVED, shown.items.single().status)
+        assertEquals(AssetStatus.ARCHIVED, shown.items.single().asset.status)
     }
 
     @Test fun theDetailExposesOnlyTheTagsBoundToThisAsset() = runTest {
@@ -680,5 +688,236 @@ class AssetViewModelsTest {
         val pair = season.state.first { !it.saving }.problems
         assertEquals("Set both season dates or neither", pair[AssetField.SEASON])
         assertEquals(null, pair[AssetField.SEASON_START])
+    }
+
+    /**
+     * The parent's COMPONENTS section counts each child's *own* out-of-range readings and rolls no
+     * values up (spec §2): the spa's own instrument panel stays empty while its heater has a
+     * reading past its bound, and the heater's screen names the spa as what it is part of.
+     */
+    @Test fun componentsListChildrenWithOutOfRangeCounts() = runTest {
+        val spa = graph.createAsset.run("Spa", "Water")
+        val heater = graph.createAsset.run("Heater", "Heating", templateKey = "hot_tub")
+        val cover = graph.createAsset.run("Cover", "Cover")
+        graph.updateAsset.run(
+            heater.id,
+            AssetCommand(name = "Heater", category = "Heating", parentAssetId = spa.id),
+        )
+        graph.updateAsset.run(
+            cover.id,
+            AssetCommand(name = "Cover", category = "Cover", parentAssetId = spa.id),
+        )
+
+        val defs = graph.definitions.forAsset(heater.id).associateBy(MeasurementDefinition::key)
+        val profile = graph.profiles.forAsset(heater.id).first { it.name == "Water test" }
+        graph.logEvent.run(
+            waterTest(
+                heater.id,
+                profile.id,
+                "2026-09-15",
+                mapOf(
+                    defs.getValue("ph").id to "7.4",
+                    defs.getValue("free_chlorine").id to "9.0",
+                ),
+            ),
+        )
+
+        val vm = detailModel(spa.id)
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it?.components?.size == 2 }!!
+        assertEquals(listOf("Cover", "Heater"), state.components.map(ComponentRow::name))
+        assertEquals(listOf("Cover", "Heating"), state.components.map(ComponentRow::category))
+        assertEquals(0, state.components.first { it.name == "Cover" }.outOfRange)
+        assertEquals(1, state.components.first { it.name == "Heater" }.outOfRange)
+        // The parent's own readings and service record contain only its own data (spec §5).
+        assertTrue(state.readings.isEmpty())
+        assertEquals(null, state.parentName)
+
+        val child = detailModel(heater.id)
+        backgroundScope.launch { child.state.collect() }
+        val childState = child.state.first { it?.parentName != null }!!
+        assertEquals("Spa", childState.parentName)
+        assertEquals(spa.id.value, childState.parentId)
+        // A child is a full asset: its own readings are its own, and it has no components.
+        assertEquals(1, childState.readings.count { it.state == RangeState.HIGH })
+        assertTrue(childState.components.isEmpty())
+    }
+
+    /**
+     * OUT OF SEASON is read off the clock, not stored (spec §6). The same asset is out of season in
+     * January and in it in June, and a window that wraps the year says the opposite of both.
+     */
+    @Test fun outOfSeasonComputedFromClock() = runTest {
+        val mower = graph.createAsset.run("Mower", "Yard")
+        graph.updateAsset.run(
+            mower.id,
+            AssetCommand(name = "Mower", seasonStartMmdd = "05-01", seasonEndMmdd = "09-30"),
+        )
+
+        graph.now = millisOn("2026-01-15")
+        val winter = detailModel(mower.id)
+        backgroundScope.launch { winter.state.collect() }
+        assertTrue(winter.state.first { it != null }!!.outOfSeason)
+
+        graph.now = millisOn("2026-06-15")
+        val summer = detailModel(mower.id)
+        backgroundScope.launch { summer.state.collect() }
+        assertFalse(summer.state.first { it != null }!!.outOfSeason)
+
+        // A window whose start is after its end wraps the year, inclusively (spec §6).
+        graph.updateAsset.run(
+            mower.id,
+            AssetCommand(name = "Mower", seasonStartMmdd = "11-01", seasonEndMmdd = "02-28"),
+        )
+        graph.now = millisOn("2026-01-15")
+        val wrappedWinter = detailModel(mower.id)
+        backgroundScope.launch { wrappedWinter.state.collect() }
+        assertFalse(wrappedWinter.state.first { it != null }!!.outOfSeason)
+
+        graph.now = millisOn("2026-06-15")
+        val wrappedSummer = detailModel(mower.id)
+        backgroundScope.launch { wrappedSummer.state.collect() }
+        assertTrue(wrappedSummer.state.first { it != null }!!.outOfSeason)
+    }
+
+    /**
+     * Retirement is data (spec §7): the row stays, the status is untouched, and logging what
+     * happened is a separate offer that "Not now" declines without undoing anything.
+     */
+    @Test fun retireKeepsAssetAndFollowOnIsOptional() = runTest {
+        val mower = graph.createAsset.run("Mower", "Yard")
+        val vm = detailModel(mower.id)
+        backgroundScope.launch { vm.state.collect() }
+        backgroundScope.launch { vm.prompt.collect() }
+        backgroundScope.launch { vm.missing.collect() }
+        vm.state.first { it != null }
+
+        graph.now = millisOn("2026-09-15")
+        vm.askRetire()
+        // The dialog opens on today and the date is the user's from there: backdating is normal.
+        assertEquals("2026-09-15", (vm.prompt.value as DetailPrompt.Retire).date)
+
+        vm.retire("2026-04-02")
+        val retired = vm.state.first { it?.asset?.isRetired == true }!!
+        assertEquals("2026-04-02", retired.asset.retiredOn)
+        assertEquals(AssetStatus.ACTIVE, retired.asset.status)
+        assertFalse(vm.missing.value)
+
+        // Only once the date is written is the entry offered — and declining it leaves it written.
+        assertEquals(DetailPrompt.LogWhatHappened, vm.prompt.first { it is DetailPrompt.LogWhatHappened })
+        vm.dismissPrompt()
+        assertEquals(null, vm.prompt.value)
+        assertEquals("2026-04-02", graph.assets.get(mower.id)!!.retiredOn)
+    }
+
+    @Test fun unretireClears() = runTest {
+        val mower = graph.createAsset.run("Mower", "Yard")
+        graph.retireAsset.retire(mower.id, "2026-04-02")
+
+        val vm = detailModel(mower.id)
+        backgroundScope.launch { vm.state.collect() }
+        assertTrue(vm.state.first { it != null }!!.asset.isRetired)
+
+        vm.unretire()
+        assertEquals(null, vm.state.first { it?.asset?.isRetired == false }!!.asset.retiredOn)
+    }
+
+    /** Children-first (spec §5): the refusal names them, and nothing is deleted. */
+    @Test fun deleteRefusedNamesChildren() = runTest {
+        val generator = graph.createAsset.run("Generator", "Power")
+        val battery = graph.createAsset.run("Starter battery", "Battery")
+        graph.updateAsset.run(
+            battery.id,
+            AssetCommand(name = "Starter battery", parentAssetId = generator.id),
+        )
+
+        val vm = detailModel(generator.id)
+        backgroundScope.launch { vm.state.collect() }
+        backgroundScope.launch { vm.prompt.collect() }
+        vm.state.first { it?.components?.size == 1 }
+
+        vm.askDelete()
+        assertEquals(DetailPrompt.ConfirmDelete, vm.prompt.value)
+
+        vm.delete()
+        val refused = vm.prompt.first { it is DetailPrompt.DeleteRefused } as DetailPrompt.DeleteRefused
+        assertEquals(listOf("Starter battery"), refused.children)
+        assertEquals(2, graph.assets.all().size)
+    }
+
+    @Test fun deleteWithoutChildrenEmits() = runTest {
+        val thing = graph.createAsset.run("Thing", "Misc")
+        val vm = detailModel(thing.id)
+        backgroundScope.launch { vm.state.collect() }
+        // The screen leaves by the one shot rather than as a side effect of the row disappearing,
+        // so the test waits on that shot: the delete itself runs in the ViewModel's own scope.
+        val gone = backgroundScope.async { vm.deleted.first() }
+        vm.state.first { it != null }
+
+        vm.delete()
+        gone.await()
+        assertTrue(graph.assets.all().isEmpty())
+        assertEquals(null, vm.prompt.value)
+    }
+
+    /**
+     * Active, then retired, then archived, by name within each group and case-insensitively, so
+     * "apple press" does not sort after "Zebra mower" (spec §9). An asset that is both retired and
+     * archived belongs to the archived tail: the chip that hides archived rows must hide all of them.
+     */
+    @Test fun assetsListSortsActiveRetiredArchived() = runTest {
+        graph.createAsset.run("Zebra mower", "Yard")
+        graph.createAsset.run("apple press", "Kitchen")
+        val retired = graph.createAsset.run("Brine pump", "Water")
+        val archived = graph.createAsset.run("Ash vacuum", "Shop")
+        val both = graph.createAsset.run("Attic fan", "Air")
+        graph.retireAsset.retire(retired.id, "2026-04-02")
+        graph.archiveAsset.run(archived.id)
+        graph.retireAsset.retire(both.id, "2026-01-01")
+        graph.archiveAsset.run(both.id)
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+
+        val active = vm.state.first { it.items.size == 3 }
+        assertEquals(
+            listOf("apple press", "Zebra mower", "Brine pump"),
+            active.items.map { it.asset.name },
+        )
+        assertEquals(2, active.archivedCount)
+
+        vm.toggleArchived()
+        val all = vm.state.first { it.items.size == 5 }
+        assertEquals(
+            listOf("apple press", "Zebra mower", "Brine pump", "Ash vacuum", "Attic fan"),
+            all.items.map { it.asset.name },
+        )
+    }
+
+    /** A row says whose component it is and whether today is outside its window (spec §6, §9). */
+    @Test fun assetsRowsCarryPartOf() = runTest {
+        val generator = graph.createAsset.run("Generator", "Power")
+        val battery = graph.createAsset.run("Starter battery", "Battery")
+        graph.updateAsset.run(
+            battery.id,
+            AssetCommand(
+                name = "Starter battery",
+                parentAssetId = generator.id,
+                seasonStartMmdd = "05-01",
+                seasonEndMmdd = "09-30",
+            ),
+        )
+        graph.now = millisOn("2026-01-15")
+
+        val vm = AssetsViewModel(graph.assets, graph.clock)
+        backgroundScope.launch { vm.state.collect() }
+
+        val rows = vm.state.first { it.items.size == 2 }.items.associateBy { it.asset.name }
+        assertEquals("Generator", rows.getValue("Starter battery").parentName)
+        assertTrue(rows.getValue("Starter battery").outOfSeason)
+        // A root asset with no window says neither thing.
+        assertEquals(null, rows.getValue("Generator").parentName)
+        assertFalse(rows.getValue("Generator").outOfSeason)
     }
 }

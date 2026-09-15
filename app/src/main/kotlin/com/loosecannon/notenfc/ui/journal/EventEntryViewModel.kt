@@ -99,6 +99,13 @@ data class EventEntryState(
 )
 
 /**
+ * The title a preset kind opens with (spec §7). One word, and editable like any other title: the
+ * entry is the user's, and the preset is only there so the common case needs no typing.
+ */
+private fun presetTitle(kind: EventKind): String =
+    kind.name.lowercase().replaceFirstChar { it.uppercase() }.replace('_', ' ')
+
+/**
  * New entry ([eventId] null) or edit of a stored one. A new entry takes its rows from the profile;
  * an edit takes them from the event's own profile, falling back to every unarchived definition of
  * the asset as optional rows when the event was logged without one.
@@ -117,12 +124,25 @@ class EventEntryViewModel(
     private val assetId: AssetId,
     private val profileId: ProfileId?,
     private val eventId: EventId?,
+    /**
+     * The kind a *new, profile-less* entry opens with — the retirement follow-on of spec §7 asks
+     * for a REPLACEMENT or a NOTE. A profile always wins, because its kind is the one the action
+     * was set up to log; an edit always keeps the kind it was logged with.
+     */
+    private val presetKind: EventKind? = null,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph, assetId: String, profileId: String?, eventId: String?) : this(
+    constructor(
+        graph: AppGraph,
+        assetId: String,
+        profileId: String?,
+        eventId: String?,
+        kind: String? = null,
+    ) : this(
         graph.assets, graph.definitions, graph.profiles, graph.events,
         graph.logEvent, graph.updateEvent, graph.clock,
         AssetId(assetId), profileId?.let(::ProfileId), eventId?.let(::EventId),
+        kind?.let { name -> runCatching { EventKind.valueOf(name) }.getOrNull() },
     )
 
     /** The zone the entry is being made in; stored on the event as `tzId` for the audit trail. */
@@ -162,7 +182,7 @@ class EventEntryViewModel(
             val existing = eventId?.let { events.get(it) }
             val profile = (existing?.profileId ?: profileId)?.let { profiles.get(it) }
             commandProfileId = profile?.id
-            kind = existing?.kind ?: profile?.eventKind ?: EventKind.NOTE
+            kind = existing?.kind ?: profile?.eventKind ?: presetKind ?: EventKind.NOTE
             val all = definitions.forAsset(assetId)
             sources = all.associateBy(MeasurementDefinition::id)
             derivedDefinitions = all
@@ -173,7 +193,9 @@ class EventEntryViewModel(
                 current.copy(
                     assetName = assetName,
                     profileName = profile?.name.orEmpty(),
-                    title = existing?.title ?: profile?.defaultTitle.orEmpty(),
+                    title = existing?.title
+                        ?: profile?.defaultTitle
+                        ?: presetKind?.let(::presetTitle).orEmpty(),
                     occurredOn = existing?.occurredOn ?: current.occurredOn,
                     occurredTime = if (existing != null) existing.occurredTime else current.occurredTime,
                     fields = fields,

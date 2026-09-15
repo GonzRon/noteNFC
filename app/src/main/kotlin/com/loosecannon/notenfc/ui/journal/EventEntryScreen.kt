@@ -75,9 +75,11 @@ fun EventEntryScreen(
     eventId: String?,
     onDone: () -> Unit,
     onBack: () -> Unit,
+    /** The `EventKind` name a new, profile-less entry opens with (spec §7); ignored otherwise. */
+    kind: String? = null,
 ) {
-    val model: EventEntryViewModel = viewModel(key = eventId ?: "new-$assetId-$profileId") {
-        EventEntryViewModel(graph, assetId, profileId, eventId)
+    val model: EventEntryViewModel = viewModel(key = eventId ?: "new-$assetId-$profileId-$kind") {
+        EventEntryViewModel(graph, assetId, profileId, eventId, kind)
     }
     val state by model.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
