@@ -40,8 +40,32 @@ interface DefinitionDao {
     @Query("SELECT * FROM measurement_definition WHERE asset_id = :assetId ORDER BY sort_order, id")
     fun observeForAsset(assetId: String): Flow<List<MeasurementDefinitionEntity>>
 
+    /**
+     * One row. The RESTRICT keys in front of it — `measurement.definition_id` and the two
+     * `source_*_id` self-references — are what refuse a definition that is still in use; the
+     * caller (`:core`'s DeleteDefinition) checks first so the user gets a sentence instead of a
+     * constraint failure, and this is the last line of defence if it ever doesn't.
+     */
+    @Query("DELETE FROM measurement_definition WHERE id = :id")
+    suspend fun delete(id: String)
+
+    /**
+     * Two statements, because the table points at itself: a DERIVED row's `source_a_id` /
+     * `source_b_id` are RESTRICT, and RESTRICT is checked the instant the parent row goes, not at
+     * the end of the statement. Deleting everything in one `DELETE FROM` would therefore trip over
+     * its own rows depending on page order. DERIVED rows are cleared first, then the rest.
+     */
+    @Transaction
+    suspend fun deleteAll() {
+        deleteDerived()
+        deleteRemaining()
+    }
+
+    @Query("DELETE FROM measurement_definition WHERE kind = 'DERIVED'")
+    suspend fun deleteDerived()
+
     @Query("DELETE FROM measurement_definition")
-    suspend fun deleteAll()
+    suspend fun deleteRemaining()
 }
 
 /**
@@ -106,6 +130,22 @@ interface ProfileDao {
     @Query("SELECT * FROM event_profile WHERE asset_id = :assetId ORDER BY sort_order, id")
     fun observeForAsset(assetId: String): Flow<List<ProfileWithParts>>
 
+    /**
+     * The aggregate, deleted whole. The two child tables CASCADE from `event_profile`, but they
+     * are cleared explicitly so the intent reads here rather than only in the schema, and so the
+     * behaviour does not depend on `PRAGMA foreign_keys` being on. Events that used the profile
+     * keep their history: `asset_event.profile_id` is SET NULL.
+     */
+    @Transaction
+    suspend fun delete(id: String) {
+        deleteFields(id)
+        deleteConsumables(id)
+        deleteRow(id)
+    }
+
+    @Query("DELETE FROM event_profile WHERE id = :id")
+    suspend fun deleteRow(id: String)
+
     @Query("DELETE FROM event_profile")
     suspend fun deleteAll()
 }
@@ -145,6 +185,10 @@ interface EventDao {
 
     @Query("DELETE FROM measurement WHERE event_id = :eventId")
     suspend fun deleteMeasurements(eventId: String)
+
+    /** How many stored readings name this definition — what makes a definition "in use". */
+    @Query("SELECT COUNT(*) FROM measurement WHERE definition_id = :definitionId")
+    suspend fun countMeasurementsFor(definitionId: String): Int
 
     @Query("DELETE FROM consumable_usage WHERE event_id = :eventId")
     suspend fun deleteConsumables(eventId: String)

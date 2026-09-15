@@ -4,6 +4,9 @@ import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.ConsumableUsage
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.DerivedFormula
+import com.loosecannon.notenfc.core.model.DerivedSpec
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
@@ -24,11 +27,17 @@ import com.loosecannon.notenfc.data.room.entities.MeasurementEntity
 import com.loosecannon.notenfc.data.room.entities.ProfileConsumableEntity
 import com.loosecannon.notenfc.data.room.entities.ProfileFieldEntity
 
-// Schema v2's half of the mapping layer. Same rules as [Mappers.kt]: enums travel as their Kotlin
+// Schema v3's half of the mapping layer. Same rules as [Mappers.kt]: enums travel as their Kotlin
 // name and `valueOf` rejects anything else here, at the repository boundary. Child-row ids pass
 // through unchanged in both directions — the database never mints one, the domain always does.
 // `@Relation` returns children in no particular order, so every read sorts by `sortOrder`.
 
+/**
+ * The three DERIVED columns are one value in the domain: a [DerivedSpec], or nothing. Anything in
+ * between — a formula with no sources, a source with no formula — is a row the writers below
+ * cannot produce and `:core`'s validation refuses, so it is read as an absent spec rather than
+ * being half-assembled.
+ */
 fun MeasurementDefinitionEntity.toDomain(): MeasurementDefinition = MeasurementDefinition(
     id = DefinitionId(id),
     assetId = AssetId(assetId),
@@ -44,7 +53,16 @@ fun MeasurementDefinitionEntity.toDomain(): MeasurementDefinition = MeasurementD
     archivedAt = archivedAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    kind = enumValueOf<DefinitionKind>(kind),
+    derived = derivedSpec(),
 )
+
+private fun MeasurementDefinitionEntity.derivedSpec(): DerivedSpec? {
+    val f = formula ?: return null
+    val a = sourceAId ?: return null
+    val b = sourceBId ?: return null
+    return DerivedSpec(enumValueOf<DerivedFormula>(f), DefinitionId(a), DefinitionId(b))
+}
 
 fun MeasurementDefinition.toEntity(): MeasurementDefinitionEntity = MeasurementDefinitionEntity(
     id = id.value,
@@ -61,6 +79,10 @@ fun MeasurementDefinition.toEntity(): MeasurementDefinitionEntity = MeasurementD
     archivedAt = archivedAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    kind = kind.name,
+    formula = derived?.formula?.name,
+    sourceAId = derived?.sourceA?.value,
+    sourceBId = derived?.sourceB?.value,
 )
 
 fun ProfileWithParts.toDomain(): EventProfile = EventProfile(

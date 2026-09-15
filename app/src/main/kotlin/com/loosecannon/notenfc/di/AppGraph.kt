@@ -16,21 +16,30 @@ import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.ports.UuidGenerator
 import com.loosecannon.notenfc.core.usecase.ApplyTemplate
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
+import com.loosecannon.notenfc.core.usecase.ArchiveDefinition
+import com.loosecannon.notenfc.core.usecase.ArchiveProfile
 import com.loosecannon.notenfc.core.usecase.BindTag
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
+import com.loosecannon.notenfc.core.usecase.DeleteProfile
 import com.loosecannon.notenfc.core.usecase.ExportBackup
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.OpenLink
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
+import com.loosecannon.notenfc.core.usecase.ReorderDefinitions
+import com.loosecannon.notenfc.core.usecase.ReorderProfiles
 import com.loosecannon.notenfc.core.usecase.ResolveTag
+import com.loosecannon.notenfc.core.usecase.SaveDefinition
 import com.loosecannon.notenfc.core.usecase.SaveLink
+import com.loosecannon.notenfc.core.usecase.SaveProfile
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.MIGRATION_1_2
+import com.loosecannon.notenfc.data.room.MIGRATION_2_3
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
 import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
 import com.loosecannon.notenfc.data.room.RoomEventRepository
@@ -53,7 +62,7 @@ class AppGraph(context: Context) {
         )
         .setDriver(AndroidSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
 
     val clock: Clock = Clock { System.currentTimeMillis() }
@@ -101,10 +110,22 @@ class AppGraph(context: Context) {
     val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
     val deleteEvent: DeleteEvent = DeleteEvent(events, uow)
 
+    // Phase 2B-1 — the definition and profile editors. Archive is the ordinary retirement; delete
+    // exists only for a row nothing references yet, and each use case checks that before writing.
+    val saveDefinition: SaveDefinition =
+        SaveDefinition(definitions, events, profiles, assets, uow, ids, clock)
+    val archiveDefinition: ArchiveDefinition = ArchiveDefinition(definitions, uow, clock)
+    val deleteDefinition: DeleteDefinition = DeleteDefinition(definitions, events, profiles, uow)
+    val reorderDefinitions: ReorderDefinitions = ReorderDefinitions(definitions, uow, clock)
+    val saveProfile: SaveProfile = SaveProfile(profiles, definitions, assets, uow, ids, clock)
+    val archiveProfile: ArchiveProfile = ArchiveProfile(profiles, uow, clock)
+    val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
+    val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
+
     private companion object {
         const val DB_NAME = "notenfc.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
     }
 }
