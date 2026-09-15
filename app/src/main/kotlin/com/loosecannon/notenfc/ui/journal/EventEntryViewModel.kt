@@ -22,9 +22,11 @@ import com.loosecannon.notenfc.core.ports.EventRepository
 import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.usecase.ConsumableInput
 import com.loosecannon.notenfc.core.usecase.EventCommand
+import com.loosecannon.notenfc.core.usecase.EventOwnership
 import com.loosecannon.notenfc.core.usecase.EventValidation
 import com.loosecannon.notenfc.core.usecase.FieldProblem
 import com.loosecannon.notenfc.core.usecase.LogEvent
+import com.loosecannon.notenfc.core.usecase.NoSuchEvent
 import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.di.AppGraph
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -164,8 +166,13 @@ class EventEntryViewModel(
 
     /**
      * The profile's fields in `sortOrder`, or — for an event logged without a profile — every
-     * unarchived definition of the asset as an optional row, so an edit can still reach a value
-     * the event already carries.
+     * unarchived definition of the asset as an optional row.
+     *
+     * An edit then adds a row for anything the stored event measured that neither list covers: an
+     * imported event whose profile has since changed, or a definition archived after the event was
+     * logged. Without that row the value would be invisible on the form and, because [save] submits
+     * the rows and nothing else, silently dropped by the edit. An edit must not delete a reading
+     * the user never saw.
      */
     private suspend fun rows(profile: EventProfile?, existing: AssetEvent?): List<FieldRow> {
         val fields: List<Pair<DefinitionId, Boolean>> = profile
@@ -176,7 +183,17 @@ class EventEntryViewModel(
                 .filter { it.archivedAt == null }
                 .sortedBy { it.sortOrder }
                 .map { it.id to false }
-        return fields.mapNotNull { (id, required) ->
+
+        val covered = fields.map { it.first }.toSet()
+        val carried = existing?.measurements.orEmpty()
+            .map { it.definitionId }
+            .filterNot { it in covered }
+            .distinct()
+            .mapNotNull { id -> definitions.get(id)?.let { id to it.sortOrder } }
+            .sortedBy { it.second }
+            .map { it.first to false }
+
+        return (fields + carried).mapNotNull { (id, required) ->
             val definition = definitions.get(id) ?: return@mapNotNull null
             val measurement = existing?.measurements?.firstOrNull { it.definitionId == id }
             FieldRow(definition, required, measurement.asText(definition), problem = null)
@@ -189,7 +206,7 @@ class EventEntryViewModel(
 
     fun onTime(value: String?) = _state.update { it.copy(occurredTime = value, firstProblem = null) }
 
-    fun onNotes(value: String) = _state.update { it.copy(notes = value) }
+    fun onNotes(value: String) = _state.update { it.copy(notes = value, firstProblem = null) }
 
     /** Typing in a row clears that row's mark and the line under the app bar, as 1C's name field does. */
     fun onValue(definitionId: DefinitionId, value: String) = _state.update { current ->
@@ -269,15 +286,18 @@ class EventEntryViewModel(
                     .associate { it.definition.id to it.text },
                 consumables = submitted.map { it.second },
             )
-            val result = runCatching { if (eventId == null) logEvent.run(cmd) else updateEvent.run(eventId, cmd) }
-
-            when (val failure = result.exceptionOrNull()) {
-                null -> {
-                    _state.update { it.copy(saving = false) }
-                    result.getOrNull()?.let { _saved.tryEmit(it.id) }
-                }
-                is EventValidation -> markProblems(failure, submitted.map { it.first })
-                else -> _state.update { it.copy(saving = false, firstProblem = "Could not save this entry.") }
+            // Caught by name, not by runCatching: a cancelled `viewModelScope` must stay cancelled
+            // rather than be reported to the user as a refused save.
+            try {
+                val event = if (eventId == null) logEvent.run(cmd) else updateEvent.run(eventId, cmd)
+                _state.update { it.copy(saving = false) }
+                _saved.tryEmit(event.id)
+            } catch (e: EventValidation) {
+                markProblems(e, submitted.map { it.first })
+            } catch (e: EventOwnership) {
+                refuse(e)
+            } catch (e: NoSuchEvent) {
+                refuse(e)
             }
         }
     }
@@ -298,6 +318,15 @@ class EventEntryViewModel(
                 firstProblem = failure.problems.firstProblemText(fields),
             )
         }
+    }
+
+    /**
+     * The two failures no amount of retyping fixes: the event moved, or the profile or definition
+     * the form names is not this asset's any more. Say so once and leave the form as it was typed.
+     */
+    private fun refuse(cause: Throwable) {
+        val line = if (cause is NoSuchEvent) "This entry is no longer there." else "Could not save this entry."
+        _state.update { it.copy(saving = false, firstProblem = line) }
     }
 
     /**

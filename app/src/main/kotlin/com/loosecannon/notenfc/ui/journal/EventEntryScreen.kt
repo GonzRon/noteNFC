@@ -142,7 +142,7 @@ fun EventEntryScreen(
             }
             if (state.fields.isNotEmpty()) {
                 item("header") { InstrumentEntryHeader() }
-                itemsIndexed(state.fields) { index, row ->
+                itemsIndexed(state.fields, key = { _, row -> row.definition.id.value }) { index, row ->
                     if (index > 0) {
                         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }

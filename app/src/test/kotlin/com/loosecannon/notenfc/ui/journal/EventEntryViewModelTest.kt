@@ -231,6 +231,45 @@ class EventEntryViewModelTest {
         assertEquals(7.5, after.valueNum!!, 1e-9)
     }
 
+    @Test fun editKeepsMeasurementsNotInTheProfile() = runTest {
+        val spa = spa()
+        val alkalinity = spa.def("alkalinity")
+        // Treatment's fields are pH and free chlorine only, so the alkalinity reading is an extra
+        // the profile does not name — the shape an import, or a profile edited since, leaves behind.
+        val treatment = graph.profiles.forAsset(spa.id).first { it.name == "Treatment" }
+        val logged = graph.logEvent.run(
+            EventCommand(
+                assetId = spa.id,
+                profileId = treatment.id,
+                kind = EventKind.TREATMENT,
+                title = "Treatment",
+                occurredOn = "2026-09-15",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = mapOf(spa.def("ph").id to "7.4", alkalinity.id to "110"),
+                consumables = emptyList(),
+            ),
+        )
+
+        val vm = entryModel(spa.id, null, logged.id)
+        val state = vm.state.first { it.loaded }
+
+        // The carried row is shown, after the profile's own, so the value is not invisible.
+        assertEquals(listOf("ph", "free_chlorine", "alkalinity"), state.fields.map { it.definition.key })
+        assertEquals("110", state.fields.last().text)
+        assertFalse(state.fields.last().required)
+
+        vm.save()
+        vm.state.first { !it.saving }
+
+        val reloaded = graph.events.forAsset(spa.id).single()
+        val before = logged.measurements.first { it.definitionId == alkalinity.id }
+        val after = reloaded.measurements.first { it.definitionId == alkalinity.id }
+        assertEquals(before.id, after.id)
+        assertEquals(110.0, after.valueNum!!, 1e-9)
+    }
+
     @Test fun deleteRemovesAndEmits() = runTest {
         val spa = spa()
         val logged = graph.logEvent.run(
