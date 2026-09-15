@@ -133,26 +133,6 @@ class AppSmokeTest {
         // "Last backup: Never" — the screen agrees with the nudge that sent us here.
         rule.onNodeWithText("Never").assertIsDisplayed()
     }
-
-    /**
-     * `notenfc://asset/nope` is not a canonical UUID, so `DeepLinkRoute` calls it malformed,
-     * `MainActivity.routeFrom` pushes nothing and says so in a snackbar, and the dashboard is still
-     * what is on screen.
-     *
-     * The intent is handed to the already-running activity rather than to a fresh
-     * `ActivityScenario`: `MainActivity` is `singleTask`, so a second `ActivityScenario.launch`
-     * would be routed to this same instance by the platform and the scenario would wait for an
-     * activity that is never created. `startActivity` is the delivery path a deep link actually
-     * takes on a phone where the app is already open, and it reaches the same `safeRouteFrom`
-     * branch that a cold start would.
-     */
-    @Test fun malformedDeepLinkLandsOnDashboard() {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/nope"))
-        rule.activityRule.scenario.onActivity { activity -> activity.startActivity(intent) }
-
-        rule.awaitText("That link doesn't point at anything here.")
-        rule.onNode(hasText("noteNFC") and hasNoClickAction()).assertIsDisplayed()
-    }
 }
 
 /**
@@ -180,6 +160,37 @@ class ShareActivitySmokeTest {
             rule.onNodeWithText("Title").assertIsDisplayed()
             rule.onNodeWithText("https://example.invalid/x").assertIsDisplayed()
             rule.onNodeWithText("Write to a new tag").assertIsDisplayed()
+        }
+    }
+}
+
+/**
+ * A deep link opened while the app is closed: the cold-start path through `MainActivity.onCreate`.
+ *
+ * `notenfc://asset/nope` is not a canonical UUID, so `DeepLinkRoute` calls it malformed,
+ * `routeFrom` pushes nothing and says so in a snackbar, and the dashboard is what comes up.
+ *
+ * It is its own class, launched from an empty Compose rule, because `MainActivity` is
+ * `singleTask` and answers a second intent through `onNewIntent`/`setIntent`; `ActivityScenario`
+ * matches lifecycle events against the intent it launched with, so a scenario that saw its
+ * activity's intent swapped underneath it stops tracking it and its teardown times out. Making the
+ * deep link the launch intent keeps the two in agreement and proves the path a phone actually
+ * takes when a link is opened from another app.
+ */
+class DeepLinkSmokeTest {
+
+    @get:Rule val rule = createEmptyComposeRule()
+
+    @Before fun freshInstall() = clearInstall()
+
+    @Test fun malformedDeepLinkLandsOnDashboard() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/nope"))
+            .setClass(context, MainActivity::class.java)
+
+        ActivityScenario.launch<MainActivity>(intent).use {
+            rule.awaitText("That link doesn't point at anything here.")
+            rule.onNode(hasText("noteNFC") and hasNoClickAction()).assertIsDisplayed()
         }
     }
 }

@@ -7,10 +7,10 @@ Phase 1C replaces the interim View screens with the real app: the Apollo Service
 write, the share card, backup and a settings shell. It is the last slice of milestone **M1**, so
 this document also carries M1's exit criteria.
 
-**Read the status first (§5).** Everything in §1 and §4 that needs a tag, a phone or a note app is
-**pending the owner's phone session**: no phone was attached when this task ran, so no device row
-below claims a result. The JVM and build evidence (§3, §9) is complete and was produced on this
-machine.
+**Read the status first (§5).** The install and the instrumented smoke suite (§4 rows 1–2, §3)
+ran on the owner's phone on 2026-09-15 and pass. Everything in §1 and §4 that needs a tag or a
+note app (rows 3–16) is **pending the owner's phone session** and claims no result below. The JVM
+and build evidence (§3, §9) is complete and was produced on this machine.
 
 ## 1. Exit criteria (D7 §1C — milestone M1) → evidence
 
@@ -77,30 +77,56 @@ Totals: **`:core` 117, `:app` 61** — 0 failures, 0 skipped (§9).
 |---|---|---|
 | `ui.components.ComponentsSmokeTest` | 4 | `IdentityPlate` renders an em dash for a blank cell and mono for a tag id; `StatusBadge` exposes its label to accessibility; `LedgerEntry` shows date and title; `SectionHeader` renders |
 | `ui.nav.NavigationSmokeTest` | 2 | Dashboard is the start destination; the bottom bar switches to Scan |
-| `ui.AppSmokeTest` | 5 | Backup nudge on a fresh install; bottom bar → Scan shows **READY TO SCAN**; an asset created from the dashboard opens on its own plate; the production Backup screen renders; a malformed `notenfc://asset/nope` leaves the dashboard standing and says so |
+| `ui.AppSmokeTest` | 4 | Backup nudge on a fresh install; bottom bar → Scan shows **READY TO SCAN**; an asset created from the dashboard opens on its own plate; the production Backup screen renders|
+| `ui.DeepLinkSmokeTest` | 1 | `MainActivity` cold-started with `notenfc://asset/nope` as its launch intent shows the "That link doesn't point at anything here." snackbar and the dashboard title |
 | `ui.ShareActivitySmokeTest` | 1 | `ShareActivity` launched with an `EXTRA_TEXT` of a title line followed by `https://example.invalid/x` shows **WEB PAGE**, the title line and the URI in mono |
 
 Compilation is gated on every build: `./gradlew :app:compileDebugAndroidTestKotlin` is part of the
-final gate (§9) and passes. **Execution result: pending the owner's phone session** — no device was
-attached when Task 8 ran (`adb devices` listed none), so the runner was never started. Nothing
-below this line was observed:
+final gate (§9) and passes. **Executed on the owner's phone (Android 17, SDK 37) on 2026-09-15**,
+as device row 2, after the install in row 1. All 12 pass:
 
 ```
-(per-test results from ./gradlew :app:connectedDebugAndroidTest — to be pasted here)
+AppSmokeTest             4 tests, 0 failures   6.9s
+  PASS bottomBarReachesScanAndShowsReadyToScan   2.4s
+  PASS assetCanBeCreatedFromTheDashboardAndOpens 2.1s
+  PASS dashboardShowsTheBackupNudgeOnAFreshInstall 1.1s
+  PASS backupScreenRenders                       1.3s
+DeepLinkSmokeTest        1 test,  0 failures   1.0s
+  PASS malformedDeepLinkLandsOnDashboard         1.0s
+ShareActivitySmokeTest   1 test,  0 failures   0.9s
+  PASS sharedWebLinkShowsTheCard                 0.9s
+ComponentsSmokeTest      4 tests, 0 failures   3.1s
+  PASS sectionHeaderShowsItsTitle                0.8s
+  PASS identityPlateShowsDashForBlankValues      0.8s
+  PASS statusBadgeExposesItsLabelToAccessibility 0.8s
+  PASS ledgerEntryShowsItsDateAndTitle           0.8s
+NavigationSmokeTest      2 tests, 0 failures   2.2s
+  PASS bottomBarSwitchesToScan                   1.3s
+  PASS dashboardIsTheStartDestination            0.9s
+BUILD SUCCESSFUL
 ```
 
-Two notes for whoever runs it:
+Two things the phone taught that the JVM could not (both fixed in the run's commit, both test-only):
 
-- `AppSmokeTest` clears `SharedPreferences("notenfc")` and empties the three tables in `@Before`,
-  so the suite is destructive to whatever is on the phone. It is therefore **row 2** of the device
-  checklist — the first thing after the install, before anything worth keeping exists. Running it
-  at any other point means exporting a backup first.
-- `malformedDeepLinkLandsOnDashboard` hands the intent to the already-running `MainActivity` with
-  `startActivity` rather than to a second `ActivityScenario`. `MainActivity` is `singleTask`: a
-  second `ActivityScenario.launch` is routed by the platform to the same instance, so the scenario
-  would wait for an activity that is never created. `startActivity` is the delivery path a deep
-  link actually takes when the app is already open, and it reaches the same `safeRouteFrom` branch
-  a cold start does. The cold-start case is covered by device row 13.
+- **Espresso 3.5.0 does not run on Android 17.** Compose `ui-test` 1.12.0 pulls
+  `espresso-core:3.5.0` transitively, and its idle check reflects into a hidden
+  `InputManager.getInstance()` that the platform removed; every test died in
+  `Espresso.onIdle` after ~20 ms with `NoSuchMethodException`. Pinning
+  `androidx.test.espresso:espresso-core:3.7.0` on the `androidTest` classpath (version catalog
+  `androidxEspresso`) resolves it. Release is untouched — it is an instrumentation dependency only.
+- **`ActivityScenario` stops tracking an activity whose intent changes.** The first version of
+  `malformedDeepLinkLandsOnDashboard` handed the deep link to the already-running `MainActivity`
+  with `startActivity`. The assertions passed, but `MainActivity.onNewIntent` calls `setIntent`,
+  and `ActivityScenario` matches lifecycle events against the intent it launched with — logcat:
+  "lifecycle changed event received but ignored because the intent does not match" — so the rule's
+  teardown never saw `DESTROYED` and timed out after 45 s. The test is now `DeepLinkSmokeTest`,
+  cold-starting `MainActivity` with the deep link as its launch intent through an empty Compose
+  rule. That is also the path a phone takes when a link is opened from another app while the app
+  is closed; the warm path (`onNewIntent`) is exercised by device row 13.
+
+The suite is destructive: `@Before` clears `SharedPreferences("notenfc")` and empties the three
+tables, which is why it is **row 2** of the device checklist — the first thing after the install,
+before anything worth keeping exists. Running it at any other point means exporting a backup first.
 
 ## 4. Device checklist (the owner's Android 17 phone; old `com.looseCannon.noteNFC` app uninstalled first — D13 §4)
 
@@ -112,8 +138,8 @@ restore proof and must be run as one unbroken sequence.
 
 | # | Step | Expected | Criterion | Result |
 |---|---|---|---|---|
-| 1 | Install the 1C build (`adb install -r`), uninstall nothing else; launch the app once | The app opens on the dashboard. This is what takes the package out of the Android 17 *stopped* state; until it happens no NFC intent is delivered at all | — | pending |
-| 2 | Run the instrumented smoke suite: `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `adb shell svc power stayon false` | 12 instrumented tests pass; paste the per-test lines into §3. **DESTRUCTIVE** — `@Before` clears `SharedPreferences("notenfc")` and empties the asset, tag and link tables, so this must run before any manual seeding below | — | pending |
+| 1 | Install the 1C build (`adb install -r`), uninstall nothing else; launch the app once | The app opens on the dashboard. This is what takes the package out of the Android 17 *stopped* state; until it happens no NFC intent is delivered at all | — | **PASS** 2026-09-15: `versionCode` 1 → 2 over the 1B install; launched via the launcher intent, `MainActivity` resumed on the dashboard |
+| 2 | Run the instrumented smoke suite: `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `adb shell svc power stayon false` | 12 instrumented tests pass; paste the per-test lines into §3. **DESTRUCTIVE** — `@Before` clears `SharedPreferences("notenfc")` and empties the asset, tag and link tables, so this must run before any manual seeding below | — | **PASS** 2026-09-15: 12/12 after two test-only fixes (Espresso 3.7.0 pin; deep-link test cold-starts) — §3 |
 | 3 | Dashboard → **Add your first asset** → name it → Save → on the asset, **Write a tag** → hold a blank tag | Write screen reports the tag written and read back byte-identical; the asset's plate shows the tag id | 1 | pending |
 | 4 | Dashboard → **Export now** (or Backup → **Export backup**) → save the zip somewhere off the phone | A `notenfc-backup-<stamp>.zip` is written; the nudge is gone when you come back to the dashboard | 1, 3 | pending |
 | 5 | Debug launcher → **noteNFC Backup (debug)** → **Wipe** → return to the app → Scan → tap the tag from row 3 | Counts read `0 / 0 / 0`; the scan result sheet says the tag is an unregistered v1 tag and offers Bind / New asset — it does **not** resolve to the asset | 1 | pending |
@@ -134,10 +160,14 @@ row 2 by construction: nothing above it exists to lose, and nothing below it can
 
 ## 5. Status of the device proof
 
-**No phone was attached when Task 8 ran.** `adb devices` listed nothing, so neither the
-instrumented suite (§3) nor any checklist row (§4) was executed, and none of the four M1 exit
-criteria is device-proven yet. Every criterion is implemented and JVM-proven at the seams that can
-be tested without hardware; what is missing is the tag, the note app and the phone.
+**Device rows 1–2 are done; rows 3–16 are not.** No phone was attached when Task 8 was
+implemented. On 2026-09-15 the phone was attached, the 1C build was installed over the 1B install
+and launched (row 1), and the instrumented suite ran to 12/12 (row 2, §3) after two test-only
+fixes the phone surfaced — an Espresso version that does not run on Android 17, and an
+`ActivityScenario` interaction with `singleTask` (§3). No checklist row that needs a tag or a note
+app has been executed, so none of the four M1 exit criteria is device-proven yet. Every criterion
+is implemented and JVM-proven at the seams that can be tested without hardware; what is missing is
+the tag and the note app.
 
 What is complete on this machine:
 
@@ -148,8 +178,8 @@ What is complete on this machine:
   ViewModels, the write controller over a fake `TagIo`, and the D12 contrast ratios.
 - The release APK contains exactly three exported activities of ours and no debug harness (§9).
 
-What the phone session must produce: §4 rows 1–16, and the per-test block in §3. Until then the
-honest statement of M1 is **implemented and JVM-proven, not device-proven**.
+What the phone session must still produce: §4 rows 3–16. Until then the honest statement of M1 is
+**implemented, JVM-proven and smoke-tested on the phone, not device-proven end to end**.
 
 Privacy: this document records no device serial, phone model, tag UID, note link or any other
 personal data, and paths are written relative to the repository. The phone is referred to
