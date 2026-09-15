@@ -4,14 +4,12 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 
 object NoteNfcTheme {
     val semanticColors: NoteNfcSemanticColors
@@ -44,13 +42,4 @@ private fun resolveNoteNfcColorScheme(darkTheme: Boolean, dynamicColor: Boolean)
         return if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     }
     return if (darkTheme) DarkColorScheme else LightColorScheme
-}
-
-@Preview(name = "Theme light")
-@Preview(name = "Theme dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
-@Composable
-private fun NoteNfcThemePreview() {
-    NoteNfcTheme {
-        Text("Apollo Service Binder", style = MaterialTheme.typography.titleMedium)
-    }
 }
