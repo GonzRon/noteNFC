@@ -119,6 +119,18 @@ from this commit before the tap rows are run. No tap result is claimed anywhere 
 
 ## 7. Deferred to Phase 1C (bind/rebind UX, Compose)
 
+**Must be explicit 1C work items (owner ruling at 1B closure), not buried minors:**
+
+- Broad `catch (e: Exception)` blocks inside coroutine scopes also swallow `CancellationException`
+  (`WriteTagActivity`, `NfcDispatchActivity`, `TargetPicker`). Clean this up when the Compose /
+  session layer is built; do not copy the pattern into ViewModels.
+- The "tag write succeeded but the database completion failed" window (`WriteTagActivity.finishWrite`
+  → `ProvisionTag.complete` throws after a verified read-back; `onDestroy` then abandons the row):
+  1C needs an explicit recovery path. The intended shape is that the next scan of such a tag
+  resolves as an unknown v1 tag (`Resolution.UnknownV1`) that can be safely rebound — which is
+  already what `ResolveTag` + `BindTag` do today, so the state is recoverable, not lost — and the
+  write screen should say so instead of reporting a bare failure.
+
 - interim `ui.interim` screens replaced by Compose routes; asset screen; revoke/re-activate;
   retiring a bound `LEGACY_MD5` row when its tag is rewritten in v1; link card on share;
   `lastOpenedAt` display; targetSdk 37 `DISPATCH_NFC_MESSAGE` (Phase 7).
