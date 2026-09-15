@@ -61,6 +61,9 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         onNewAsset = { backStack.add(Route.AssetEdit(null)) },
                         onBackup = { backStack.add(Route.Backup) },
                         onSettings = { backStack.add(Route.Settings) },
+                        // Scan is a destination, not a dialog: the empty dashboard sends the user
+                        // to the same place the bottom bar does, so one back press leaves it.
+                        onScan = { backStack.switchTopLevel(Route.Scan) },
                     )
                 }
                 entry<Route.Assets> {

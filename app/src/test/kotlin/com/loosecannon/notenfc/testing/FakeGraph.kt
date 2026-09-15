@@ -9,6 +9,8 @@ import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.CreateAsset
 import com.loosecannon.notenfc.core.usecase.DeleteLink
+import com.loosecannon.notenfc.core.usecase.ExportBackup
+import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.data.room.AppDatabase
@@ -17,6 +19,8 @@ import com.loosecannon.notenfc.data.room.RoomLinkRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
 import com.loosecannon.notenfc.data.room.inMemoryDb
+import com.loosecannon.notenfc.prefs.AppPrefs
+import com.loosecannon.notenfc.prefs.KeyValueStore
 
 /**
  * `AppGraph` without a `Context`: the same members, built on `inMemoryDb()` and the real Room
@@ -46,5 +50,28 @@ class FakeGraph(private val db: AppDatabase = inMemoryDb()) {
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
 
+    /** Device-local preferences, in a map: a test can read back exactly what the UI wrote. */
+    val prefs: AppPrefs = AppPrefs(InMemoryKeyValueStore())
+
+    val exportBackup: ExportBackup =
+        ExportBackup(assets, tags, links, uow, clock, APP_VERSION, SCHEMA_VERSION)
+    val importBackupReplace: ImportBackupReplace = ImportBackupReplace(assets, tags, links, uow)
+
     fun close() = db.close()
+
+    private companion object {
+        const val APP_VERSION = "test"
+        const val SCHEMA_VERSION = 1
+    }
+}
+
+/** The `SharedPreferences` side of [AppPrefs] without Android under it. */
+private class InMemoryKeyValueStore : KeyValueStore {
+    private val longs = mutableMapOf<String, Long>()
+    private val strings = mutableMapOf<String, String>()
+
+    override fun getLong(key: String): Long? = longs[key]
+    override fun putLong(key: String, value: Long) { longs[key] = value }
+    override fun getString(key: String): String? = strings[key]
+    override fun putString(key: String, value: String) { strings[key] = value }
 }
