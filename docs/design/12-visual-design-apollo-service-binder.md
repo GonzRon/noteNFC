@@ -1220,7 +1220,10 @@ by every later feature lane.
   the user never opens the app to "scan". The tab existed because 1B/1C needed a place to
   exercise the resolver. Remove it at the first phase that touches the bottom bar (2B, or Phase
   3 when a maintenance destination may take its place); until then it is a utility, not the
-  primary path. Dedicated foreground NFC screens remain only for intentional tag operations —
+  primary path. **Done in 2B-2**: `TopLevelRoutes` is now Dashboard · Assets, and the scan
+  screen — unchanged — is reached as a pushed destination from Settings' "Read / inspect tag"
+  row or the dashboard's empty-state "Scan a tag" action. Dedicated foreground NFC screens
+  remain only for intentional tag operations —
   Write tag, Replace/rebind, Rewrite legacy, optional Inspect — because those may modify tag
   contents and the screen establishes intent; an ambient read never enters write mode. A manual
   "identify a tag" utility may live under tag tools or Settings. Asset detail, ledger and sheets

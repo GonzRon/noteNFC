@@ -20,6 +20,7 @@ import com.loosecannon.notenfc.core.usecase.ArchiveDefinition
 import com.loosecannon.notenfc.core.usecase.ArchiveProfile
 import com.loosecannon.notenfc.core.usecase.BindTag
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteAsset
 import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
@@ -32,6 +33,7 @@ import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.ReorderDefinitions
 import com.loosecannon.notenfc.core.usecase.ReorderProfiles
 import com.loosecannon.notenfc.core.usecase.ResolveTag
+import com.loosecannon.notenfc.core.usecase.RetireAsset
 import com.loosecannon.notenfc.core.usecase.SaveDefinition
 import com.loosecannon.notenfc.core.usecase.SaveLink
 import com.loosecannon.notenfc.core.usecase.SaveProfile
@@ -40,6 +42,7 @@ import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.MIGRATION_1_2
 import com.loosecannon.notenfc.data.room.MIGRATION_2_3
+import com.loosecannon.notenfc.data.room.MIGRATION_3_4
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
 import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
 import com.loosecannon.notenfc.data.room.RoomEventRepository
@@ -62,7 +65,7 @@ class AppGraph(context: Context) {
         )
         .setDriver(AndroidSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()
 
     val clock: Clock = Clock { System.currentTimeMillis() }
@@ -102,6 +105,11 @@ class AppGraph(context: Context) {
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
     val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
 
+    // Phase 2B-2 — retirement is a date the person picks, not a status (spec §7), and delete is
+    // the one destructive asset action: it refuses a parent that still has children.
+    val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
+    val deleteAsset: DeleteAsset = DeleteAsset(assets, uow)
+
     /** A link is a pointer, not a record, so it can be deleted — unless a tag still points at it. */
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
 
@@ -126,6 +134,6 @@ class AppGraph(context: Context) {
         const val DB_NAME = "notenfc.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }

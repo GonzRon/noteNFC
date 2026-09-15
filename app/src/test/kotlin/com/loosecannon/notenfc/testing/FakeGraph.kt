@@ -14,6 +14,7 @@ import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.ArchiveDefinition
 import com.loosecannon.notenfc.core.usecase.ArchiveProfile
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteAsset
 import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
@@ -24,6 +25,7 @@ import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.ReorderDefinitions
 import com.loosecannon.notenfc.core.usecase.ReorderProfiles
+import com.loosecannon.notenfc.core.usecase.RetireAsset
 import com.loosecannon.notenfc.core.usecase.SaveDefinition
 import com.loosecannon.notenfc.core.usecase.SaveProfile
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
@@ -69,6 +71,8 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
     val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
+    val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
+    val deleteAsset: DeleteAsset = DeleteAsset(assets, uow)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
@@ -97,7 +101,7 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
 
     private companion object {
         const val APP_VERSION = "test"
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }
 

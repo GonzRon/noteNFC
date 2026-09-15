@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -97,14 +98,20 @@ class AppSmokeTest {
     }
 
     /**
-     * "Scan" is on screen twice once the destination is open — the bar item and the screen title —
-     * so both matchers say which one they mean (the bar item is the clickable one).
+     * Scan is a pushed destination now, not a tab (D12 §16 correction): the empty dashboard's own
+     * "Scan a tag" action is one of the two ways in, and a single Back press must return to the
+     * dashboard that sent it there rather than leaving the stack empty or landing elsewhere.
      */
-    @Test fun bottomBarReachesScanAndShowsReadyToScan() {
-        rule.onNode(hasText("Scan") and hasClickAction()).performClick()
-        rule.onNode(hasText("Scan") and hasNoClickAction()).assertIsDisplayed()
+    @Test fun emptyDashboardScanActionOpensReadInspectTag() {
+        rule.awaitText("Scan a tag")
+        rule.onNodeWithText("Scan a tag").performClick()
+
         rule.awaitText("READY TO SCAN")
         rule.onNodeWithText("READY TO SCAN").assertIsDisplayed()
+
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.awaitText("Scan a tag")
+        rule.onNodeWithText("Scan a tag").assertIsDisplayed()
     }
 
     /**
@@ -118,9 +125,10 @@ class AppSmokeTest {
         rule.onNodeWithText("Add your first asset").performClick()
 
         rule.awaitText("New asset")
-        // Four fields in a fixed order (D12 §7): Name is the first one that takes text.
+        // The grouped form of 2B-2 opens on IDENTITY (D12 §7): Name is still the first field
+        // that takes text, and the foot button is now well below the fold.
         rule.onAllNodes(hasSetTextAction()).onFirst().performTextInput(name)
-        rule.onNodeWithText("Save asset").performClick()
+        rule.onNodeWithText("Save asset").performScrollTo().performClick()
 
         rule.awaitText(name, count = 2)
         rule.onAllNodesWithText(name).onFirst().assertIsDisplayed()
@@ -141,7 +149,7 @@ class AppSmokeTest {
 
         rule.awaitText("New asset")
         rule.onAllNodes(hasSetTextAction()).onFirst().performTextInput("First one")
-        rule.onNodeWithText("Save asset").performClick()
+        rule.onNodeWithText("Save asset").performScrollTo().performClick()
         // The saved asset opens on its own screen: app bar title and identity plate, twice.
         rule.awaitText("First one", count = 2)
 

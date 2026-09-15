@@ -52,8 +52,10 @@ import org.junit.jupiter.api.Test
 
 class BackupUseCasesTest {
 
-    private class Fakes(val definitions: InMemoryDefinitionRepository = InMemoryDefinitionRepository()) {
-        val assets = InMemoryAssetRepository()
+    private class Fakes(
+        val definitions: InMemoryDefinitionRepository = InMemoryDefinitionRepository(),
+        val assets: InMemoryAssetRepository = InMemoryAssetRepository(),
+    ) {
         val tags = InMemoryTagRepository()
         val links = InMemoryLinkRepository()
         val profiles = InMemoryProfileRepository()
@@ -61,8 +63,15 @@ class BackupUseCasesTest {
         val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events)
     }
 
-    private fun asset(id: String, name: String, status: AssetStatus = AssetStatus.ACTIVE) =
-        Asset(AssetId(id), name, "desc $id", "cat", "notes", status, createdAt = 1L, updatedAt = 2L)
+    private fun asset(
+        id: String,
+        name: String,
+        status: AssetStatus = AssetStatus.ACTIVE,
+        parentAssetId: String? = null,
+    ) = Asset(
+        AssetId(id), name, "desc $id", "cat", "notes", status,
+        createdAt = 1L, updatedAt = 2L, parentAssetId = parentAssetId?.let(::AssetId),
+    )
 
     private fun link(id: String, assetId: String?) = ExternalLink(
         id = LinkId(id),
@@ -149,7 +158,7 @@ class BackupUseCasesTest {
     private suspend fun populate(f: Fakes) {
         f.assets.upsert(asset("a1", "Furnace"))
         f.assets.upsert(asset("a2", "Mower", AssetStatus.ARCHIVED))
-        f.assets.upsert(asset("a3", "Heater", AssetStatus.RETIRED))
+        f.assets.upsert(asset("a3", "Heater", AssetStatus.ARCHIVED))
         f.links.upsert(link("l1", "a1"))
         f.links.upsert(link("l2", "a2"))
         f.links.upsert(link("l3", null))
@@ -204,7 +213,7 @@ class BackupUseCasesTest {
             assertEquals(source.links.all().sortedBy { it.id.value }, target.links.all().sortedBy { it.id.value })
         }
         assertEquals(
-            ImportReport(formatVersion = 3, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0, events = 0),
+            ImportReport(formatVersion = 4, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0, events = 0),
             report,
         )
     }
@@ -309,8 +318,8 @@ class BackupUseCasesTest {
         runBlocking { target.assets.upsert(asset("untouched", "Untouched")) }
 
         val e = assertFailsWith<BackupNewerFormat> { importInto(target, bytes) }
-        assertEquals(4, e.found)
-        assertEquals(3, e.supported)
+        assertEquals(5, e.found)
+        assertEquals(4, e.supported)
 
         runBlocking {
             assertEquals(listOf("untouched"), target.assets.all().map { it.id.value })
@@ -341,7 +350,7 @@ class BackupUseCasesTest {
         val target = Fakes()
         runBlocking { target.assets.upsert(asset("gone", "Gone")) }
         val report = importInto(target, exportOf(f))
-        assertEquals(ImportReport(formatVersion = 3, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0, events = 0), report)
+        assertEquals(ImportReport(formatVersion = 4, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0, events = 0), report)
         runBlocking { assertTrue(target.assets.all().isEmpty()) }
     }
 
@@ -386,7 +395,7 @@ class BackupUseCasesTest {
         val report = importInto(target, bytes)
 
         assertEquals(
-            ImportReport(formatVersion = 3, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1, events = 1),
+            ImportReport(formatVersion = 4, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1, events = 1),
             report,
         )
         runBlocking {
@@ -437,7 +446,7 @@ class BackupUseCasesTest {
         val v2Bytes = exportOf(source)
 
         val v2Report = importInto(Fakes(), v2Bytes)
-        assertEquals(3, v2Report.formatVersion)
+        assertEquals(4, v2Report.formatVersion)
 
         // reseal the same, already-valid data under a manifest claiming format 1 — the same
         // trick BackupCodecTest's formatOneFileStillDecodes uses.
@@ -494,6 +503,51 @@ class BackupUseCasesTest {
         }
     }
 
+    /** Fails an upsert whose `parentAssetId` is not yet in [rows], to prove insert order. */
+    private class FkCheckingAssetRepository : InMemoryAssetRepository() {
+        override suspend fun upsert(asset: Asset) {
+            val parent = asset.parentAssetId
+            if (parent != null) {
+                check(rows.containsKey(parent.value)) {
+                    "asset ${asset.id.value} has parent ${parent.value} which is not inserted yet"
+                }
+            }
+            super.upsert(asset)
+        }
+    }
+
+    @Test
+    fun shuffledTreeImportsParentsFirst() {
+        val source = Fakes()
+        runBlocking {
+            // ids chosen so the file's own (alphabetical) sort order lists the grandchild
+            // first, then the child, then the root — children before parents — which is what
+            // actually proves parents-first import order, not file order.
+            source.assets.upsert(asset("c_root", "Root"))
+            source.assets.upsert(asset("b_child", "Child", parentAssetId = "c_root"))
+            source.assets.upsert(asset("a_grandchild", "Grandchild", parentAssetId = "b_child"))
+        }
+        val bytes = exportOf(source)
+        assertEquals(
+            listOf("a_grandchild", "b_child", "c_root"),
+            BackupCodec.decode(bytes).data.assets.map { it.id },
+            "fixture is not actually shuffled",
+        )
+
+        val target = Fakes(assets = FkCheckingAssetRepository())
+        val report = importInto(target, bytes)
+
+        assertEquals(3, report.assets)
+        runBlocking {
+            assertEquals(
+                setOf("a_grandchild", "b_child", "c_root"),
+                target.assets.all().map { it.id.value }.toSet(),
+            )
+            assertEquals(AssetId("c_root"), target.assets.get(AssetId("b_child"))!!.parentAssetId)
+            assertEquals(AssetId("b_child"), target.assets.get(AssetId("a_grandchild"))!!.parentAssetId)
+        }
+    }
+
     // --- helper: rewrite the manifest to claim a newer format version --------------------------
 
     private fun bumpFormatVersion(bytes: ByteArray): ByteArray {
@@ -506,7 +560,7 @@ class BackupUseCasesTest {
             }
         }
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*3"), "\"formatVersion\": 4")
+            .replace(Regex("\"formatVersion\"\\s*:\\s*4"), "\"formatVersion\": 5")
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zos ->

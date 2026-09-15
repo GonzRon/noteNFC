@@ -75,8 +75,9 @@ class JournalDeviceProofTest {
             // two profiles as the first two quick actions.
             rule.awaitText("CURRENT READINGS")
             HOT_TUB_LABELS.forEach { rule.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
-            // Five empty readings plus the three blank plate cells (Serial, NFC tag, Links).
-            rule.onAllNodesWithText("—").assertCountEquals(8)
+            // Five empty readings plus the six blank plate cells of spec §9 (Model, Serial,
+            // Location, Purchased, In service, NFC tag) — 2B-2 grew the plate from three.
+            rule.onAllNodesWithText("—").assertCountEquals(11)
             rule.onNodeWithText("Log water test").performScrollTo().assertIsDisplayed()
             rule.onNodeWithText("Log treatment").performScrollTo().assertIsDisplayed()
 
@@ -253,8 +254,8 @@ class JournalDeviceProofTest {
                 rule.onNodeWithText(it).performScrollTo().assertIsDisplayed()
             }
             // Four empty readings — the three entered plus the derived one, which cannot compute
-            // from an asset with no events — plus the three blank plate cells.
-            rule.onAllNodesWithText("—").assertCountEquals(7)
+            // from an asset with no events — plus the six blank plate cells of spec §9.
+            rule.onAllNodesWithText("—").assertCountEquals(10)
             // `quickActionLabel` only lowercases the profile name's first character when the
             // second one is itself lowercase, so an acronym like "TDS test" reads "Log TDS test"
             // rather than the mangled "Log tDS test" a blanket decapitalize used to produce.

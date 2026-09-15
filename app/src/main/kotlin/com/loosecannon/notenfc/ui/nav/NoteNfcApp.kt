@@ -80,9 +80,9 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         onNewAsset = { backStack.add(Route.AssetEdit(null)) },
                         onBackup = { backStack.add(Route.Backup) },
                         onSettings = { backStack.add(Route.Settings) },
-                        // Scan is a destination, not a dialog: the empty dashboard sends the user
-                        // to the same place the bottom bar does, so one back press leaves it.
-                        onScan = { backStack.switchTopLevel(Route.Scan) },
+                        // Scan is a pushed destination, not a tab (D12 §16 correction): a plain
+                        // push means one back press returns to the dashboard that sent it there.
+                        onScan = { backStack.add(Route.Scan) },
                     )
                 }
                 entry<Route.Assets> {
@@ -106,12 +106,20 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                             backStack.add(Route.EventEntry(asset, profile, null))
                         },
                         onOpenEvent = { backStack.add(Route.EventDetail(it)) },
+                        // "Part of" and a component row both push the other asset's own screen:
+                        // the hierarchy is navigated, never nested inside one screen (spec §2).
+                        onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                        onAddComponent = { backStack.add(Route.AssetEdit(null, parentId = it)) },
+                        onLogOutcome = { asset, kind ->
+                            backStack.add(Route.EventEntry(asset, null, null, kind = kind))
+                        },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
                     AssetEditScreen(
                         graph = graph,
                         assetId = key.id,
+                        parentId = key.parentId,
                         // A new asset opens on its own detail screen and the form leaves the stack:
                         // backing out of the asset should not land back on the form that made it.
                         onDone = { id ->
@@ -162,6 +170,7 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         eventId = key.eventId,
                         onDone = { backStack.removeLastOrNull() },
                         onBack = { backStack.removeLastOrNull() },
+                        kind = key.kind,
                     )
                 }
                 entry<Route.EventDetail> { key ->
@@ -190,7 +199,11 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                     )
                 }
                 entry<Route.Scan> {
-                    ScanScreen(graph = graph, onResolved = { backStack.add(it) })
+                    ScanScreen(
+                        graph = graph,
+                        onResolved = { backStack.add(it) },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
                 }
                 entry<Route.TagResult> { key ->
                     TagResultSheet(
@@ -212,7 +225,11 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                     BackupScreen(graph = graph, onBack = { backStack.removeLastOrNull() })
                 }
                 entry<Route.Settings> {
-                    SettingsScreen(graph = graph, onBack = { backStack.removeLastOrNull() })
+                    SettingsScreen(
+                        graph = graph,
+                        onBack = { backStack.removeLastOrNull() },
+                        onReadTag = { backStack.add(Route.Scan) },
+                    )
                 }
             },
         )

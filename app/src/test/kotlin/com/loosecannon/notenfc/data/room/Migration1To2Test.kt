@@ -13,11 +13,11 @@ import org.junit.Test
  * See [openMigrated] for why the proof is assembled by hand rather than with Room's own migration
  * test helper.
  *
- * Since schema v3 the compiled database is two steps ahead of a v1 file, so opening one runs the
- * whole registered chain: there is no way to ask Room to stop at v2, and pretending otherwise
- * would only mean not validating at all. The assertions here are still v1 -> v2's own question —
- * do the phase-1 rows survive, do the seven journal tables arrive — and [Migration1To3Test] owns
- * what the far end of the chain must look like.
+ * The compiled database is three versions ahead of a v1 file, so opening one runs the whole
+ * registered chain: there is no way to ask Room to stop at v2, and pretending otherwise would
+ * only mean not validating at all. The assertions here are still v1 -> v2's own question — do the
+ * phase-1 rows survive, do the seven journal tables arrive — and [Migration1To4Test] owns what the
+ * far end of the chain must look like.
  */
 class Migration1To2Test {
 

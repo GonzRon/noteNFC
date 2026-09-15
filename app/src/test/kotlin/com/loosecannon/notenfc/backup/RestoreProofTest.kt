@@ -37,6 +37,7 @@ import com.loosecannon.notenfc.data.room.inMemoryDb
 import com.loosecannon.notenfc.testing.FakeGraph
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -216,7 +217,7 @@ class RestoreProofTest {
             assertEquals(before, after)
             assertEquals(
                 ImportReport(
-                    formatVersion = 3, assets = 2, tags = 3, links = 2,
+                    formatVersion = 4, assets = 2, tags = 3, links = 2,
                     definitions = 0, profiles = 0, events = 0,
                 ),
                 report,
@@ -313,7 +314,7 @@ class RestoreProofTest {
             val report = g.import.run(backup)
             assertEquals(
                 ImportReport(
-                    formatVersion = 3, assets = 2, tags = 3, links = 2,
+                    formatVersion = 4, assets = 2, tags = 3, links = 2,
                     definitions = 0, profiles = 0, events = 0,
                 ),
                 report,
@@ -381,7 +382,7 @@ class RestoreProofTest {
             val report = g2.import.run(bytes)
             assertEquals(
                 ImportReport(
-                    formatVersion = 3,
+                    formatVersion = 4,
                     assets = 1,
                     tags = 0,
                     links = 0,
@@ -470,8 +471,78 @@ class RestoreProofTest {
         }
     }
 
+    /**
+     * Phase 2B-2's half: a three-level tree — root → child → grandchild — through the whole cycle,
+     * export, wipe, import, over one database. Three separate things could go wrong here and each
+     * would throw rather than merely mismatch: the wipe has to delete children before parents or
+     * RESTRICT refuses it; the load has to insert parents before children or the same foreign key
+     * refuses that; and `parent_asset_id` has to come back as an id, not as a position in a list.
+     * The ids are asserted exactly.
+     */
+    @Test
+    fun aThreeLevelTreeSurvivesTheRoundTrip() = runTest {
+        val db = inMemoryDb()
+        try {
+            val g = graphOver(db)
+            g.uow.write {
+                g.assets.upsert(tree("asset-tractor", "Tractor", parent = null))
+                g.assets.upsert(tree("asset-deck", "Mower deck", parent = "asset-tractor"))
+                g.assets.upsert(tree("asset-blade", "Blade", parent = "asset-deck"))
+            }
+            val before = snapshot(g)
+            assertEquals(3, before.assets.size)
+
+            val bytes = g.export.run()
+
+            // The wipe half on its own, against the tree: children-first or nothing.
+            g.uow.write { g.assets.deleteAll() }
+            assertTrue("the wipe must clear the whole tree", g.assets.all().isEmpty())
+
+            // And the load half.
+            val report = g.import.run(bytes)
+            assertEquals(3, report.assets)
+
+            val after = snapshot(g)
+            assertEquals(before, after)
+            assertEquals(
+                listOf("asset-blade", "asset-deck", "asset-tractor"),
+                after.assets.map { it.id.value },
+            )
+            val byId = after.assets.associateBy { it.id }
+            assertNull(byId.getValue(AssetId("asset-tractor")).parentAssetId)
+            assertEquals(
+                AssetId("asset-tractor"),
+                byId.getValue(AssetId("asset-deck")).parentAssetId,
+            )
+            assertEquals(
+                AssetId("asset-deck"),
+                byId.getValue(AssetId("asset-blade")).parentAssetId,
+            )
+
+            // A second replace import over the tree it already holds: the wipe now meets a real
+            // three-level tree rather than an empty table, which is the case the debug Wipe and
+            // the instrumentation's `clearInstall` hit on a device.
+            g.import.run(bytes)
+            assertEquals(before, snapshot(g))
+        } finally {
+            db.close()
+        }
+    }
+
+    private fun tree(id: String, name: String, parent: String?) = Asset(
+        id = AssetId(id),
+        name = name,
+        description = "",
+        category = "Yard",
+        notes = "",
+        status = AssetStatus.ACTIVE,
+        createdAt = 1_000L,
+        updatedAt = 1_100L,
+        parentAssetId = parent?.let(::AssetId),
+    )
+
     private companion object {
         const val FIXED_NOW = 1_757_000_000_000L
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }

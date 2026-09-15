@@ -1,9 +1,14 @@
 package com.loosecannon.notenfc.core.backup
 
 import com.loosecannon.notenfc.core.journal.derivedProblems
+import com.loosecannon.notenfc.core.model.AssetTree
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.Money
+import com.loosecannon.notenfc.core.model.Season
+import com.loosecannon.notenfc.core.model.isCode
 import com.loosecannon.notenfc.core.model.shapeMatches
+import com.loosecannon.notenfc.core.usecase.isIsoDate
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
@@ -14,7 +19,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Backup format v3: a ZIP holding exactly two entries.
+ * Backup format v4: a ZIP holding exactly two entries.
  *
  * ```
  * manifest.json   { formatVersion, appVersion, schemaVersion, createdAt, counts, dataSha256 }
@@ -24,13 +29,15 @@ import kotlinx.serialization.json.Json
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
  * and the manifest carries the SHA-256 of the data entry, so the same input always produces the
- * same bytes and an edited file is refused. A format-1 file (the three original lists only) and a
+ * same bytes and an edited file is refused. A format-1 file (the three original lists only), a
  * format-2 file (measurementDefinitions without kind/formula/sourceAId/sourceBId — every DERIVED
- * definition needs those) still decode: the new fields default to ENTERED with no formula and no
- * sources. JDK ZIP + JDK SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
+ * definition needs those) and a format-3 file (assets without the §4 fields) still decode: the
+ * new fields default to ENTERED with no formula/sources, and to empty/null asset fields,
+ * respectively. JDK ZIP + JDK SHA-256 + kotlinx-serialization only; no Android types anywhere in
+ * here.
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 3
+    const val FORMAT_VERSION = 4
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -155,6 +162,56 @@ object BackupCodec {
         val assetIds = uniqueIds("assets", data.assets.map { it.id })
         val linkIds = uniqueIds("externalLinks", data.externalLinks.map { it.id })
         uniqueIds("nfcTags", data.nfcTags.map { it.id })
+
+        // --- asset fields and hierarchy (spec §10) ----------------------------------------------
+
+        data.assets.forEach { asset ->
+            if (asset.parentAssetId != null && asset.parentAssetId !in assetIds) {
+                throw BackupCorrupt(
+                    "assets: asset ${asset.id} points at parent ${asset.parentAssetId}, " +
+                        "which is not in assets",
+                )
+            }
+        }
+        // Every asset was already proven nameable (enum-check pass above), so toDomain() here
+        // cannot throw; it is only how we get at AssetTree's own cycle detection.
+        try {
+            AssetTree.parentsFirst(data.assets.map { it.toDomain() })
+        } catch (e: IllegalStateException) {
+            throw BackupCorrupt("assets: cycle in asset hierarchy")
+        }
+        data.assets.forEach { asset ->
+            val currency = asset.currency
+            val price = asset.purchasePriceMinor
+            if (currency != null && !Money.isCode(currency)) {
+                throw BackupCorrupt("assets: asset ${asset.id} has a malformed currency \"$currency\"")
+            }
+            if (price != null && currency == null) {
+                throw BackupCorrupt("assets: asset ${asset.id} has a price but no currency")
+            }
+            if (price != null && currency != null && Money.fractionDigits(currency) == null) {
+                throw BackupCorrupt("assets: asset ${asset.id} has an unresolvable currency \"$currency\"")
+            }
+            if (price != null && price < 0) {
+                throw BackupCorrupt("assets: asset ${asset.id} has a negative price")
+            }
+            for ((field, value) in listOf(
+                "purchaseOn" to asset.purchaseOn,
+                "inServiceOn" to asset.inServiceOn,
+                "warrantyExpiresOn" to asset.warrantyExpiresOn,
+                "retiredOn" to asset.retiredOn,
+            )) {
+                if (value != null && !isIsoDate(value)) {
+                    throw BackupCorrupt("assets: asset ${asset.id} has a malformed $field \"$value\"")
+                }
+            }
+            val seasonProblems = Season.validate(asset.seasonStartMmdd, asset.seasonEndMmdd)
+            if (seasonProblems.isNotEmpty()) {
+                throw BackupCorrupt(
+                    "assets: asset ${asset.id} has an invalid season window: ${seasonProblems.first()}",
+                )
+            }
+        }
 
         data.externalLinks.forEach { link ->
             if (link.assetId != null && link.assetId !in assetIds) {

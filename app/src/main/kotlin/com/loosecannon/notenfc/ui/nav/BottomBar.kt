@@ -11,11 +11,11 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.loosecannon.notenfc.ui.components.NoteNfcIcons
 
 /**
- * Dashboard · Assets · Scan and nothing else (D12 §3, G1 verdict): three destinations, no FAB,
- * no overflow. Backup and Settings are reached from the Dashboard, not from a fourth tab.
+ * Dashboard · Assets and nothing else (2B-2, D12 §16 correction): two destinations, no FAB, no
+ * overflow. Backup and Settings are reached from the Dashboard, and Read / inspect tag from
+ * Settings, not from a third tab.
  */
 @Composable
 fun BottomBar(current: Route, onSelect: (Route) -> Unit) {
@@ -37,12 +37,10 @@ fun BottomBar(current: Route, onSelect: (Route) -> Unit) {
 @Composable
 private fun iconFor(route: Route): ImageVector = when (route) {
     Route.Assets -> Icons.AutoMirrored.Outlined.List
-    Route.Scan -> NoteNfcIcons.Contactless
     else -> Icons.Outlined.Home
 }
 
 private fun labelFor(route: Route): String = when (route) {
     Route.Assets -> "Assets"
-    Route.Scan -> "Scan"
     else -> "Dashboard"
 }

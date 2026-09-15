@@ -29,9 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.isRetired
 import com.loosecannon.notenfc.di.AppGraph
+import com.loosecannon.notenfc.ui.components.NoteNfcIcons
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.components.StatusBadge
 import com.loosecannon.notenfc.ui.theme.ControlShape
@@ -100,14 +101,14 @@ fun AssetsScreen(
                 }
             } else {
                 LazyColumn {
-                    itemsIndexed(state.items, key = { _, asset -> asset.id.value }) { index, asset ->
+                    itemsIndexed(state.items, key = { _, row -> row.asset.id.value }) { index, row ->
                         if (index > 0) {
                             HorizontalDivider(
                                 thickness = 1.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant,
                             )
                         }
-                        AssetRow(asset = asset, onClick = { onOpenAsset(asset.id.value) })
+                        AssetListRow(row = row, onClick = { onOpenAsset(row.asset.id.value) })
                     }
                 }
             }
@@ -115,9 +116,14 @@ fun AssetsScreen(
     }
 }
 
-/** Name over category, with the status badge doing the work colour alone must not (D12 §5). */
+/**
+ * Name over category, then "Part of <parent>" when the asset is a component of another (spec §9).
+ * The badges do the work colour alone must not (D12 §5), and an asset can carry more than one:
+ * retired and out of season are different facts and neither implies the other.
+ */
 @Composable
-private fun AssetRow(asset: Asset, onClick: () -> Unit) {
+private fun AssetListRow(row: AssetRow, onClick: () -> Unit) {
+    val asset = row.asset
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -140,6 +146,27 @@ private fun AssetRow(asset: Asset, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            row.parentName?.let { parent ->
+                Text(
+                    text = "Part of $parent",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (asset.isRetired) {
+            StatusBadge(
+                label = RETIRED,
+                colors = NoteNfcTheme.semanticColors.paused,
+                icon = NoteNfcIcons.PauseCircle,
+            )
+        }
+        if (row.outOfSeason) {
+            StatusBadge(
+                label = OUT_OF_SEASON,
+                colors = NoteNfcTheme.semanticColors.seasonInactive,
+                icon = NoteNfcIcons.CalendarMonth,
+            )
         }
         statusLabel(asset.status)?.let { label ->
             StatusBadge(label = label, colors = NoteNfcTheme.semanticColors.seasonInactive)
@@ -147,9 +174,12 @@ private fun AssetRow(asset: Asset, onClick: () -> Unit) {
     }
 }
 
-/** An active asset says nothing; the other two say what they are, in the neutral family. */
+/** An active asset says nothing; the other says what it is, in the neutral family. */
 internal fun statusLabel(status: AssetStatus): String? = when (status) {
     AssetStatus.ACTIVE -> null
     AssetStatus.ARCHIVED -> "Archived"
-    AssetStatus.RETIRED -> "Retired"
 }
+
+/** The two badge words spec §7 and §6 fix, shared by the list row and the identity plate. */
+internal const val RETIRED = "Retired"
+internal const val OUT_OF_SEASON = "Out of season"

@@ -62,7 +62,7 @@ internal fun openMigrated(file: File): AppDatabase = Room
     .databaseBuilder<AppDatabase>(name = file.absolutePath)
     .setDriver(BundledSQLiteDriver())
     .setQueryCoroutineContext(Dispatchers.Default)
-    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     .build()
 
 internal fun SQLiteConnection.tableNames(): Set<String> = buildSet {

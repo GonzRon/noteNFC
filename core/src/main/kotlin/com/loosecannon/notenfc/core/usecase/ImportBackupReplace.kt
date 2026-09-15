@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.core.usecase
 
 import com.loosecannon.notenfc.core.backup.BackupCodec
 import com.loosecannon.notenfc.core.backup.toDomain
+import com.loosecannon.notenfc.core.model.AssetTree
 import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.ports.AssetRepository
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
@@ -48,11 +49,13 @@ class ImportBackupReplace(
             links.deleteAll()
             assets.deleteAll()
 
-            // insert in reference order so foreign keys are satisfied at every step. Within
-            // measurementDefinitions, ENTERED rows go first and DERIVED rows after, so a
-            // DERIVED definition's source_a_id/source_b_id foreign keys (schema v3) resolve at
-            // insert time regardless of the file's own id ordering.
-            data.assets.forEach { assets.upsert(it.toDomain()) }
+            // insert in reference order so foreign keys are satisfied at every step. Assets go
+            // in parents-first order (AssetTree.parentsFirst) regardless of the file's own list
+            // order, so a self-referencing parent_asset_id FK resolves at insert time even for a
+            // shuffled file. Within measurementDefinitions, ENTERED rows go first and DERIVED
+            // rows after, so a DERIVED definition's source_a_id/source_b_id foreign keys
+            // (schema v3) resolve at insert time regardless of the file's own id ordering.
+            AssetTree.parentsFirst(data.assets.map { it.toDomain() }).forEach { assets.upsert(it) }
             val (entered, derived) = data.measurementDefinitions.partition { it.kind == DefinitionKind.ENTERED.name }
             entered.forEach { definitions.upsert(it.toDomain()) }
             derived.forEach { definitions.upsert(it.toDomain()) }

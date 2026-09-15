@@ -134,13 +134,16 @@ resolves one, Vendor), WARRANTY (Expires on, Notes), NOTES, and on a new asset o
 (`AssetValidation`: name required; currency resolvable through `java.util.Currency` when a price is present, else the three-letter shape, and a price without a currency refused; price ≥ 0 and within the currency's fraction digits; dates parse; season both-or-neither
 and valid; cycle → snackbar naming the parent).
 
-**Asset detail**: plate cells become CATEGORY / MODEL (manufacturer + model) / SERIAL / LOCATION /
-IN SERVICE / NFC TAG (six cells, 2×3); badges RETIRED, ARCHIVED, OUT OF SEASON as applicable;
+**Asset detail**: plate cells become MODEL (manufacturer + model) / SERIAL / LOCATION / PURCHASED /
+IN SERVICE / NFC TAG (six cells, 2×3; the category stays the eyebrow and is not repeated as a
+cell); badges RETIRED, ARCHIVED, OUT OF SEASON as applicable;
 "Part of <parent>" line under the plate, tap → parent; DETAILS section listing only set fields
 (purchase date, price, vendor, warranty expiry with "expired" wording when past, warranty notes);
-**COMPONENTS** section (children: name, category, "N readings out of range" from the child's own
-`LatestReadings`, tap → child; "+ Add component" creates a new asset with Part of preset); overflow
-gains Retire / Unretire and Delete (refused with the children named).
+**COMPONENTS** section (always; "No components" when empty — "+ Add component" is how the first
+child gets made, so it cannot be behind having one) (children: name, category, "N readings out of
+range" from the child's own `LatestReadings`, tap → child; "+ Add component" creates a new asset
+with Part of preset); overflow gains Retire / Unretire and Delete (refused with the children
+named).
 
 **Assets list**: flat; each row gains a subtitle "Part of <parent>" when applicable and the
 RETIRED / OUT OF SEASON badges; sort active first, then retired, then archived, by name.

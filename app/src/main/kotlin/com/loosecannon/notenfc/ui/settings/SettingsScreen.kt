@@ -1,6 +1,7 @@
 package com.loosecannon.notenfc.ui.settings
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.loosecannon.notenfc.BuildConfig
@@ -40,6 +43,7 @@ import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.links.LinkLauncher
 import com.loosecannon.notenfc.prefs.AppearanceMode
 import com.loosecannon.notenfc.ui.components.LabelValue
+import com.loosecannon.notenfc.ui.components.NoteNfcIcons
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.components.SectionHeader
 import kotlinx.coroutines.launch
@@ -56,12 +60,17 @@ private const val PROJECT_URL = "https://github.com/GonzRon/noteNFC"
  *
  * The Theme row is informational and has no control at all (D12 §14 "Disabled controls":
  * information must not be hidden merely because its action is unavailable).
+ *
+ * Read / inspect tag is the scan screen kept as a utility (D12 §16 correction, spec §9): normal
+ * tag reading is ambient dispatch, so the only reason to open it deliberately is to identify a
+ * tag with nothing else prompting the read.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     graph: AppGraph,
     onBack: () -> Unit,
+    onReadTag: () -> Unit,
 ) {
     val activity = LocalActivity.current
     val prefs = graph.prefs
@@ -115,6 +124,13 @@ fun SettingsScreen(
                 QuietLine("Dynamic colour arrives in a later release")
             }
 
+            SectionHeader(title = "Utilities")
+            UtilityRow(
+                icon = NoteNfcIcons.Contactless,
+                label = "Read / inspect tag",
+                onClick = onReadTag,
+            )
+
             SectionHeader(title = "About")
             LabelValue(
                 label = "Version",
@@ -155,6 +171,37 @@ private fun ModeRow(label: String, selected: Boolean, onSelect: () -> Unit) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+/** One navigation row: leading glyph, label, trailing chevron. The whole row is the target. */
+@Composable
+private fun UtilityRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(vertical = 4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

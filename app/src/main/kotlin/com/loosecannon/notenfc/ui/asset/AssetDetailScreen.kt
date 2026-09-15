@@ -1,11 +1,14 @@
 package com.loosecannon.notenfc.ui.asset
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -51,19 +54,23 @@ import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetStatus
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.MeasurementDefinition
+import com.loosecannon.notenfc.core.model.Money
 import com.loosecannon.notenfc.core.model.PayloadFormat
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.ValueType
+import com.loosecannon.notenfc.core.model.isRetired
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.ui.components.ActionGrid
 import com.loosecannon.notenfc.ui.components.ActionSpec
 import com.loosecannon.notenfc.ui.components.IdentityPlate
 import com.loosecannon.notenfc.ui.components.InstrumentList
 import com.loosecannon.notenfc.ui.components.InstrumentRow
+import com.loosecannon.notenfc.ui.components.LabelValue
 import com.loosecannon.notenfc.ui.components.LedgerEntry
 import com.loosecannon.notenfc.ui.components.LedgerList
 import com.loosecannon.notenfc.ui.components.NoteNfcIcons
@@ -71,6 +78,7 @@ import com.loosecannon.notenfc.ui.components.PlateValue
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.components.SectionHeader
 import com.loosecannon.notenfc.ui.components.StatusBadge
+import com.loosecannon.notenfc.ui.components.TypedConfirmDialog
 import com.loosecannon.notenfc.ui.journal.eventDetailLine
 import com.loosecannon.notenfc.ui.journal.formatTarget
 import com.loosecannon.notenfc.ui.journal.formatValue
@@ -103,10 +111,15 @@ fun AssetDetailScreen(
     onBackup: () -> Unit,
     onLogEvent: (assetId: String, profileId: String) -> Unit,
     onOpenEvent: (eventId: String) -> Unit,
+    onOpenAsset: (assetId: String) -> Unit,
+    onAddComponent: (parentAssetId: String) -> Unit,
+    /** A free-form entry of one [EventKind] — the retirement follow-on of spec §7 opens it. */
+    onLogOutcome: (assetId: String, kind: String) -> Unit,
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
+    val prompt by model.prompt.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     var pickingTemplate by remember { mutableStateOf(false) }
 
@@ -114,6 +127,9 @@ fun AssetDetailScreen(
     // any more. Leaving is the honest answer; an empty plate would pretend it still exists.
     LaunchedEffect(missing) { if (missing) onBack() }
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
+    // A deleted asset leaves by its own door rather than through `missing`: the pop happens once,
+    // on the write, and not as a side effect of the row disappearing from a flow.
+    LaunchedEffect(model) { model.deleted.collect { onBack() } }
 
     val asset = state?.asset
     Scaffold(
@@ -136,9 +152,13 @@ fun AssetDetailScreen(
                     if (asset != null) {
                         DetailOverflow(
                             archived = asset.status != AssetStatus.ACTIVE,
+                            retired = asset.isRetired,
                             onEdit = { onEdit(assetId) },
                             onArchive = model::archive,
                             onUnarchive = model::unarchive,
+                            onRetire = model::askRetire,
+                            onUnretire = model::unretire,
+                            onDelete = model::askDelete,
                         )
                     }
                 },
@@ -159,13 +179,24 @@ fun AssetDetailScreen(
                 },
             )
         }
+        DetailPrompts(
+            prompt = prompt,
+            assetName = current.asset.name,
+            onDismiss = model::dismissPrompt,
+            onRetire = model::retire,
+            onDelete = model::delete,
+            onLogOutcome = { kind -> model.dismissPrompt(); onLogOutcome(assetId, kind) },
+        )
         Column(
             modifier = Modifier
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            AssetPlate(current.asset, current.tags, current.links)
+            AssetPlate(current)
+            current.parentName?.let { parent ->
+                PartOfLine(parent) { current.parentId?.let(onOpenAsset) }
+            }
             ReadingsSection(current.readings)
             Spacer(Modifier.height(10.dp))
             // No schedules in 2A, so nothing can be due: one quiet line, never a red one (G1 §1.1).
@@ -185,6 +216,12 @@ fun AssetDetailScreen(
                     onSetUp = { pickingTemplate = true },
                 ),
                 modifier = Modifier.fillMaxWidth(),
+            )
+            DetailsSection(current)
+            ComponentsSection(
+                components = current.components,
+                onOpenAsset = onOpenAsset,
+                onAddComponent = { onAddComponent(assetId) },
             )
             ServiceRecordSection(current.events, current.definitions, onOpenEvent)
             TagsSection(current.tags)
@@ -340,12 +377,22 @@ private fun outOfRange(
             .takeIf { it == RangeState.LOW || it == RangeState.HIGH }
     }
 
+/**
+ * Edit, then the two reversible lifecycle actions, then the one that is not. Archive and retire are
+ * different facts and both are offered: archived is "off my list", retired is "out of service"
+ * (spec §7), and an asset can honestly be either, both or neither. Delete is last and spelled in
+ * the destructive family, because it is the only item here that cannot be undone.
+ */
 @Composable
 private fun DetailOverflow(
     archived: Boolean,
+    retired: Boolean,
     onEdit: () -> Unit,
     onArchive: () -> Unit,
     onUnarchive: () -> Unit,
+    onRetire: () -> Unit,
+    onUnretire: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
@@ -353,37 +400,279 @@ private fun DetailOverflow(
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         DropdownMenuItem(text = { Text("Edit") }, onClick = { open = false; onEdit() })
-        // Archive-first (R-9): there is no delete here, and there will not be one in Phase 1.
         DropdownMenuItem(
             text = { Text(if (archived) "Unarchive" else "Archive") },
             onClick = { open = false; if (archived) onUnarchive() else onArchive() },
+        )
+        DropdownMenuItem(
+            text = { Text(if (retired) "Unretire" else "Retire") },
+            onClick = { open = false; if (retired) onUnretire() else onRetire() },
+        )
+        DropdownMenuItem(
+            text = {
+                Text("Delete", color = NoteNfcTheme.semanticColors.destructiveAction.foreground)
+            },
+            onClick = { open = false; onDelete() },
         )
     }
 }
 
 /**
- * The plate's four cells are fixed in G1 §1.1. SERIAL has no field behind it until the Phase 2
- * asset profile, and a blank [PlateValue] renders as "—", which is the honest thing to show.
+ * Every dialog this screen can show, in one place, driven by the ViewModel's one prompt: the
+ * retirement date, the follow-on offer that comes *after* the retirement is already written, the
+ * delete confirmation, and the children-first refusal (spec §5, §7).
  */
 @Composable
-private fun AssetPlate(asset: Asset, tags: List<TagBinding>, links: List<ExternalLink>) {
+private fun DetailPrompts(
+    prompt: DetailPrompt?,
+    assetName: String,
+    onDismiss: () -> Unit,
+    onRetire: (String) -> Unit,
+    onDelete: () -> Unit,
+    onLogOutcome: (String) -> Unit,
+) {
+    when (prompt) {
+        null -> Unit
+        is DetailPrompt.Retire -> RetireDialog(prompt.date, onDismiss, onRetire)
+        DetailPrompt.LogWhatHappened -> LogWhatHappenedDialog(
+            onDismiss = onDismiss,
+            onReplacement = { onLogOutcome(EventKind.REPLACEMENT.name) },
+            onNote = { onLogOutcome(EventKind.NOTE.name) },
+        )
+        DetailPrompt.ConfirmDelete -> TypedConfirmDialog(
+            title = "Delete $assetName?",
+            body = "Type the asset's name to delete it. Its tags, readings and history go with it. " +
+                "There is no automatic snapshot yet.",
+            expected = assetName,
+            confirmLabel = "Delete",
+            onConfirm = onDelete,
+            onDismiss = onDismiss,
+        )
+        is DetailPrompt.DeleteRefused -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Components first") },
+            text = {
+                Text(
+                    "$assetName still has ${prompt.children.joinToString(", ")}. Move or delete " +
+                        "them first, so nothing disappears by cascade.",
+                )
+            },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+        )
+    }
+}
+
+/**
+ * The date the asset went out of service — today by default, and freely backdated, because
+ * "I replaced this in April" is the normal case (spec §7). Retiring commits on its own: nothing
+ * about the follow-on offer is decided here.
+ */
+@Composable
+private fun RetireDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var date by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Retire this asset?") },
+        text = {
+            Column {
+                Text("It keeps its history and its tags still resolve.")
+                Spacer(Modifier.height(12.dp))
+                DateField(value = date, onValueChange = { date = it }, label = "Retired on")
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(date) }) { Text("Retire") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Offered after the retirement is written, so all three answers are fine ones and "Not now" is
+ * not a cancel: the two entries are a convenience, and declining changes nothing (spec §7).
+ */
+@Composable
+private fun LogWhatHappenedDialog(
+    onDismiss: () -> Unit,
+    onReplacement: () -> Unit,
+    onNote: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log what happened?") },
+        text = {
+            Column {
+                Text(
+                    text = "The asset is retired either way.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                listOf("Log replacement" to onReplacement, "Log note" to onNote).forEach { (label, pick) ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = pick)
+                            .padding(vertical = 12.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+    )
+}
+
+/**
+ * The plate's six cells are fixed in spec §9: MODEL / SERIAL / LOCATION / PURCHASED / IN SERVICE /
+ * NFC TAG, laid out 2×3. The category is the eyebrow above them and is not repeated as a cell. A
+ * blank [PlateValue] renders as "—", which is the honest thing to show for an unfilled field.
+ */
+@Composable
+private fun AssetPlate(state: AssetDetailState) {
+    val asset = state.asset
     IdentityPlate(
         category = asset.category.ifBlank { "Asset" },
         model = asset.name,
         name = asset.description.takeIf { it.isNotBlank() },
         cells = listOf(
-            "Serial" to PlateValue("", mono = true),
-            "NFC tag" to PlateValue(tags.firstOrNull()?.let(::tagIdentity).orEmpty(), mono = true),
-            "Created" to PlateValue(asset.createdAt.asPlateDate()),
-            "Links" to PlateValue(links.size.takeIf { it > 0 }?.toString().orEmpty()),
+            "Model" to PlateValue(modelLine(asset)),
+            "Serial" to PlateValue(asset.serialNumber, mono = true),
+            "Location" to PlateValue(asset.location),
+            "Purchased" to PlateValue(asset.purchaseOn.orEmpty().asDayDate()),
+            "In service" to PlateValue(asset.inServiceOn.orEmpty().asDayDate()),
+            "NFC tag" to PlateValue(state.tags.firstOrNull()?.let(::tagIdentity).orEmpty(), mono = true),
         ),
         icon = categoryIcon(asset.category),
-        badge = statusLabel(asset.status)?.let { label ->
-            { StatusBadge(label = label, colors = NoteNfcTheme.semanticColors.seasonInactive) }
-        },
+        badges = plateBadges(asset, state.outOfSeason),
         modifier = Modifier.fillMaxWidth(),
     )
 }
+
+/**
+ * Make and model as one line, because that is how the plate on the machine reads. Either half
+ * alone is fine; neither leaves the cell to render its own "—" (spec §9).
+ */
+private fun modelLine(asset: Asset): String =
+    listOf(asset.manufacturer, asset.model).filter { it.isNotBlank() }.joinToString(" ")
+
+/**
+ * Retired, archived and out of season are three independent facts and an asset can carry all three
+ * (spec §6, §7). Each gets its own D12 §5 family, wording and glyph; an ordinary asset gets no
+ * badge slot at all, because "normal" needs no badge.
+ */
+@Composable
+private fun plateBadges(asset: Asset, outOfSeason: Boolean): (@Composable FlowRowScope.() -> Unit)? {
+    val archived = statusLabel(asset.status)
+    if (!asset.isRetired && archived == null && !outOfSeason) return null
+    val semantic = NoteNfcTheme.semanticColors
+    val retiredIcon = NoteNfcIcons.PauseCircle
+    val seasonIcon = NoteNfcIcons.CalendarMonth
+    return {
+        if (asset.isRetired) {
+            StatusBadge(label = RETIRED, colors = semantic.paused, icon = retiredIcon)
+        }
+        if (archived != null) {
+            StatusBadge(label = archived, colors = semantic.seasonInactive)
+        }
+        if (outOfSeason) {
+            StatusBadge(label = OUT_OF_SEASON, colors = semantic.seasonInactive, icon = seasonIcon)
+        }
+    }
+}
+
+/** "Part of <parent>" under the plate, tapping through to the parent (spec §9). */
+@Composable
+private fun PartOfLine(parentName: String, onClick: () -> Unit) {
+    QuietLine(
+        text = "Part of $parentName",
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 44.dp)
+            .padding(top = 10.dp, bottom = 4.dp),
+    )
+}
+
+/**
+ * The fields that are neither identity nor journal: what it cost, who from, and what the warranty
+ * says (spec §9). Only the ones that are actually set appear, and the section is absent rather
+ * than empty when none are — a list of five dashes tells nobody anything.
+ */
+@Composable
+private fun DetailsSection(state: AssetDetailState) {
+    val asset = state.asset
+    val rows = buildList {
+        asset.purchaseOn?.let { add("Purchase date" to it.asDayDate()) }
+        priceLine(asset)?.let { add("Price" to it) }
+        asset.vendor.takeIf { it.isNotBlank() }?.let { add("Vendor" to it) }
+        asset.warrantyExpiresOn?.let { on ->
+            // The date on its own makes the reader do the arithmetic; the word does it for them.
+            add("Warranty" to on.asDayDate() + if (state.warrantyExpired) " (expired)" else "")
+        }
+        asset.warrantyNotes.takeIf { it.isNotBlank() }?.let { add("Warranty notes" to it) }
+    }
+    if (rows.isEmpty()) return
+    SectionHeader(title = "Details")
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        rows.forEach { (label, value) ->
+            LabelValue(label = label, value = value, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/** The stored price through [Money], which owns minor units both ways; null when there is none. */
+private fun priceLine(asset: Asset): String? {
+    val minor = asset.purchasePriceMinor ?: return null
+    val code = asset.currency ?: return null
+    return runCatching { Money.format(minor, code) }.getOrNull()
+}
+
+/**
+ * The asset's children (spec §9). Always present, because "+ Add component" is how the first child
+ * gets made and an action nobody can reach is no action at all; empty reads "No components" rather
+ * than vanishing. Each row says how many of the child's *own* readings are out of range and never
+ * what they read: 2B-2 rolls nothing up, so a parent that looks fine is not a claim about its
+ * components, only an invitation to open one.
+ */
+@Composable
+private fun ComponentsSection(
+    components: List<ComponentRow>,
+    onOpenAsset: (String) -> Unit,
+    onAddComponent: () -> Unit,
+) {
+    SectionHeader(title = "Components")
+    Column {
+        if (components.isEmpty()) QuietLine("No components")
+        components.forEach { child ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenAsset(child.id) }
+                    .heightIn(min = 56.dp)
+                    .padding(vertical = 10.dp),
+            ) {
+                Text(
+                    text = child.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                QuietLine(componentLine(child))
+            }
+        }
+        TextButton(onClick = onAddComponent) { Text("+ Add component") }
+    }
+}
+
+/** "Pump · Water · 1 reading out of range", with an unset category simply left out. */
+private fun componentLine(child: ComponentRow): String = listOfNotNull(
+    child.category.takeIf { it.isNotBlank() },
+    when (child.outOfRange) {
+        0 -> "No readings out of range"
+        1 -> "1 reading out of range"
+        else -> "${child.outOfRange} readings out of range"
+    },
+).joinToString(" · ")
 
 /** The tag's own id, not the chip's hardware UID (G1 §3 correction a), with the payload format. */
 private fun tagIdentity(tag: TagBinding): String {
@@ -487,7 +776,9 @@ private val ledgerYear = DateTimeFormatter.ofPattern("uuuu")
 
 private fun Long.zoned() = Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault())
 
-private fun Long.asPlateDate(): String = zoned().format(plateDate)
+/** An ISO date as the plate and DETAILS show it. A string the domain would refuse shows verbatim. */
+private fun String.asDayDate(): String =
+    runCatching { LocalDate.parse(this).format(plateDate) }.getOrDefault(this)
 
 /** The ledger's 64dp date column wants the three parts apart, not one formatted string. */
 private fun Long.asLedgerDate(): Triple<String, String, String> {

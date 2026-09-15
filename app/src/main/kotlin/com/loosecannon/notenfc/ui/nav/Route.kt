@@ -12,7 +12,12 @@ sealed interface Route : NavKey {
     @Serializable data object Dashboard : Route
     @Serializable data object Assets : Route
     @Serializable data class AssetDetail(val id: String) : Route
-    @Serializable data class AssetEdit(val id: String?) : Route
+    /**
+     * New when [id] is null. [parentId] is the "Part of" a new asset opens with, which is how
+     * "+ Add component" on a parent's screen makes a child (spec §9); it is ignored on an edit,
+     * whose stored parent always wins.
+     */
+    @Serializable data class AssetEdit(val id: String?, val parentId: String? = null) : Route
 
     /** What this asset measures and what can be logged against it — the editors of spec §9. */
     @Serializable data class AssetSetup(val assetId: String) : Route
@@ -23,8 +28,17 @@ sealed interface Route : NavKey {
     /** New when [profileId] is null, otherwise that action of [assetId]. */
     @Serializable data class ProfileEdit(val assetId: String, val profileId: String?) : Route
 
-    /** New when [eventId] is null; [profileId] null is a free-form entry with no profile behind it. */
-    @Serializable data class EventEntry(val assetId: String, val profileId: String?, val eventId: String?) : Route
+    /**
+     * New when [eventId] is null; [profileId] null is a free-form entry with no profile behind it.
+     * [kind] presets the kind of such an entry — the retirement follow-on of spec §7 opens
+     * REPLACEMENT or NOTE — and is the name of an `EventKind`, never an index.
+     */
+    @Serializable data class EventEntry(
+        val assetId: String,
+        val profileId: String?,
+        val eventId: String?,
+        val kind: String? = null,
+    ) : Route
     @Serializable data class EventDetail(val id: String) : Route
 
     @Serializable data object Links : Route
@@ -36,5 +50,10 @@ sealed interface Route : NavKey {
     @Serializable data object Settings : Route
 }
 
-/** The three roots the bottom bar switches between; nothing else ever shows it. */
-val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets, Route.Scan)
+/**
+ * The two roots the bottom bar switches between; nothing else ever shows it. [Route.Scan] is a
+ * pushed destination reached from Settings or the dashboard's empty-state action, not a tab
+ * (D12 §16 correction, spec §9): normal tag reading is ambient dispatch, so "Scan" does not earn
+ * a slot in the primary navigation for something the app never asks the user to open.
+ */
+val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets)

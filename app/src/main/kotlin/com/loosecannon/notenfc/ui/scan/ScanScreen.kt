@@ -15,8 +15,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -53,12 +56,16 @@ private const val BREATH_MILLIS = 3_200
  * app sits here and the halo is the app's only animation; what a tag turns out to be is decided by
  * `ResolveTag` and shown on the result sheet — except a link tag, which launches its note with no
  * sheet at all (R-7).
+ *
+ * Reached as a pushed destination (Settings' Read / inspect tag row, or the dashboard's empty-state
+ * action), never a tab (D12 §16 correction), so it always needs a way back.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
     graph: AppGraph,
     onResolved: (Route) -> Unit,
+    onBack: () -> Unit,
 ) {
     val model: ScanViewModel = viewModel(key = "scan") { ScanViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -83,7 +90,18 @@ fun ScanScreen(
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Scan") }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Read / inspect tag") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

@@ -20,6 +20,14 @@ interface AssetRepository {
     suspend fun get(id: AssetId): Asset?
     suspend fun all(): List<Asset>
     suspend fun delete(id: AssetId)
+
+    /**
+     * Wipes every asset. With a self-referencing `parent_asset_id` FK, this must delete children
+     * before parents (spec §10): the Room adapter walks `AssetTree.parentsFirst(all).asReversed()`
+     * and deletes each id individually inside the caller's transaction, rather than issuing a
+     * single unordered `DELETE`. A fake repository backed by a plain in-memory map may delete in
+     * any order — there is no FK to violate.
+     */
     suspend fun deleteAll()
     fun observeAll(): Flow<List<Asset>>
 }

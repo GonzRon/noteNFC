@@ -137,3 +137,65 @@ val MIGRATION_2_3: Migration = object : Migration(2, 3) {
         )
     }
 }
+
+/**
+ * Schema v3 -> v4: the asset record (spec §4, §5). `asset` gains the identification, money,
+ * warranty and season columns, `retired_on`, and `parent_asset_id` — a self-referencing foreign
+ * key into `asset(id)` with ON DELETE RESTRICT, plus its index.
+ *
+ * SQLite cannot add a column carrying a foreign key, so `asset` is recreated exactly as
+ * `MIGRATION_2_3` recreated `measurement_definition`: build `_new_asset` from `4.json`'s
+ * createSql, copy every v3 row into it, drop the old table, rename the new one into its place,
+ * and create the three indexes `4.json` declares — the two `asset` already had, which the DROP
+ * took with it, plus one for `parent_asset_id`.
+ *
+ * The copy fills the new columns itself rather than leaning on defaults, because there are none:
+ * the six new TEXT columns are NOT NULL with no DEFAULT (they are non-null Kotlin `String`s), so
+ * the INSERT supplies `''` for each. Everything else is nullable and is simply left out.
+ *
+ * `status` is rewritten through `CASE status WHEN 'RETIRED' THEN 'ARCHIVED' ELSE status END`.
+ * That is defensive, not corrective: `AssetStatus.RETIRED` existed in the enum but no code path
+ * ever wrote it, so no shipped install should hold one. If some hand-edited database does, this
+ * turns it into a value v4's enum still knows instead of a row that throws in `valueOf` forever
+ * after. Retirement is `retired_on` from here on (§7).
+ *
+ * The same two details that made the 2B-1 recreate safe hold here, and they matter more because
+ * `asset` is the table everything else hangs off:
+ *
+ *  - Room turns `PRAGMA foreign_keys` **off** for the duration of `migrate` (and runs
+ *    `foreign_key_check` afterwards), so dropping `asset` while `nfc_tag`, `external_link`,
+ *    `measurement_definition`, `event_profile` and `asset_event` all name it in their REFERENCES
+ *    clauses is not an error. With foreign keys off SQLite leaves those clauses alone across the
+ *    RENAME, so they keep referring to the table *by name* — and the name comes back, attached to
+ *    the new table, the moment the rename lands. `Migration1To4Test` runs the whole chain and
+ *    proves it, including that the rows on the far side still resolve.
+ *  - The new table's own `parent_asset_id` clause says `asset`, not `_new_asset`, exactly as
+ *    `4.json` spells it: before the rename it points at the table being replaced (which nothing
+ *    inserts a parent into), after it, at itself.
+ */
+val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `_new_asset` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `notes` TEXT NOT NULL, `status` TEXT NOT NULL, `template_key` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `manufacturer` TEXT NOT NULL, `model` TEXT NOT NULL, `serial_number` TEXT NOT NULL, `purchase_on` TEXT, `in_service_on` TEXT, `purchase_price_minor` INTEGER, `currency` TEXT, `vendor` TEXT NOT NULL, `location` TEXT NOT NULL, `warranty_expires_on` TEXT, `warranty_notes` TEXT NOT NULL, `retired_on` TEXT, `parent_asset_id` TEXT, `season_start_mmdd` TEXT, `season_end_mmdd` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`parent_asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        )
+        connection.execSQL(
+            "INSERT INTO `_new_asset` (`id`, `name`, `description`, `category`, `notes`, `status`, " +
+                "`template_key`, `created_at`, `updated_at`, `manufacturer`, `model`, " +
+                "`serial_number`, `vendor`, `location`, `warranty_notes`) " +
+                "SELECT `id`, `name`, `description`, `category`, `notes`, " +
+                "CASE `status` WHEN 'RETIRED' THEN 'ARCHIVED' ELSE `status` END, " +
+                "`template_key`, `created_at`, `updated_at`, '', '', '', '', '', '' FROM `asset`",
+        )
+        connection.execSQL("DROP TABLE `asset`")
+        connection.execSQL("ALTER TABLE `_new_asset` RENAME TO `asset`")
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_status` ON `asset` (`status`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_name` ON `asset` (`name`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_asset_parent_asset_id` ON `asset` (`parent_asset_id`)",
+        )
+    }
+}
