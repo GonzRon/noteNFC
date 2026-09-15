@@ -24,7 +24,7 @@
 - **Tests:** `:core` JUnit 5 block-bodied; `:app` JVM tests with `inMemoryDb()` for DAO flows and ViewModel state via fakes; a theme contrast test on the JVM; Compose smoke tests in `app/src/androidTest` compiled in every task (`:app:compileDebugAndroidTestKotlin`) and **executed on the attached phone in Task 8** (`:app:connectedDebugAndroidTest`). CI stays `:core:test :app:testDebugUnitTest :app:assembleDebug`.
 - **Cross-phase rules (D7):** `versionCode` → 2; Room schema unchanged (v1), so no migration test is added; the backup importer is untouched.
 - **Privacy:** no personal data, phone identifiers or note links in code, tests, previews or docs. Preview/sample data uses the D12 examples (rack UPS, generator, hot tub).
-- **Commits:** casual, terse, human (repo `CLAUDE.md`); **never** any `Co-Authored-By` or AI attribution line. Repo-local identity GonzRon. Do not push. Do not touch the sibling checkout `/home/lcstyle/Documents/Projects/AndroidStudioProjects/noteNFC`.
+- **Commits:** casual, terse, human (repo `CLAUDE.md`); **never** any `Co-Authored-By` or AI attribution line. Repo-local identity GonzRon. Do not push. Do not touch the sibling checkout of `master`.
 - **Build/test commands** (worktree root): `./gradlew :core:test`, `./gradlew :app:testDebugUnitTest`, `./gradlew :app:assembleDebug :app:compileDebugAndroidTestKotlin`, full gate `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:compileDebugAndroidTestKotlin`.
 
 ---

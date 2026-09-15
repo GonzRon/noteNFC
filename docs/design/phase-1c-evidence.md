@@ -77,34 +77,49 @@ Totals: **`:core` 117, `:app` 61** — 0 failures, 0 skipped (§9).
 |---|---|---|
 | `ui.components.ComponentsSmokeTest` | 4 | `IdentityPlate` renders an em dash for a blank cell and mono for a tag id; `StatusBadge` exposes its label to accessibility; `LedgerEntry` shows date and title; `SectionHeader` renders |
 | `ui.nav.NavigationSmokeTest` | 2 | Dashboard is the start destination; the bottom bar switches to Scan |
-| `ui.AppSmokeTest` | 4 | Backup nudge on a fresh install; bottom bar → Scan shows **READY TO SCAN**; an asset created from the dashboard opens on its own plate; the production Backup screen renders|
+| `ui.AppSmokeTest` | 5 | Backup nudge on a fresh install; bottom bar → Scan shows **READY TO SCAN**; an asset created from the dashboard opens on its own plate; the production Backup screen renders; **a second "New asset" form in the same session opens blank** — the entry-scoped `ViewModelStore` regression test (§6) |
 | `ui.DeepLinkSmokeTest` | 1 | `MainActivity` cold-started with `notenfc://asset/nope` as its launch intent shows the "That link doesn't point at anything here." snackbar and the dashboard title |
 | `ui.ShareActivitySmokeTest` | 1 | `ShareActivity` launched with an `EXTRA_TEXT` of a title line followed by `https://example.invalid/x` shows **WEB PAGE**, the title line and the URI in mono |
 
 Compilation is gated on every build: `./gradlew :app:compileDebugAndroidTestKotlin` is part of the
 final gate (§9) and passes. **Executed on the owner's phone (Android 17, SDK 37) on 2026-09-15**,
-as device row 2, after the install in row 1. All 12 pass:
+as device row 2, after the install in row 1. **Re-run on 2026-09-15 after the ViewModel-scoping
+fix (§6), with the new fifth `AppSmokeTest` case. All 13 pass:**
 
 ```
-AppSmokeTest             4 tests, 0 failures   6.9s
+AppSmokeTest             5 tests, 0 failures   10.0s
   PASS bottomBarReachesScanAndShowsReadyToScan   2.4s
   PASS assetCanBeCreatedFromTheDashboardAndOpens 2.1s
+  PASS secondNewAssetFormStartsBlank             3.0s
   PASS dashboardShowsTheBackupNudgeOnAFreshInstall 1.1s
-  PASS backupScreenRenders                       1.3s
+  PASS backupScreenRenders                       1.4s
 DeepLinkSmokeTest        1 test,  0 failures   1.0s
   PASS malformedDeepLinkLandsOnDashboard         1.0s
 ShareActivitySmokeTest   1 test,  0 failures   0.9s
   PASS sharedWebLinkShowsTheCard                 0.9s
-ComponentsSmokeTest      4 tests, 0 failures   3.1s
+ComponentsSmokeTest      4 tests, 0 failures   3.2s
   PASS sectionHeaderShowsItsTitle                0.8s
   PASS identityPlateShowsDashForBlankValues      0.8s
   PASS statusBadgeExposesItsLabelToAccessibility 0.8s
   PASS ledgerEntryShowsItsDateAndTitle           0.8s
 NavigationSmokeTest      2 tests, 0 failures   2.2s
-  PASS bottomBarSwitchesToScan                   1.3s
-  PASS dashboardIsTheStartDestination            0.9s
+  PASS bottomBarSwitchesToScan                   1.2s
+  PASS dashboardIsTheStartDestination            1.0s
 BUILD SUCCESSFUL
 ```
+
+`secondNewAssetFormStartsBlank` is a real regression test, not a smoke check: with the
+`rememberViewModelStoreNavEntryDecorator()` line commented out it fails on the phone with
+
+```
+java.lang.AssertionError: Failed to assert count of nodes.
+Reason: Did not expect any node but found '1' node that satisfies:
+        (Text + InputText + EditableText contains 'First one')
+  EditableText = 'First one'
+  Text = '[Name]'
+```
+
+— the second form opening with the first asset's name still in it.
 
 Two things the phone taught that the JVM could not (both fixed in the run's commit, both test-only):
 
@@ -139,7 +154,7 @@ restore proof and must be run as one unbroken sequence.
 | # | Step | Expected | Criterion | Result |
 |---|---|---|---|---|
 | 1 | Install the 1C build (`adb install -r`), uninstall nothing else; launch the app once | The app opens on the dashboard. This is what takes the package out of the Android 17 *stopped* state; until it happens no NFC intent is delivered at all | — | **PASS** 2026-09-15: `versionCode` 1 → 2 over the 1B install; launched via the launcher intent, `MainActivity` resumed on the dashboard |
-| 2 | Run the instrumented smoke suite: `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `adb shell svc power stayon false` | 12 instrumented tests pass; paste the per-test lines into §3. **DESTRUCTIVE** — `@Before` clears `SharedPreferences("notenfc")` and empties the asset, tag and link tables, so this must run before any manual seeding below | — | **PASS** 2026-09-15: 12/12 after two test-only fixes (Espresso 3.7.0 pin; deep-link test cold-starts) — §3 |
+| 2 | Run the instrumented smoke suite: `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `adb shell svc power stayon false` | 13 instrumented tests pass; paste the per-test lines into §3. **DESTRUCTIVE** — `@Before` clears `SharedPreferences("notenfc")` and empties the asset, tag and link tables, so this must run before any manual seeding below | — | **PASS** 2026-09-15: **13/13** — 12/12 on the first run after two test-only fixes (Espresso 3.7.0 pin; deep-link test cold-starts), then 13/13 on the re-run that added `secondNewAssetFormStartsBlank` alongside the ViewModel-scoping fix — §3 |
 | 3 | Dashboard → **Add your first asset** → name it → Save → on the asset, **Write a tag** → hold a blank tag | Write screen reports the tag written and read back byte-identical; the asset's plate shows the tag id | 1 | pending |
 | 4 | Dashboard → **Export now** (or Backup → **Export backup**) → save the zip somewhere off the phone | A `notenfc-backup-<stamp>.zip` is written; the nudge is gone when you come back to the dashboard | 1, 3 | pending |
 | 5 | Debug launcher → **noteNFC Backup (debug)** → **Wipe** → return to the app → Scan → tap the tag from row 3 | Counts read `0 / 0 / 0`; the scan result sheet says the tag is an unregistered v1 tag and offers Bind / New asset — it does **not** resolve to the asset | 1 | pending |
@@ -147,7 +162,7 @@ restore proof and must be run as one unbroken sequence.
 | 7 | Joplin → a note → *Copy external link* → share to noteNFC | The share card shows **JOPLIN NOTE**, the note's title and the URI in mono | 2 | pending |
 | 8 | On that card → **Write to a new tag** → hold a blank tag → Done | The tag is written and Done returns to Joplin, not into noteNFC. Then close noteNFC and tap the tag: Joplin opens the note directly, with no noteNFC screen in between | 2 | pending |
 | 9 | Reinstall (or Wipe + clear app data), create one asset, look at the dashboard, then export | The nudge "No backup yet · Tags survive a phone change only if you have one." is present before the export and absent after it; it is also absent on a genuinely empty install (Task 7 ruling, §6) | 3 | pending |
-| 10 | On the write screen, hold the tag from row 3 (which already holds a different noteNFC payload) | The confirmation names what is on the tag; **Keep it** leaves it unwritten and a later scan still resolves the original id | 4 (1B ex. 2) | pending |
+| 10 | Create a **second** asset (or use a link card) and open **its** write screen — deliberately *not* the row-3 asset — then hold the row-3 tag, which already holds a different noteNFC payload | The confirmation names what is on the tag; **Keep it** leaves it unwritten and a later scan still resolves the row-3 asset's original id. Opening a write screen for a target whose write screen was already used once in this session now works too: since the ViewModel-scoping fix (§6) each visit gets a fresh `TagWriteController`, and abandoning an unwritten tag runs when the screen closes, not when the process dies | 4 (1B ex. 2) | pending |
 | 11 | Swipe noteNFC from recents → tap the tag from row 3 | The app opens on the tag result / asset, through `NfcDispatchActivity` | 4 (1B ex. 3) | pending |
 | 12 | Hold an old `md5_short` tag on the scan screen | Recognised as a legacy tag and offered Bind / Rewrite, never an error | 4 (D6) | pending |
 | 13 | `adb shell am force-stop com.loosecannon.notenfc`, then `adb shell am start -a android.intent.action.VIEW -d "notenfc://asset/nope"` | The app cold-starts on the dashboard and shows "That link doesn't point at anything here." — no crash, no half-drawn screen | — | pending |
@@ -162,7 +177,8 @@ row 2 by construction: nothing above it exists to lose, and nothing below it can
 
 **Device rows 1–2 are done; rows 3–16 are not.** No phone was attached when Task 8 was
 implemented. On 2026-09-15 the phone was attached, the 1C build was installed over the 1B install
-and launched (row 1), and the instrumented suite ran to 12/12 (row 2, §3) after two test-only
+and launched (row 1), and the instrumented suite ran to 12/12 and then, after the
+ViewModel-scoping fix, to 13/13 (row 2, §3) after two test-only
 fixes the phone surfaced — an Espresso version that does not run on Android 17, and an
 `ActivityScenario` interaction with `singleTask` (§3). No checklist row that needs a tag or a note
 app has been executed, so none of the four M1 exit criteria is device-proven yet. Every criterion
@@ -192,8 +208,23 @@ Toolchain and process (from the pre-flight scan):
 - Compose BOM 2026.08.00, activity-compose 1.13.0 and Navigation 3 1.1.7 were S1-verified;
   lifecycle 2.10.0 and androidx.test 1.7.0/1.7.0/1.3.0 were best-known guesses. Task 1 resolved
   every guessed version exactly as written — no substitutions were needed.
-- No ViewModel-per-`NavEntry` scoping library in 1C: activity-scoped `viewModel(key = …)` is
-  enough for these screens.
+- ~~No ViewModel-per-`NavEntry` scoping library in 1C: activity-scoped `viewModel(key = …)` is
+  enough for these screens.~~ **Ruling: ViewModels are scoped to NavEntries via
+  `rememberViewModelStoreNavEntryDecorator`; the earlier activity-scope ruling was wrong — the
+  nav3 1.1.7 default decorators do not include a ViewModelStore.** `NavDisplay` decorates entries
+  with a `SaveableStateHolder` and nothing else, so every `viewModel(key = …)` inside an entry
+  resolved against the *activity's* store and lived for the whole process. Three screens depend on
+  a per-visit model: `TagResultSheet` resolves in `init` (scanning the same tag twice showed the
+  first answer forever), `WriteTagScreen` holds a `done` flag and abandons an unwritten tag from
+  `onCleared` (a second write over the same target opened on the old "Tag written" sheet), and
+  `AssetEditScreen` prefills in `init` (the second "New asset" opened with the previous draft).
+  `app/build.gradle.kts` now takes `androidx.lifecycle:lifecycle-viewmodel-navigation3` (same
+  `lifecycle` 2.10.0 ref) and `NoteNfcApp` passes
+  `entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator(), rememberViewModelStoreNavEntryDecorator())`
+  — the ViewModelStore decorator must come second. With `removeViewModelStoreOnPop` at its default
+  a popped entry's store is cleared, so `onCleared()` runs when the screen closes, as 1B did. The
+  `viewModel(key = …)` calls were left alone: with an entry-scoped owner the keys are harmless.
+  `AppSmokeTest.secondNewAssetFormStartsBlank` is the regression guard (§3).
 - The dynamic-colour parameter exists but has no settings UI (Phase 7). Changing the appearance
   mode recreates the activity.
 - Compose instrumented tests compile on every task and run on the phone in Task 8 only.
@@ -325,6 +356,12 @@ Parked minors from the task ledger — small, real, none of them blocking:
 - **Semantic colours are a separate layer.** `NoteNfcSemanticColors` sits beside the M3 scheme and
   is never derived from it, so dynamic colour (Phase 7) can recolour the app without touching what
   OVERDUE looks like. `ContrastTest` is the guard; add a row to it with every new state.
+- **ViewModels are scoped to their `NavEntry`, and must stay that way.** The two entry decorators
+  in `NoteNfcApp` are load-bearing: `TagResultSheet`, `WriteTagScreen` and `AssetEditScreen` all
+  compute their state in `init` or hold a one-shot `done` flag, and `TagWriteController` abandons
+  an unwritten tag from `onCleared()`. Any new screen Phase 2+ adds under `NavDisplay` inherits
+  that scope and should be written to depend on it; removing the decorator (or adding a second
+  `NavDisplay` without it) silently reverts every one of those screens to a process-lived model.
 - **Preferences are device-local by design.** `AppPrefs` is not in the backup: a restored phone has
   no `lastBackupAt`, so it nudges for a backup of its own. That is intended, not an omission.
 
