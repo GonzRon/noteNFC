@@ -374,8 +374,10 @@ attachments/<attachment-id>.<ext>   managed bytes only (references are metadata)
 - IDs are preserved verbatim; dates as ISO strings; no derived tables; **no secrets** (tokens),
   no preferences except the reminder hour and unit choices.
 - Export via `ACTION_CREATE_DOCUMENT` (any SAF provider, including cloud ones) and an optional
-  "auto-backup folder" (`ACTION_OPEN_DOCUMENT_TREE`) written weekly by a WorkManager job. Also
-  "share backup" through the share sheet.
+  "auto-backup folder" (`ACTION_OPEN_DOCUMENT_TREE`, persistable grant) written by a WorkManager
+  job as immutable versioned files with a daily/weekly/monthly retention policy — D7 Phase 1D,
+  provider-neutral so Google Drive works through its `DocumentsProvider` without a Drive API
+  integration. Also "share backup" through the share sheet.
 - Import modes: **Replace** (wipe and load in one Room transaction, attachments after commit;
   failure leaves the previous data intact because the transaction rolls back) and **Merge** (by
   ID: missing rows inserted, existing rows kept unless the import's `updated_at` is newer;

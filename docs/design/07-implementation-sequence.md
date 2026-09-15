@@ -11,6 +11,7 @@ Phase 0  Foundation
 Phase 1  Tag survival (M1)  =  1A persistence + legacy migration + backup/restore
                                1B tag payload format v1 + legacy resolver + real-device NFC proof
                                1C Compose shell + asset/link UX + full restore proof
+                               1D automatic versioned backup (SAF folder, WorkManager, retention)
    ▼
 Phase 2  Journal + profiles
    ▼
@@ -83,12 +84,27 @@ own falsification points; the milestone is done when 1C's criteria hold.
 | **Exit criteria (milestone M1)** | (1) a new tag written on phone X resolves on phone Y after restoring X's backup, entirely through the UI; (2) the original share → write → scan → launch flow works with Joplin end to end and returns to Joplin after the write; (3) Home shows the "no backup yet" nudge until the first export succeeds; (4) all 1A/1B criteria still hold. |
 | **Rollback / compat** | The old app is a separate package and keeps working until uninstalled; Room v1 → nothing to roll back. |
 
+### 1D — Automatic versioned backup (durability foundation, before Phase 2)
+
+Recorded 2026-09-15 at the M1 boundary. Phase 2 is where the app starts holding service history
+and measurements the owner would genuinely hate to lose, so off-device backup becomes automatic
+*before* that data exists, not after.
+
+| | |
+|---|---|
+| **Prerequisites** | 1C (M1). No new format: the 1A backup ZIP (manifest + SHA-256, `BackupCodec`) is what gets written. |
+| **Scope** | (1) A **backup destination** chosen once through `ACTION_OPEN_DOCUMENT_TREE` with a persistable URI grant — Google Drive, a local folder, Nextcloud or any other `DocumentsProvider`; noteNFC never becomes a Drive client (no OAuth, no Drive API, no hidden `appDataFolder`). (2) A **WorkManager** job (constraints: storage/network as the provider needs; retry with backoff) that runs at most daily and only when the store is dirty since the last successful backup, plus an explicit *Back up now*. (3) **Immutable versioned files** `notenfc-<UTC stamp>-v1.zip`; never a single overwritten `latest.zip`. (4) **Retention** applied after each successful write: 14 daily, 8 weekly, 12 monthly (≈ a year of rollback for a database this small). (5) **Backup health** state surfaced in Settings (destination, last backup, current / stale / failed / not configured) and on the dashboard once assets exist ("BACKUP NOT CONFIGURED — Choose backup location"), replacing the 1C "no backup yet" nudge; the 1C rule that an empty install is never nagged stands. (6) Restore from any versioned file through the existing Replace import. |
+| **Out of scope** | Attachments (Phase 4 separates database backup from attachment storage because photos/PDFs change the size class); Merge import; a Google-specific path — only if the SAF/Drive provider proves unreliable in the device spike does the direct Drive API (`drive.appdata`) get a concrete reason to exist. |
+| **Tests** | JVM: dirty-flag semantics, retention policy over synthetic file lists, filename stamping/parsing, health-state derivation. Device: choose a Drive-backed folder, dirty the store, run the worker on demand, see the file appear in Drive's own UI; reboot and confirm the grant persists; restore an older version. |
+| **Exit criteria** | (1) after one change and one worker run, a new versioned ZIP exists in the chosen tree and imports cleanly; (2) a second run with no change writes nothing; (3) retention deletes exactly the files the policy says over a synthetic 60-day history; (4) the grant survives a reboot; (5) health reads "current" only after a verified write. |
+| **Rollback / compat** | Feature is additive and off until a destination is chosen; manual export/import unchanged. |
+
 ## Phase 2 — Asset core, journal, profiles
 
 | | |
 |---|---|
 | **Goal** | "Scan the hot tub → log a water test in a few taps; see the history." |
-| **Prerequisites** | Phase 1. |
+| **Prerequisites** | Phase 1 including 1D (automatic backup established before history accumulates). |
 | **Source areas** | Room v2 (`measurement_definition`, `event_profile`, `profile_field`, `profile_consumable`, `asset_event`, `measurement`, `consumable_usage`; full `asset` fields incl. hierarchy and season window); seed templates JSON (`hot_tub`, `power_equipment`, `ups`, `generic`); generic entry form rendered as D12 §9 Instrument Measurement rows (value, unit, range, explicit LOW / IN RANGE / HIGH); journal as the D12 §8 Service Ledger; full Asset Identity Plate; journal list/detail/edit; range classification; profile editor; backup importer tolerates the new tables. |
 | **Schema** | Room v2 migration + test. |
 | **Tests** | `:core`: template application (idempotent), range classification, measurement typing. `:app`: DAO tests for the time-series query, migration v1→v2, entry-form Compose test (required-field gating), backup round-trip incl. events. |
