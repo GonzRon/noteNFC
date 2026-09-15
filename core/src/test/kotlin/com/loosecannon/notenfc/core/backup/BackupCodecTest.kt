@@ -250,11 +250,11 @@ class BackupCodecTest {
     fun `a newer format version is refused`() {
         val entries = unzip(encoded())
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*3"), "\"formatVersion\": 4")
+            .replace(Regex("\"formatVersion\"\\s*:\\s*4"), "\"formatVersion\": 5")
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val e = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(rezip(entries)) }
-        assertEquals(4, e.found)
-        assertEquals(3, e.supported)
+        assertEquals(5, e.found)
+        assertEquals(4, e.supported)
     }
 
     @Test
@@ -641,6 +641,117 @@ class BackupCodecTest {
         )
         val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
         assertTrue(e.message!!.contains("m1"), "unhelpful: ${e.message}")
+    }
+
+    // --- asset fields and hierarchy (format 4) ----------------------------------------------------
+
+    @Test
+    fun formatThreeFileStillDecodes() {
+        val f = fixture()
+        val bytes = BackupCodec.encode(
+            f,
+            appVersion = "2.0",
+            schemaVersion = 1,
+            createdAt = 1_726_000_000_000L,
+            formatVersion = 3,
+        )
+        val decoded = BackupCodec.decode(bytes)
+        assertEquals(3, decoded.manifest.formatVersion)
+        assertTrue(decoded.data.assets.all { it.manufacturer == "" && it.model == "" && it.serialNumber == "" })
+        assertTrue(decoded.data.assets.all { it.purchaseOn == null && it.inServiceOn == null })
+        assertTrue(decoded.data.assets.all { it.purchasePriceMinor == null && it.currency == null })
+        assertTrue(decoded.data.assets.all { it.vendor == "" && it.location == "" })
+        assertTrue(decoded.data.assets.all { it.warrantyExpiresOn == null && it.warrantyNotes == "" })
+        assertTrue(decoded.data.assets.all { it.retiredOn == null && it.parentAssetId == null })
+        assertTrue(decoded.data.assets.all { it.seasonStartMmdd == null && it.seasonEndMmdd == null })
+    }
+
+    @Test
+    fun formatFourRoundTripsATree() {
+        val root = assetDto("root").copy(
+            manufacturer = "Acme",
+            model = "9000",
+            serialNumber = "SN-1",
+            purchaseOn = "2024-01-01",
+            inServiceOn = "2024-01-05",
+            purchasePriceMinor = 12345L,
+            currency = "USD",
+            vendor = "Acme Store",
+            location = "Garage",
+            warrantyExpiresOn = "2026-01-01",
+            warrantyNotes = "5 year parts",
+            retiredOn = null,
+            parentAssetId = null,
+            seasonStartMmdd = "04-01",
+            seasonEndMmdd = "10-31",
+        )
+        val child = assetDto("child").copy(parentAssetId = "root", retiredOn = "2025-06-01")
+        val grandchild = assetDto("grandchild").copy(parentAssetId = "child")
+        // encode() sorts assets by id ("child" < "grandchild" < "root"), so the fixture is
+        // pre-sorted the same way — matching the pattern the other round-trip tests use — for
+        // the whole-data equality check below to hold.
+        val data = BackupData(
+            assets = listOf(child, grandchild, root),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+        )
+        val decoded = BackupCodec.decode(encoded(data))
+        assertEquals(data, decoded.data)
+        assertEquals(4, decoded.manifest.formatVersion)
+    }
+
+    @Test
+    fun unknownParentIsCorrupt() {
+        val orphan = assetDto("a1").copy(parentAssetId = "a404")
+        val data = BackupData(assets = listOf(orphan), nfcTags = emptyList(), externalLinks = emptyList())
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("a1") && e.message!!.contains("a404"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun cycleIsCorrupt() {
+        val a1 = assetDto("a1").copy(parentAssetId = "a2")
+        val a2 = assetDto("a2").copy(parentAssetId = "a1")
+        val data = BackupData(assets = listOf(a1, a2), nfcTags = emptyList(), externalLinks = emptyList())
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("assets") && e.message!!.contains("cycle"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun retiredStatusNameIsCorrupt() {
+        val bad = assetDto("a1").copy(status = "RETIRED")
+        val data = BackupData(assets = listOf(bad), nfcTags = emptyList(), externalLinks = emptyList())
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("a1"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun badCurrencyIsCorrupt() {
+        val badShape = assetDto("a1").copy(purchasePriceMinor = 100L, currency = "XX1")
+        val e1 = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(BackupData(listOf(badShape), emptyList(), emptyList())))
+        }
+        assertTrue(e1.message!!.contains("a1"), "unhelpful: ${e1.message}")
+
+        val unresolvable = assetDto("a2").copy(purchasePriceMinor = 100L, currency = "ZZZ")
+        val e2 = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(BackupData(listOf(unresolvable), emptyList(), emptyList())))
+        }
+        assertTrue(e2.message!!.contains("a2"), "unhelpful: ${e2.message}")
+
+        val noCurrency = assetDto("a3").copy(purchasePriceMinor = 100L, currency = null)
+        val e3 = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(BackupData(listOf(noCurrency), emptyList(), emptyList())))
+        }
+        assertTrue(e3.message!!.contains("a3"), "unhelpful: ${e3.message}")
+    }
+
+    @Test
+    fun badSeasonIsCorrupt() {
+        val bad = assetDto("a1").copy(seasonStartMmdd = "04-01", seasonEndMmdd = null)
+        val data = BackupData(assets = listOf(bad), nfcTags = emptyList(), externalLinks = emptyList())
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("a1"), "unhelpful: ${e.message}")
     }
 
     // --- random fixture generation (ids pre-sorted, so the identity is literal) -----------------

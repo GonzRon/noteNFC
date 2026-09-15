@@ -67,7 +67,8 @@ private class UpsertRig(private val label: String) {
     }
 }
 
-class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
+/** Open so a test can subclass it to rig a check on upsert order (e.g. FK-like checks). */
+open class InMemoryAssetRepository : AssetRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, Asset>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("asset")
