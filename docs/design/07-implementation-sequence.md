@@ -173,6 +173,60 @@ abstraction is needed ahead of the phase.
 | **Source areas** | `MeasurementSource` port stub (telemetry → measurements with `source = TELEMETRY`), CSV/JSON per-asset export, backup encryption option, fatigue controls (#11 NEXT), multi-provider UI if ever wanted (model already allows it), Obsidian/Logseq link polish, targetSdk 37 + `DISPATCH_NFC_MESSAGE`, optional OAuth/App Links if R-4 grants a domain, widened native-recurrence eligibility if S8 passes. |
 | **Exit criteria** | Each item ships behind its own falsifiable acceptance; no open-ended "polish" bucket remains. |
 
+## Product separation — deferred convergence operation (decided 2026-09-15)
+
+The application built here has become a different product from the original noteNFC. Three
+artifacts are intended, but **the split is deferred until ServiceTag is functionally mature and
+before its first real deployment or permanent tag rollout**, not tied to any phase. This
+supersedes an earlier instruction to split immediately after Phase 2A.
+
+Why deferring is right: the project is entirely greenfield — no users, no production installs, no
+deployed tags, no data to migrate, no external compatibility obligations. Package names, NDEF
+record types, deep-link schemes, databases and test tags are development artifacts, so there is
+no phase-based migration tipping point. Waiting also means the shared NFC layer is extracted from
+two concrete, finished consumers rather than designed prospectively.
+
+Target shape at that time:
+
+```text
+current modern lineage ──► ServiceTag   (this repository, renamed; keeps history, docs, issues)
+                            "the service record attached to the machine": assets, journal,
+                            measurements, profiles, schedules, reminders, scan-time context,
+                            attachments, supplies, integrations, backup, Apollo Service Binder UI,
+                            its own applicationId (expected com.loosecannon.servicetag), record
+                            type (com.loosecannon.servicetag:tag) and deep links (servicetag://)
+historical narrow lineage ► noteNFC     (reconstructed from the last coherent Joplin/NFC commit,
+                            found by reading source behaviour, not dates; keeps its ancestry and
+                            com.loosecannon.notenfc; narrow scope with modern NFC safety)
+intersection of the two ──► nfc-tag-core (product-neutral: NDEF framing, external-record and
+                            AAR helpers taking the package as a parameter, reader-mode lifecycle,
+                            capacity checks, safe write + read-back, error mapping; knows nothing
+                            of Joplin, assets, Room, Compose, backups or navigation; versioned
+                            and pinned by both apps; created only once both consume it)
+```
+
+Until then: one repository, one app, no parallel products, **no speculative shared library**.
+Preserve separability through ordinary architecture only:
+
+- domain code (`Asset`, `AssetEvent`, `TagBinding`, schedules, reminders) never references the
+  applicationId, the NDEF record-type string, the deep-link scheme or the brand name; those live
+  at adapter/configuration boundaries (`NdefCodec`, `TagRoute`/`DeepLinkRoute`, the manifest,
+  `strings.xml`);
+- NFC mechanism (reader mode, write/verify, capability inspection) stays distinct from what a
+  record means to the app;
+- no abstraction is introduced for the future split alone.
+
+When the split runs it is its own investigation → design → plan → execution project with:
+archaeology before mutation; durable checkpoint and rollback path; remote rename only after the
+local split and builds are proven; both apps installable together with on-device dispatch proof
+(note tag → noteNFC, asset tag → ServiceTag, link tag → ServiceTag, legacy tag → noteNFC, foreign
+tag → nothing unsafe, no ambient scan enters write mode); data migration through the canonical
+backup format (identity-preserving); explicit user-intent tag rewrite for any tag written before
+the split; a distinct ServiceTag signing key, the original noteNFC key preserved, no private
+material tracked; independent green CI for all three; docs under `docs/architecture/` for
+archaeology, target and migration, with the existing design documents updated so no future
+session mistakes the maintenance product for noteNFC.
+
 ## Cross-phase rules
 
 - Every phase bumps `versionCode`, ships a migration test, and updates the backup importer to

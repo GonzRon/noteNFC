@@ -307,6 +307,10 @@ Tag ──▶ NfcReaderModeSession (in-app Scan/Write screens, enableReaderMode)
   freshly installed, never-launched package gets no NFC dispatch until its first launch (1B
   evidence), but a package that was launched once and then force-stopped (even with its data
   cleared) still gets dispatched (1C evidence row 16). The health screen explains the first case.
+- Product identity (applicationId, NDEF record type, deep-link scheme, brand) stays at adapter
+  boundaries, never in domain code: the maintenance product will be separated from the narrow
+  noteNFC utility before first real deployment (D7 "Product separation"), and that discipline is
+  what keeps the separation mechanical.
 - Normal reads are ambient (manifest NDEF dispatch → `NfcDispatchActivity` → resolver → route);
   reader mode is reserved for intentional tag operations (write, rebind, rewrite legacy,
   inspect). No top-level Scan destination is required for reading (D12 §16 correction). With
