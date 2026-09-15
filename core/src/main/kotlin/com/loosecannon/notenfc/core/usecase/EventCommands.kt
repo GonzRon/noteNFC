@@ -116,7 +116,7 @@ private fun validTime(occurredTime: String?): Boolean {
 /** Parses one field's raw text against its definition's [ValueType]; null means "no value". */
 private fun parsedValue(definition: MeasurementDefinition, raw: String): Pair<Double?, String?>? =
     when (definition.valueType) {
-        ValueType.NUMBER -> raw.toDoubleOrNull()?.let { it to null }
+        ValueType.NUMBER -> raw.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { it to null }
         ValueType.BOOLEAN -> when (raw.lowercase()) {
             "1", "true" -> 1.0 to null
             "0", "false" -> 0.0 to null
@@ -198,7 +198,7 @@ internal suspend fun buildEvent(
 
     val consumables = cmd.consumables.mapIndexedNotNull { i, input ->
         val name = input.name.trim()
-        val quantity = input.quantity.trim().toDoubleOrNull()
+        val quantity = input.quantity.trim().toDoubleOrNull()?.takeIf { it.isFinite() }
         if (name.isBlank() || quantity == null || quantity < 0.0) {
             problems += FieldProblem.BadConsumable(i)
             null

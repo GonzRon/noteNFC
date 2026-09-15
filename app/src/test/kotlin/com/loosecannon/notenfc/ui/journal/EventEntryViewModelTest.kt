@@ -18,6 +18,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -186,6 +187,51 @@ class EventEntryViewModelTest {
         vm.state.first { !it.saving }
 
         assertEquals(1, graph.events.forAsset(spa.id).size)
+    }
+
+    /**
+     * `save()` guards on `saving` alone would let a tap that lands between construction and the
+     * `init` load's completion submit the form's still-default state over the event being edited.
+     * A [StandardTestDispatcher] tied to this test's own scheduler, left un-advanced, catches the
+     * VM mid-load: `init`'s coroutine is queued but has not run, so `state.loaded` is still false
+     * when `save()` is called.
+     */
+    @Test fun saveBeforeLoadIsIgnored() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val spa = spa()
+        val logged = graph.logEvent.run(
+            EventCommand(
+                assetId = spa.id,
+                profileId = spa.profile.id,
+                kind = EventKind.MEASUREMENT,
+                title = "Water test",
+                occurredOn = "2026-09-15",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = mapOf(spa.def("ph").id to "7.4", spa.def("free_chlorine").id to "2.0"),
+                consumables = emptyList(),
+            ),
+        )
+
+        val vm = entryModel(spa.id, null, logged.id)
+        assertFalse(vm.state.value.loaded)
+
+        val saved = mutableListOf<EventId>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { vm.saved.collect { saved += it } }
+
+        vm.save()
+        // The guard runs synchronously on the caller, before any coroutine is launched, so this
+        // holds even before the dispatcher is advanced.
+        assertFalse(vm.state.value.saving)
+
+        // Let `init`'s load actually finish — a real Room query underlies it, so this waits on
+        // the flow rather than fast-forwarding virtual time.
+        vm.state.first { it.loaded }
+
+        assertFalse(vm.state.value.saving)
+        assertTrue(saved.isEmpty())
+        assertEquals(logged, graph.events.forAsset(spa.id).single())
     }
 
     @Test fun editModePrefillsAndPreservesIds() = runTest {

@@ -13,8 +13,8 @@ knows what a hot tub is.
 owner's Android 17 phone on 2026-09-15. The device checklist's UI rows (§4 rows 3–11) are no
 longer manual: they are `JournalDeviceProofTest`, which drives them through the real screens on
 the phone. Row 12 was run by the controller with `adb`. Row 13 needs a physical tag and was not
-run. One checklist expectation is **not** met and stays open: row 9's quick action reads "Log tDS
-test" (§4 row 9, §5, §7).
+run. Row 9's quick action originally read "Log tDS test"; the automated row caught it and the
+defect is fixed in this commit (§4 row 9, §5).
 
 ## 1. Exit criteria (spec §12, from D7 Phase 2 as they apply to 2A) → evidence
 
@@ -205,7 +205,7 @@ below it, because Android 17 delivers no NFC intent to a package in the *stopped
 | 6 | Log water test dated a week earlier with pH 7.0; Save | SERVICE RECORD lists it **below** today's; current readings still 7.5 | **PASS** (automated: `JournalDeviceProofTest.aBackdatedTestSitsBelowAndLeavesTheCurrentReadingAlone`, run on the owner's Android 17 phone 2026-09-15). The date **is** driven through the UI — the form's Date field is an ordinary text field holding today until it is replaced — so nothing here was done in-process. "Below" is read off the two ledger rows' laid-out `positionInRoot`, not inferred |
 | 7 | New asset "UPS", template UPS → Log load test: voltage 12.7, load 38, runtime 42, Passed = Yes; Save | Readings show the three numbers with NO TARGET SET and "Passed · Yes"; record line "Battery voltage 12.7 V · Load 38 % · Runtime 42 min" | **PASS** (automated: `JournalDeviceProofTest.upsLoadTestShowsNoTargetsAndPassedYes`, run on the owner's Android 17 phone 2026-09-15). **Yes** is tapped on the segmented control. On the asset: 12.7 / 38 / 42, NO TARGET SET exactly three times (the boolean carries no state at all), "Passed" and "Yes" both on screen, and the record line verbatim |
 | 8 | New asset "Mower", template Power equipment → Log oil change: engine hours 138.5, Engine oil 1.5 qt, Oil filter 1 pcs; Save | Readings show Engine hours 138.5 h NO TARGET SET; record line shows the reading; opening the event lists both materials | **PASS** (automated: `JournalDeviceProofTest.mowerOilChangeRecordsTheMeterAndBothMaterials`, run on the owner's Android 17 phone 2026-09-15). Both materials come from the profile's suggestion chips; the event is then opened from the ledger and both lines are asserted with their quantities and units (1.5 qt, 1 pcs) |
-| 9 | Existing 1C asset (no template) and a new asset saved with Template = None → "Set up from template" → RO water | Three TDS rows appear with "—"; "Log TDS test" action appears; doing it again is not offered | **FAIL** (automated: `JournalDeviceProofTest.anAssetWithNoTemplateCanBeSetUpLater`, run on the owner's Android 17 phone 2026-09-15). Three of the four clauses hold: the three TDS rows appear with "—", the action appears, and **Set up from template** is gone afterwards. The fourth does not — **the quick action reads "Log tDS test", not "Log TDS test"**. `quickActionLabel` is `"Log " + profile.name.replaceFirstChar { it.lowercase() }`, which is what makes "Water test" read "Log water test" and which mangles an acronym. Cosmetic, one line, and a production change — so it is reported (§7) rather than fixed here, and the test asserts the string that is actually on the phone |
+| 9 | Existing 1C asset (no template) and a new asset saved with Template = None → "Set up from template" → RO water | Three TDS rows appear with "—"; "Log TDS test" action appears; doing it again is not offered | **PASS** (automated: `JournalDeviceProofTest.anAssetWithNoTemplateCanBeSetUpLater`, run on the owner's Android 17 phone 2026-09-15). The three TDS rows appear with "—", the action reads "Log TDS test", and **Set up from template** is gone afterwards. This row originally failed the fourth clause — the automated row caught `quickActionLabel` reading the action as "Log tDS test" — and that defect is fixed in this commit: `quickActionLabel` now only lowercases the profile name's first character when the second one is itself lowercase, so "Water test" still reads "Log water test" while "TDS test" is left alone. The test now asserts the correct string |
 | 10 | Backup → Export; Debug → Wipe; Backup → Import (REPLACE) | Dashboard, assets, readings and records identical; the manifest counts in the file match `sqlite3` counts of the seven tables | **PASS** (automated: `JournalDeviceProofTest.backupRoundTripKeepsEveryCountAndTheAssetRendersAgain`, run on the owner's Android 17 phone 2026-09-15). **Said plainly: the export and the import are called in-process** (`exportBackup.run()` → wipe through the ports → `importBackupReplace.run(bytes)`), because the UI half of the backup screen is a SAF document picker, which is the system's and not the app's. What ran on the phone is the round trip against the device's own Room store: **all ten** table counts — `asset`, `nfc_tag`, `external_link` and the seven journal tables, counted through the ports — are equal before and after, the wipe in between is asserted to have emptied the store, and the asset is then cold-started again and draws 7.9, the HIGH badge and its "Water test" row from the imported rows |
 | 11 | Open the hot tub → delete today's water test | Current readings fall back to the week-old pH 7.0 (LOW) | **PASS** (automated: `JournalDeviceProofTest.deletingTodaysTestFallsBackToTheOlderReading`, run on the owner's Android 17 phone 2026-09-15). Both entries are logged through the form, today's is opened from the ledger by its own date, deleted through the overflow and the confirmation dialog; afterwards one "Water test" row remains, 7.5 is gone, 7.0 is on screen and LOW appears twice (the reading and the surviving entry's badge) |
 | 12 | `adb shell run-as com.loosecannon.notenfc sqlite3 databases/notenfc.db ".tables"` | Exactly the ten tables: `asset`, `nfc_tag`, `external_link` + the seven journal tables; nothing named after a hot tub, UPS, RO or mower | **PASS** (controller, `adb` schema listing: asset, nfc_tag, external_link plus the seven journal tables; nothing type-specific). The phone has no `sqlite3` binary, so the database was read out through `run-as` and its schema listed off-device; besides the ten app tables it carries only SQLite's own `android_metadata` and Room's `room_master_table`. `user_version` is 2 and the eighteen declared indexes are there |
@@ -218,24 +218,24 @@ rather than implying the phase is device-complete.
 
 ## 5. Status of the device proof
 
-**Device-proven, with one row not run and one row failed.** Everything below ran on the owner's
+**Device-proven, with one row not run.** Everything below ran on the owner's
 Android 17 phone on 2026-09-15.
 
-**Automated and passing (§4 rows 3–8, 10, 11).** `JournalDeviceProofTest` — eight tests, listed in
+**Automated and passing (§4 rows 3–11).** `JournalDeviceProofTest` — eight tests, listed in
 §3 — drives the checklist's UI rows through the real screens: the hot-tub template's five empty
 readings and two quick actions, a five-reading water test with two materials and a live badge on
 every row as it is typed, an edit that corrects a reading in place, a backdated entry that files
 below without becoming the current value, the UPS load test's range-less readings and its Yes/No
-answer, the mower's meter reading with both materials, the backup round trip, and a delete that
-falls back to the previous reading. With `JournalSmokeTest` and the thirteen from 1C the
-instrumented suite is **22 tests, 0 failures**, green on two consecutive runs.
+answer, the mower's meter reading with both materials, the RO water template's three TDS rows and
+"Log TDS test" action, the backup round trip, and a delete that falls back to the previous
+reading. With `JournalSmokeTest` and the thirteen from 1C the instrumented suite is **22 tests, 0
+failures**, green on two consecutive runs.
 
-**Failed (§4 row 9).** The template pick works — three TDS rows appear with "—", the action
-appears and **Set up from template** is correctly withdrawn — but the action reads **"Log tDS
-test"**. `quickActionLabel` lowercases the profile name's first character, which is right for
-"Water test" and wrong for an acronym. It is a one-line production change and this task was not
-allowed to make one, so it is reported here and in §7 and the test asserts the string the phone
-actually shows.
+**Row 9's defect fixed in this commit.** The automated row originally caught the quick action
+reading **"Log tDS test"** instead of **"Log TDS test"** — `quickActionLabel` was blanket-
+lowercasing the profile name's first character, which is right for "Water test" but wrong for an
+acronym. Fixed by only lowercasing when the second character is itself lowercase; the test now
+asserts "Log TDS test" and the row passes.
 
 **Run by the controller (§4 rows 1, 12).** The v1 → v2 migration over a real 1C install, and the
 phone's own schema: exactly the ten app tables, `user_version` 2, eighteen declared indexes,
@@ -323,11 +323,6 @@ Minors from the task ledger — small, real, none of them blocking:
 - The entry screen's value fields live in a `LazyColumn`, so on a long profile a scrolled-away
   field loses focus. The fix is `Column` + `verticalScroll`, and it should land with the 2B editor
   rather than as a lone change here.
-- **`quickActionLabel` mangles an acronym profile name.** `"Log " + name.replaceFirstChar
-  { it.lowercase() }` turns "TDS test" into "Log tDS test" (§4 row 9, found by the device proof).
-  Of the five seed templates only `ro_water` is affected. The fix is to lowercase the first
-  character only when the second is not already upper case, and it belongs with 2B's editor, where
-  the user can name a profile anything at all.
 - Carried from 1C and still open: **a rewritten tag leaves its old row bound** — the tag lifecycle
   should retire a superseded row when a known UID is rewritten.
 - There is no `observe(id)` port: a single-entity observer would let the detail screens drop their

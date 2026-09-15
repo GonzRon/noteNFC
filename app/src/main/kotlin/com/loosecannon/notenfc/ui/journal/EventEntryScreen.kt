@@ -109,7 +109,7 @@ fun EventEntryScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = model::save, enabled = !state.saving) { Text("Save") }
+                    TextButton(onClick = model::save, enabled = state.loaded && !state.saving) { Text("Save") }
                 },
             )
         },
@@ -184,7 +184,7 @@ fun EventEntryScreen(
             item("save") {
                 Button(
                     onClick = model::save,
-                    enabled = !state.saving,
+                    enabled = state.loaded && !state.saving,
                     shape = ControlShape,
                     modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
                 ) {

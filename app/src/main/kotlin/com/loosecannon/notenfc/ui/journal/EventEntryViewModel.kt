@@ -267,7 +267,8 @@ class EventEntryViewModel(
      * event rather than two.
      */
     fun save() {
-        if (_state.value.saving) return
+        val state = _state.value
+        if (state.saving || !state.loaded) return
         _state.update { it.copy(saving = true, firstProblem = null) }
         viewModelScope.launch {
             val form = _state.value

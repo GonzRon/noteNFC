@@ -115,6 +115,31 @@ class EventUseCasesTest {
         assertTrue(events.all().isEmpty())
     }
 
+    @Test fun nonFiniteNumbersAreNotNumbers() = runTest {
+        val assetId = seedHotTub()
+        val waterTest = profileId(assetId, "Water test")
+        val phId = defId(assetId, "ph")
+        val clId = defId(assetId, "free_chlorine")
+
+        for (raw in listOf("NaN", "Infinity", "1e400")) {
+            val ex = assertFailsWith<EventValidation> {
+                logEvent.run(cmd(assetId, profileId = waterTest, values = mapOf(phId to raw, clId to "1.0")))
+            }
+            assertTrue(FieldProblem.NotANumber(phId) in ex.problems, "expected NotANumber($phId) for raw=$raw, got ${ex.problems}")
+        }
+
+        val ex = assertFailsWith<EventValidation> {
+            logEvent.run(
+                cmd(
+                    assetId, profileId = waterTest,
+                    values = mapOf(phId to "7.4", clId to "1.0"),
+                    consumables = listOf(ConsumableInput("Chlorine", "Infinity", "oz")),
+                ),
+            )
+        }
+        assertTrue(ex.problems.any { it is FieldProblem.BadConsumable }, "expected BadConsumable, got ${ex.problems}")
+    }
+
     @Test fun booleanParsesToZeroOrOne() = runTest {
         val assetId = seedUps()
         val loadTest = profileId(assetId, "Load test")

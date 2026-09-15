@@ -75,9 +75,16 @@ fun stateIcon(state: RangeState): ImageVector = when (state) {
     RangeState.NO_TARGET -> Icons.Outlined.Info
 }
 
-/** "Water test" is what the profile is called; "Log water test" is what the button does. */
-fun quickActionLabel(profile: EventProfile): String =
-    "Log " + profile.name.replaceFirstChar { it.lowercase() }
+/**
+ * "Water test" is what the profile is called; "Log water test" is what the button does. Only
+ * decapitalized when the second character is itself lowercase, so an acronym like "TDS test" or
+ * "UPS check" is not mangled into "tDS test" / "uPS check".
+ */
+fun quickActionLabel(profile: EventProfile): String {
+    val name = profile.name
+    val label = if (name.length > 1 && name[1].isLowerCase()) name.replaceFirstChar { it.lowercase() } else name
+    return "Log $label"
+}
 
 /**
  * The ledger's detail line: what this entry was, in one line. Readings first because that is what

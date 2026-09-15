@@ -253,11 +253,10 @@ class JournalDeviceProofTest {
             }
             // Three empty readings plus the three blank plate cells.
             rule.onAllNodesWithText("—").assertCountEquals(6)
-            // The action reads "Log tDS test", not "Log TDS test": `quickActionLabel` lowercases
-            // the profile name's first character so that "Water test" reads "Log water test", and
-            // that rule mangles an acronym. Asserted as it is, and reported as a 2A defect —
-            // fixing it is a production change and this suite does not make one.
-            rule.onNodeWithText("Log tDS test").performScrollTo().assertIsDisplayed()
+            // `quickActionLabel` only lowercases the profile name's first character when the
+            // second one is itself lowercase, so an acronym like "TDS test" reads "Log TDS test"
+            // rather than the mangled "Log tDS test" a blanket decapitalize used to produce.
+            rule.onNodeWithText("Log TDS test").performScrollTo().assertIsDisplayed()
             // Doing it again is not offered: the asset is no longer bare.
             rule.onAllNodesWithText("Set up from template").assertCountEquals(0)
         }

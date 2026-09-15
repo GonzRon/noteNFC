@@ -102,22 +102,27 @@ class JournalFormatTest {
         assertNull(formatValue(null, ph))
     }
 
+    private fun profile(name: String) = EventProfile(
+        id = ProfileId("p"),
+        assetId = AssetId("a"),
+        name = name,
+        eventKind = EventKind.MEASUREMENT,
+        defaultTitle = name,
+        templateKey = "hot_tub",
+        sortOrder = 0,
+        archivedAt = null,
+        createdAt = 1L,
+        updatedAt = 1L,
+        fields = emptyList(),
+        consumables = emptyList(),
+    )
+
     @Test fun aQuickActionIsTheProfileNameAsAVerbPhrase() {
-        val profile = EventProfile(
-            id = ProfileId("p"),
-            assetId = AssetId("a"),
-            name = "Water test",
-            eventKind = EventKind.MEASUREMENT,
-            defaultTitle = "Water test",
-            templateKey = "hot_tub",
-            sortOrder = 0,
-            archivedAt = null,
-            createdAt = 1L,
-            updatedAt = 1L,
-            fields = emptyList(),
-            consumables = emptyList(),
-        )
-        assertEquals("Log water test", quickActionLabel(profile))
+        // A plain word decapitalizes; an acronym like "TDS" or "UPS" does not get mangled by it.
+        assertEquals("Log water test", quickActionLabel(profile("Water test")))
+        assertEquals("Log TDS test", quickActionLabel(profile("TDS test")))
+        assertEquals("Log UPS check", quickActionLabel(profile("UPS check")))
+        assertEquals("Log note", quickActionLabel(profile("Note")))
     }
 
     @Test fun theDetailLineFallsBackFromReadingsToMaterialsToNotes() {
