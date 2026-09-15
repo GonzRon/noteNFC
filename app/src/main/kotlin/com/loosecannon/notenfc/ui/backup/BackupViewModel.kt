@@ -9,6 +9,7 @@ import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.ImportReport
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.prefs.AppPrefs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -57,12 +58,12 @@ class BackupViewModel(
         prefs.markBackupExported(clock.nowMillis())
         _state.update { it.copy(lastBackupAt = prefs.lastBackupAt) }
         bytes.size
-    }
+    }.rethrowCancellation()
 
     /** Wipes and loads everything from [io]. The use case does it in one transaction or not at all. */
     suspend fun importReplace(io: BackupIO): Result<ImportReport> = runCatching {
         importBackupReplace.run(io.read())
-    }
+    }.rethrowCancellation()
 
     /** What the screen calls once the user has picked a document. */
     fun exportTo(io: BackupIO) = once {
@@ -93,3 +94,11 @@ class BackupViewModel(
 
     private fun reason(error: Throwable): String = error.message ?: error.javaClass.simpleName
 }
+
+/**
+ * `runCatching` catches everything, including the cancellation a cleared ViewModel throws at its
+ * own coroutines. Being cancelled is not a backup that failed — nobody should be told "export
+ * failed: Job was cancelled" — so it goes back out the way it came.
+ */
+private fun <T> Result<T>.rethrowCancellation(): Result<T> =
+    onFailure { if (it is CancellationException) throw it }

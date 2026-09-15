@@ -20,11 +20,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +42,7 @@ import com.loosecannon.notenfc.prefs.AppearanceMode
 import com.loosecannon.notenfc.ui.components.LabelValue
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.components.SectionHeader
+import kotlinx.coroutines.launch
 
 /** Where the app's source lives. The only outbound link the app ships with. */
 private const val PROJECT_URL = "https://github.com/GonzRon/noteNFC"
@@ -62,6 +66,8 @@ fun SettingsScreen(
     val activity = LocalActivity.current
     val prefs = graph.prefs
     var mode by remember { mutableStateOf(prefs.appearanceMode) }
+    val snackbars = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -74,6 +80,7 @@ fun SettingsScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbars) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -115,7 +122,14 @@ fun SettingsScreen(
                 modifier = Modifier.padding(vertical = 4.dp),
             )
             TextButton(
-                onClick = { activity?.let { LinkLauncher.open(it, PROJECT_URL) } },
+                // A phone with no browser is rare but real (a kiosk, a stripped ROM). The link
+                // failing quietly would read as the tap not having registered.
+                onClick = {
+                    val opened = activity?.let { LinkLauncher.open(it, PROJECT_URL) } ?: false
+                    if (!opened) {
+                        scope.launch { snackbars.showSnackbar("No browser available for this link") }
+                    }
+                },
                 contentPadding = PaddingValues(0.dp),
             ) {
                 Text("Source and issues on GitHub")

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetStatus
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.prefs.AppPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,8 +30,8 @@ data class DashboardState(
 
 /**
  * The landing screen's state: the assets that are in service, and whether a backup has ever been
- * taken. Two different kinds of fact, so they arrive two different ways — the assets from a live
- * repository flow, the backup instant from preferences, which nothing observes.
+ * taken. Two different kinds of fact, so they arrive two different ways — the rows from live
+ * repository flows, the backup instant from preferences, which nothing observes.
  *
  * [refresh] is what closes that gap. The screen calls it when it comes back into composition, so
  * an export that happened while the user was on the backup screen puts the nudge out on the next
@@ -41,20 +42,25 @@ data class DashboardState(
  */
 class DashboardViewModel(
     assets: AssetRepository,
+    links: LinkRepository,
     private val prefs: AppPrefs,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.assets, graph.prefs)
+    constructor(graph: AppGraph) : this(graph.assets, graph.links, graph.prefs)
 
     private val refreshes = MutableStateFlow(0)
 
     val state: StateFlow<DashboardState> =
-        combine(assets.observeAll(), refreshes) { rows, _ ->
+        combine(assets.observeAll(), links.observeAll(), refreshes) { rows, linkRows, _ ->
             val last = prefs.lastBackupAt
+            val active = rows.filter { it.status == AssetStatus.ACTIVE }
             DashboardState(
                 // CURRENT is the section for assets in service; archived ones are not in it.
-                assets = rows.filter { it.status == AssetStatus.ACTIVE },
-                needsBackup = last == null,
+                assets = active,
+                // An empty install has nothing to lose, and a nudge over an empty dashboard is
+                // noise: the offer only means something once there is something to survive the
+                // phone change. Links count — a standalone link is data the backup carries too.
+                needsBackup = last == null && (active.isNotEmpty() || linkRows.isNotEmpty()),
                 lastBackupAt = last,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), DashboardState())

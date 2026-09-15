@@ -1,6 +1,9 @@
 package com.loosecannon.notenfc.ui.dashboard
 
 import com.loosecannon.notenfc.core.model.Asset
+import com.loosecannon.notenfc.core.model.ExternalLink
+import com.loosecannon.notenfc.core.model.LinkId
+import com.loosecannon.notenfc.core.model.LinkKind
 import com.loosecannon.notenfc.testing.FakeGraph
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -13,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -20,8 +24,9 @@ import org.junit.Test
 
 /**
  * The dashboard's state against a Room-backed [FakeGraph]. The nudge is the interesting part: it
- * is a fact about the preferences, not about the assets, so the test proves both that it starts
- * true and that a marked export puts it out on the next emission.
+ * is a fact about the preferences *and* about whether there is anything to lose, so these tests
+ * pin all three of its states — true with data and no backup, out after an export is marked, and
+ * never on an install with nothing in it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DashboardViewModelTest {
@@ -38,8 +43,22 @@ class DashboardViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private fun viewModel() = DashboardViewModel(graph.assets, graph.links, graph.prefs)
+
+    /** A link with no asset behind it: data the backup carries, and the only data on this install. */
+    private fun standaloneLink() = ExternalLink(
+        id = LinkId("link-1"),
+        assetId = null,
+        kind = LinkKind.WEB,
+        label = "Manual",
+        uri = "https://example.invalid/manual",
+        createdAt = 1L,
+        lastOpenedAt = null,
+        updatedAt = 1L,
+    )
+
     @Test fun needsBackupIsTrueUntilPrefsSayOtherwise() = runTest {
-        val vm = DashboardViewModel(graph.assets, graph.prefs)
+        val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
         graph.createAsset.run("Pool pump", "Water")
@@ -55,12 +74,27 @@ class DashboardViewModelTest {
         assertEquals(9_000L, after.lastBackupAt)
     }
 
+    @Test fun emptyStoreNeverNeedsABackup() = runTest {
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        // Nothing has ever been backed up, and there is nothing to back up: no nudge. A fresh
+        // install is offered the empty state, not a chore.
+        assertNull(graph.prefs.lastBackupAt)
+        assertFalse(vm.state.first { it.assets.isEmpty() }.needsBackup)
+
+        // The same collector goes the other way the moment there is something to lose — which is
+        // also what proves the `false` above was computed and not just the initial state.
+        graph.links.upsert(standaloneLink())
+        assertTrue(vm.state.first { it.needsBackup }.assets.isEmpty())
+    }
+
     @Test fun assetsListedActiveOnly() = runTest {
         val pump = graph.createAsset.run("Pool pump", "Water")
         graph.createAsset.run("Mower", "Yard")
         graph.archiveAsset.run(pump.id)
 
-        val vm = DashboardViewModel(graph.assets, graph.prefs)
+        val vm = viewModel()
         backgroundScope.launch { vm.state.collect() }
 
         // CURRENT is where an asset lives while it is in service; archived rows are not there.
