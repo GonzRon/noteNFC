@@ -202,7 +202,7 @@ change them. Keys are stable identifiers; labels are what the user sees.
 |---|---|---|
 | `hot_tub` | `ph` pH · "" · NUMBER · 1 · 7.2–7.8; `free_chlorine` Free chlorine · ppm · 1 · 1.0–3.0; `alkalinity` Alkalinity · ppm · 0 · 80–120; `calcium_hardness` Calcium hardness · ppm · 0 · 150–250; `water_temp` Water temperature · °F · 0 · no range | **Water test** → MEASUREMENT, all five, none required except `ph` and `free_chlorine`; consumables: Chlorine (oz), pH reducer (oz), pH increaser (oz), Alkalinity increaser (oz). **Treatment** → TREATMENT, fields `ph`, `free_chlorine` optional; same consumables |
 | `power_equipment` | `engine_hours` Engine hours · h · NUMBER · 1 · no range · **meter** | **Oil change** → MAINTENANCE, `engine_hours` required; consumables: Engine oil (qt), Oil filter (pcs). **Service** → MAINTENANCE, `engine_hours` optional. **Season start** → SEASON_START, `engine_hours` optional. **Season end** → SEASON_END, `engine_hours` optional |
-| `ups` | `battery_voltage` Battery voltage · V · 1 · no range; `load_percent` Load · % · 0 · no range; `runtime_minutes` Runtime · min · 0 · no range; `test_passed` Result · "" · BOOLEAN | **Load test** → INSPECTION, all four, `test_passed` required. **Battery replacement** → REPLACEMENT, `battery_voltage` optional; consumables: Battery (pcs) |
+| `ups` | `battery_voltage` Battery voltage · V · 1 · no range; `load_percent` Load · % · 0 · no range; `runtime_minutes` Runtime · min · 0 · no range; `test_passed` Passed · "" · BOOLEAN | **Load test** → INSPECTION, all four, `test_passed` required. **Battery replacement** → REPLACEMENT, `battery_voltage` optional; consumables: Battery (pcs) |
 | `ro_water` | `tds_prefilter` Pre-filter TDS · ppm · 0 · no range; `tds_post_membrane` Post-membrane TDS · ppm · 0 · no range; `tds_output` Output TDS · ppm · 0 · no range | **TDS test** → MEASUREMENT, all three required |
 | `generic` | none | **Note** → NOTE, no fields |
 
@@ -279,8 +279,8 @@ App bar: ✕, eyebrow "<PROFILE NAME> · <ASSET NAME>", **Save** text button. Bo
 an editable date and optional time (defaults now, backdating allowed); column header
 READING / VALUE / TARGET; one row per profile field in `sortOrder` — NUMBER: outlined value field
 with the numeric keypad, unit inside the field, target text, live badge LOW / IN RANGE / HIGH /
-NO TARGET SET; BOOLEAN: a two-state segmented control (Pass / Fail wording comes from the
-definition label, e.g. "Result"); TEXT: a text row; required rows show "Required" until filled and
+NO TARGET SET; BOOLEAN: a two-state segmented control reading Yes / No (the definition label names the
+question, e.g. "Passed", so the row reads "Passed · Yes"); TEXT: a text row; required rows show "Required" until filled and
 Save is blocked with the first problem named. **MATERIALS USED** section: profile suggestions as
 tappable chips that add a row (name · quantity mono · unit); "+ Add material" for a free row;
 remove per row. Notes. A second Save at the bottom mirrors the app-bar one. Focus moves down the
@@ -332,7 +332,7 @@ the destructive instrumented suite; then the three slices — **hot tub**: templ
 with five readings (two out of range) and two materials, current readings show the states,
 ledger shows the event, edit the pH value and watch the reading change, log a backdated test and
 confirm current readings do not change; **UPS**: template, load test with three numbers and
-Result = Pass, ledger detail line shows the result; **mower**: power_equipment template, oil
+Passed = Yes, ledger detail line shows the readings; **mower**: power_equipment template, oil
 change with engine hours, oil and filter, current readings show the meter; then export → wipe →
 import: identical counts, the same events and readings; delete the newest hot-tub event and see
 the previous reading become current; `adb shell` schema inspection listing no asset-type table.
