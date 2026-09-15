@@ -67,9 +67,10 @@ mean on any NUMBER definition.
 
 ## 5. Computation (pure, `core.journal.Derived`)
 
-- `fun compute(def: MeasurementDefinition, event: AssetEvent): Double?` — null unless
-  `def.kind == DERIVED`; takes A and B from **this event's** measurements only; null if either is
-  absent, if A is 0 for PERCENT_DROP, or if the result is not finite. Same-event semantics are a
+- `fun compute(def: MeasurementDefinition, event: AssetEvent, sources: Map<DefinitionId, MeasurementDefinition>): Double?`
+  — null unless `def.kind == DERIVED`; takes A and B from **this event's** measurements only; null
+  if either source definition is missing from `sources` or archived, if either value is absent, if
+  A is 0 for PERCENT_DROP, or if the result is not finite. Same-event semantics are a
   hard rule: latest A and latest B from different events are never combined.
 - `LatestReadings.of` gains derived rows: for a DERIVED definition the reading is the value from
   the newest event (by `EventChronology`) for which `compute` is non-null; `Reading.measurement` is
@@ -86,6 +87,13 @@ mean on any NUMBER definition.
   numeric suffix); label non-blank; `decimals` 0–4; `rangeLow <= rangeHigh` when both set; ranges
   and meter flag only for NUMBER; derived invariants from §4; changing `valueType` or `kind` of a
   definition that has measurements is refused (`DefinitionInUse`); typed `DefinitionValidation`.
+  **Prospective graph check:** before committing an update, the use case loads the asset's
+  definitions, substitutes the edited one in memory, and runs `derivedProblems` for every DERIVED
+  definition of the asset; if any existing derived definition would become invalid — a source
+  turning TEXT/BOOLEAN, turning DERIVED, or gaining the meter flag — the update is refused with
+  `DefinitionWouldBreakDerived(id, dependentDerivedIds)`. Label, unit, range, decimals and key
+  edits pass; archiving a source is allowed by design (§5). This is what keeps the editor from
+  writing a state the backup codec would later reject.
 - `ArchiveDefinition(id)` / `UnarchiveDefinition(id)`.
 - `DeleteDefinition(id)` refused with `DefinitionReferenced(measurements: Int, derivedBy: List<DefinitionId>, profiles: List<ProfileId>)`
   when any measurement, derived definition or profile field references it; otherwise deletes.
@@ -105,9 +113,10 @@ mean on any NUMBER definition.
 
 `measurement_definition` gains `kind TEXT NOT NULL DEFAULT 'ENTERED'`, `formula TEXT NULL`,
 `source_a_id TEXT NULL`, `source_b_id TEXT NULL`, both FK → `measurement_definition(id)`
-**RESTRICT**, indexed. `MIGRATION_2_3` hand-written (ALTER TABLE ADD COLUMN ×4 plus the two
-indexes; SQLite cannot add FKs by ALTER, so the migration recreates the table the Room way:
-create `_new`, copy, drop, rename — take the statements from `3.json`), `3.json` committed,
+**RESTRICT**, indexed. `MIGRATION_2_3` hand-written: because SQLite cannot add foreign-key columns with
+ALTER TABLE, the migration recreates the table the Room way — create `_new_measurement_definition`
+from `3.json`'s createSql, copy the v2 rows with `kind = 'ENTERED'`, drop the old table, rename,
+then create the indexes (the existing three plus the two new source indexes), `3.json` committed,
 `Migration2To3Test` on the JVM in the 2A style (build v2 from `2.json`, migrate, validate, rows
 survive) plus a chained `Migration1To3Test` (v1 → v3 through both migrations: the continuous
 upgrade proof).
@@ -180,8 +189,10 @@ AssetDetailViewModel facade; `isError` tint; BOOLEAN case).
 source → null; result finite; classification against the derived range), `LatestReadingsTest`
 additions (newest event where computable, skipping newer partial events), `DefinitionUseCasesTest`
 (key generation and uniqueness, range order, type/kind change refused when in use, derived
-invariants incl. self-reference and DERIVED-as-source, delete refusal listing references,
-reorder), `ProfileUseCasesTest` (name uniqueness, field references validated, child ids
+invariants incl. self-reference and DERIVED-as-source, **`sourceUsedByDerivedCannotBecomeText`
+and `sourceUsedByDerivedCannotBecomeDerived` → `DefinitionWouldBreakDerived` naming the
+dependent, while relabelling or archiving the same source passes**, delete refusal listing
+references, reorder), `ProfileUseCasesTest` (name uniqueness, field references validated, child ids
 preserved, delete keeps events with profile cleared), `SeedTemplatesTest` (ro_water derived
 "Rejection" resolves to the two TDS sources), `BackupCodecTest` (format 2 decodes, format 3 round
 trip, derived invariants, measurement on a DERIVED definition rejected).
