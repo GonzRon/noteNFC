@@ -52,6 +52,14 @@ class WriteTagActivity : Activity() {
 
     @Volatile private var pending: TagBinding? = null
     @Volatile private var awaitingVerify = false
+
+    /**
+     * What the user agreed to overwrite. The `Tag` handle captured before the confirmation dialog
+     * can go stale while the dialog is up (the NFC service re-discovers the tag and then refuses
+     * the old handle with "Tag is out of date" — seen on an Android 17 phone), so a confirmation is
+     * remembered as consent for *this content* and honoured on the next tap of a tag carrying it.
+     */
+    @Volatile private var confirmedOverwrite: TagPayload? = null
     @Volatile private var done = false
     @Volatile private var busy = false
 
@@ -137,9 +145,19 @@ class WriteTagActivity : Activity() {
             say("This tag is read-only (locked). Nothing written.")
             return false
         }
+        val consent = confirmedOverwrite
+        if (consent != null) {
+            if (consent == inspection.existing) {
+                // The user already agreed to replace exactly this content; this tap carries a
+                // fresh handle, so the write can go ahead without asking twice.
+                write(tag, intended, row)
+                return false
+            }
+            confirmedOverwrite = null   // a different tag: the earlier consent does not carry over
+        }
         return when (val d = OverwritePolicy.decide(inspection.existing, row.id)) {
             OverwriteDecision.Proceed -> { write(tag, intended, row); false }
-            is OverwriteDecision.Confirm -> { confirm(d.reason, tag, intended, row); true }
+            is OverwriteDecision.Confirm -> { confirm(d.reason, inspection.existing, tag, intended, row); true }
         }
     }
 
@@ -156,7 +174,13 @@ class WriteTagActivity : Activity() {
             WriteResult.ReadOnly -> say("This tag is read-only (locked). Nothing written.")
             WriteResult.Unsupported -> say("This tag does not support NDEF.")
             is WriteResult.VerifyMismatch -> say("Read-back differs from what was written. Nothing recorded — try again.")
-            is WriteResult.Failed -> say("Write failed: ${r.reason}\nHold the tag still and try again.")
+            is WriteResult.Failed -> say(
+                if (confirmedOverwrite != null) {
+                    "Overwrite confirmed, but the write did not go through (${r.reason}).\nLift the tag off and hold it to the phone again to finish."
+                } else {
+                    "Write failed: ${r.reason}\nHold the tag still and try again."
+                },
+            )
         }
     }
 
@@ -187,22 +211,30 @@ class WriteTagActivity : Activity() {
         )
     }
 
-    private suspend fun confirm(reason: String, tag: Tag, intended: List<NdefRecordData>, row: TagBinding) {
+    private suspend fun confirm(reason: String, existing: TagPayload, tag: Tag, intended: List<NdefRecordData>, row: TagBinding) {
         withContext(Dispatchers.Main) {
             if (isFinishing || isDestroyed) { busy = false; return@withContext }
             AlertDialog.Builder(this@WriteTagActivity)
                 .setTitle("Overwrite this tag?")
-                .setMessage("The tag already holds $reason.\n\nKeep it on the phone and choose Overwrite to replace it.")
+                .setMessage("The tag already holds $reason.\n\nChoose Overwrite to replace it; if the phone lost the tag while this was open, hold it to the phone again.")
                 .setPositiveButton("Overwrite") { _, _ ->
+                    confirmedOverwrite = existing
                     scope.launch(Dispatchers.IO) {
-                        try { write(tag, intended, row) } catch (e: Exception) { say("Write failed: ${e.message}. Try again.") } finally { busy = false }
+                        try {
+                            write(tag, intended, row)
+                        } catch (e: Exception) {
+                            say("Overwrite confirmed, but the tag was lost (${e.message}). Hold it to the phone again to finish.")
+                        } finally {
+                            busy = false
+                        }
                     }
                 }
                 .setNegativeButton("Keep it") { _, _ ->
+                    confirmedOverwrite = null
                     busy = false
                     scope.launch { say("Not written. The tag was left as it was.\n\nTarget: ${describe(target)}") }
                 }
-                .setOnCancelListener { busy = false }
+                .setOnCancelListener { confirmedOverwrite = null; busy = false }
                 .show()
         }
     }
