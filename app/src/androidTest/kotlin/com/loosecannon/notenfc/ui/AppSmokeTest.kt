@@ -34,7 +34,7 @@ private const val TIMEOUT_MS = 10_000L
 /** The `SharedPreferences` file `SharedPrefsStore` owns; cleared before every test. */
 private const val PREFS_NAME = "notenfc"
 
-private val app: NoteNfcApp get() = ApplicationProvider.getApplicationContext()
+internal val app: NoteNfcApp get() = ApplicationProvider.getApplicationContext()
 
 /**
  * Puts the install back to "nothing has happened yet": no preferences, no rows.
@@ -44,7 +44,7 @@ private val app: NoteNfcApp get() = ApplicationProvider.getApplicationContext()
  * on each emission, so wiping the store after the activity is up simply produces one more
  * emission — the fresh-install one the test is about to assert on.
  */
-private fun clearInstall() {
+internal fun clearInstall() {
     ApplicationProvider.getApplicationContext<Context>()
         .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
@@ -64,7 +64,7 @@ private fun clearInstall() {
 }
 
 /** Waits until at least [count] nodes carrying [text] exist, then returns. */
-private fun ComposeTestRule.awaitText(text: String, count: Int = 1) {
+internal fun ComposeTestRule.awaitText(text: String, count: Int = 1) {
     waitUntil(TIMEOUT_MS) {
         onAllNodesWithText(text).fetchSemanticsNodes().size >= count
     }

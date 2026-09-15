@@ -240,9 +240,12 @@ after application.
 | `consumable_usage` | id, event_id, name, quantity REAL, unit, sort_order | FK event CASCADE; index event_id |
 
 `AppDatabase` version 2, `MIGRATION_1_2` hand-written (`ALTER TABLE asset ADD COLUMN`, seven
-`CREATE TABLE`, the indexes), `app/schemas/.../2.json` committed. Migration test on the JVM with
-`androidx.room3.testing.SQLiteDriverMigrationTestHelper` over `BundledSQLiteDriver`: create v1 from
-the exported schema, insert an asset/tag/link, migrate, validate, and assert the rows survived.
+`CREATE TABLE`, the indexes), `app/schemas/.../2.json` committed. Migration test on the JVM over
+`BundledSQLiteDriver`: create v1, insert an asset/tag/link, migrate, validate, and assert the rows
+survived. It builds v1 by executing the statements in the exported `app/schemas/.../1.json` rather
+than through `androidx.room3.testing.SQLiteDriverMigrationTestHelper`, because at Room 3.0.3 that
+helper is Android-only (it lives in the `room-testing` Android artifact and wants an instrumented
+context), so it cannot run in a JVM unit test.
 The event DAO loads an aggregate with `@Transaction` + `@Relation` (or two queries inside the
 UoW) and returns events newest-first by the §4.1 order expressed in SQL
 (`ORDER BY occurred_on DESC, COALESCE(occurred_time,'00:00') DESC, created_at DESC, id DESC`);
