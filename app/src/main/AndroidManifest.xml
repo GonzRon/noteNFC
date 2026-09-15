@@ -7,5 +7,10 @@
         android:name="com.loosecannon.notenfc.NoteNfcApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
+
+        <activity
+            android:name="com.loosecannon.notenfc.ui.interim.WriteTagActivity"
+            android:exported="false"
+            android:label="@string/write_title" />
     </application>
 </manifest>
