@@ -59,7 +59,10 @@ class AssetUseCasesTest {
     @Test fun updateTrimsEveryFieldAndBumpsUpdatedAt() = runTest {
         store()
         now = 9_000L
-        val saved = update.run(AssetId("a1"), "  Hot tub  ", "  Water  ", "  Jacuzzi J-235  ", "  drains in Oct  ")
+        val saved = update.run(
+            AssetId("a1"),
+            AssetCommand("  Hot tub  ", "  Water  ", "  Jacuzzi J-235  ", "  drains in Oct  "),
+        )
         assertEquals("Hot tub", saved.name)
         assertEquals("Water", saved.category)
         assertEquals("Jacuzzi J-235", saved.description)
@@ -72,20 +75,20 @@ class AssetUseCasesTest {
     @Test fun updateKeepsTheCreatedDateAndTheArchivedStatus() = runTest {
         store(status = AssetStatus.ARCHIVED)
         now = 9_000L
-        val saved = update.run(AssetId("a1"), "Hot tub")
+        val saved = update.run(AssetId("a1"), AssetCommand("Hot tub"))
         assertEquals(500L, saved.createdAt)
         assertEquals(AssetStatus.ARCHIVED, saved.status)
     }
 
     @Test fun updateRefusesABlankNameAndWritesNothing() = runTest {
         val before = store()
-        assertFailsWith<AssetNameRequired> { update.run(AssetId("a1"), "   ") }
+        assertFailsWith<AssetValidation> { update.run(AssetId("a1"), AssetCommand("   ")) }
         assertEquals(before, assets.rows["a1"])
         assertEquals(0, uow.commits)
     }
 
     @Test fun updateRefusesAnUnknownId() = runTest {
-        assertFailsWith<NoSuchAsset> { update.run(AssetId("nope"), "Hot tub") }
+        assertFailsWith<NoSuchAsset> { update.run(AssetId("nope"), AssetCommand("Hot tub")) }
         assertEquals(0, uow.commits)
     }
 

@@ -29,38 +29,4 @@ class UpdateAsset(
         uow.write { assets.upsert(saved) }
         return saved
     }
-
-    /** The pre-2B-2 four-field form, kept so the Phase 1C screens compile unchanged. */
-    suspend fun run(
-        id: AssetId,
-        name: String,
-        category: String = "",
-        description: String = "",
-        notes: String = "",
-    ): Asset {
-        val current = assets.get(id) ?: throw NoSuchAsset(id)
-        return run(
-            id,
-            AssetCommand(
-                name = name,
-                category = category,
-                description = description,
-                notes = notes,
-                manufacturer = current.manufacturer,
-                model = current.model,
-                serialNumber = current.serialNumber,
-                purchaseOn = current.purchaseOn,
-                inServiceOn = current.inServiceOn,
-                purchasePriceMinor = current.purchasePriceMinor,
-                currency = current.currency,
-                vendor = current.vendor,
-                location = current.location,
-                warrantyExpiresOn = current.warrantyExpiresOn,
-                warrantyNotes = current.warrantyNotes,
-                parentAssetId = current.parentAssetId,
-                seasonStartMmdd = current.seasonStartMmdd,
-                seasonEndMmdd = current.seasonEndMmdd,
-            ),
-        )
-    }
 }

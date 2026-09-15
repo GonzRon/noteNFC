@@ -52,15 +52,8 @@ sealed interface AssetProblem {
  * Every problem at once, thrown once, so a form marks all the bad fields on a single submit
  * instead of making the user re-submit to find the next one.
  */
-open class AssetValidation(val problems: List<AssetProblem>) :
+class AssetValidation(val problems: List<AssetProblem>) :
     IllegalArgumentException("asset rejected: ${problems.joinToString()}")
-
-/**
- * The one rule an asset form can break in every version of this app: an asset has to be named.
- * A subtype of [AssetValidation] rather than a sibling, so the pre-2B-2 screens that catch this
- * to mark the name field keep working while the rest of the validation grows around them.
- */
-class AssetNameRequired : AssetValidation(listOf(AssetProblem.NameRequired))
 
 /** The parent chosen for this asset is the asset itself, or sits under it (spec §5). */
 class AssetCycle(val assetId: AssetId, val parentId: AssetId) :
@@ -77,7 +70,7 @@ private val CURRENCY = Regex("""^[A-Z]{3}$""")
  * to store — blank text is `""` and a blank nullable field is `null`, so "cleared" and "never
  * filled in" are the same row — or throws:
  *
- * - [AssetValidation] with every collected problem (an [AssetNameRequired] when that is the only one);
+ * - [AssetValidation] with every collected problem, one per bad field;
  * - [AssetCycle] when [id] is an existing asset and [AssetCommand.parentAssetId] is itself or a
  *   descendant. A brand-new asset ([id] null) cannot cycle: nothing points at it yet.
  */
@@ -111,13 +104,7 @@ fun validateAsset(cmd: AssetCommand, existing: Collection<Asset>, id: AssetId?):
     val parent = clean.parentAssetId
     if (parent != null && existing.none { it.id == parent }) problems += AssetProblem.UnknownParent
 
-    if (problems.isNotEmpty()) {
-        throw if (problems == listOf<AssetProblem>(AssetProblem.NameRequired)) {
-            AssetNameRequired()
-        } else {
-            AssetValidation(problems)
-        }
-    }
+    if (problems.isNotEmpty()) throw AssetValidation(problems)
 
     if (parent != null && id != null && AssetTree.wouldCycle(existing, id, parent)) {
         throw AssetCycle(id, parent)
