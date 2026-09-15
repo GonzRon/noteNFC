@@ -16,10 +16,10 @@ machine.
 
 | # | Criterion | Evidence | Status |
 |---|---|---|---|
-| 1 | A new tag written on phone X resolves on phone Y after restoring X's backup, **entirely through the UI** | Write path: `WriteTagScreen` + `TagWriteController` (read → confirm → write → verify read-back) over the 1B `TagWriter`; export/import path: the production `BackupScreen` (`ExportBackup`/`ImportBackupReplace` through SAF); resolve path: `ScanScreen` → `ResolveTag` → `TagResultSheet`. Identity preservation is JVM-proven by `:app` `RestoreProofTest` (2) and `:core` `BackupCodecTest` (23)/`BackupUseCasesTest` (8). "Phone Y" is stood in for by the debug **Wipe** button, which empties the store without touching the tag. Device: §4 rows 1–4 | **pending the owner's phone session** |
-| 2 | The original share → write → scan → launch flow works with Joplin end to end and **returns to Joplin** after the write | `ShareActivity` runs in its own task (`excludeFromRecents`, no back-stack entry); `ShareFlow` hosts the ordinary `WriteTagScreen` inside that task and `onDone` calls `finish()`, so Done leaves the task and the previous app is what is underneath. `ShareActivitySmokeTest` proves the card renders from a real `EXTRA_TEXT` (instrumented, §3). Launch on scan without a sheet is R-7 (`ScanEvent.Launch` → `LinkLauncher`). Device: §4 rows 5–6 | **pending the owner's phone session** |
-| 3 | Home shows the "no backup yet" nudge until the first export succeeds | `DashboardViewModel.needsBackup = lastBackupAt == null && (active assets or links exist)`; `BackupViewModel` calls `AppPrefs.markBackupExported` only on a successful export, and `DashboardScreen` re-reads the preference on every return via `LaunchedEffect { refresh() }`. JVM: `DashboardViewModelTest` (3), `AppPrefsTest` (4), `BackupViewModelTest` (2). Instrumented: `AppSmokeTest.dashboardShowsTheBackupNudgeOnAFreshInstall`. Device: §4 row 7 | **pending the owner's phone session** |
-| 4 | All 1A/1B criteria still hold | 1A: `RestoreProofTest`, the DAO/repository suite and the unchanged backup format (§3). 1B: the payload codec, resolver, overwrite policy and writer are untouched by 1C — `TagWriteController` reaches them through the new `TagIo` seam, and `:core` still runs the whole 1B suite green. The interim writer and dispatch screens were deleted in `19042da` and replaced, so the 1B device rows must be re-run against the Compose screens. Device: §4 rows 8–10 | **pending the owner's phone session** |
+| 1 | A new tag written on phone X resolves on phone Y after restoring X's backup, **entirely through the UI** | Write path: `WriteTagScreen` + `TagWriteController` (read → confirm → write → verify read-back) over the 1B `TagWriter`; export/import path: the production `BackupScreen` (`ExportBackup`/`ImportBackupReplace` through SAF); resolve path: `ScanScreen` → `ResolveTag` → `TagResultSheet`. Identity preservation is JVM-proven by `:app` `RestoreProofTest` (2) and `:core` `BackupCodecTest` (23)/`BackupUseCasesTest` (8). "Phone Y" is stood in for by the debug **Wipe** button, which empties the store without touching the tag. Device: §4 rows 3–6 | **pending the owner's phone session** |
+| 2 | The original share → write → scan → launch flow works with Joplin end to end and **returns to Joplin** after the write | `ShareActivity` runs in its own task (`excludeFromRecents`, no back-stack entry); `ShareFlow` hosts the ordinary `WriteTagScreen` inside that task and `onDone` calls `finish()`, so Done leaves the task and the previous app is what is underneath. `ShareActivitySmokeTest` proves the card renders from a real `EXTRA_TEXT` (instrumented, §3). Launch on scan without a sheet is R-7 (`ScanEvent.Launch` → `LinkLauncher`). Device: §4 rows 7–8 | **pending the owner's phone session** |
+| 3 | Home shows the "no backup yet" nudge until the first export succeeds | `DashboardViewModel.needsBackup = lastBackupAt == null && (active assets or links exist)`; `BackupViewModel` calls `AppPrefs.markBackupExported` only on a successful export, and `DashboardScreen` re-reads the preference on every return via `LaunchedEffect { refresh() }`. JVM: `DashboardViewModelTest` (3), `AppPrefsTest` (4), `BackupViewModelTest` (2). Instrumented: `AppSmokeTest.dashboardShowsTheBackupNudgeOnAFreshInstall`. Device: §4 row 9 | **pending the owner's phone session** |
+| 4 | All 1A/1B criteria still hold | 1A: `RestoreProofTest`, the DAO/repository suite and the unchanged backup format (§3). 1B: the payload codec, resolver, overwrite policy and writer are untouched by 1C — `TagWriteController` reaches them through the new `TagIo` seam, and `:core` still runs the whole 1B suite green. The interim writer and dispatch screens were deleted in `19042da` and replaced, so the 1B device rows must be re-run against the Compose screens. Device: §4 rows 10–12 | **pending the owner's phone session** |
 
 ## 2. What shipped (by commit)
 
@@ -92,41 +92,45 @@ below this line was observed:
 Two notes for whoever runs it:
 
 - `AppSmokeTest` clears `SharedPreferences("notenfc")` and empties the three tables in `@Before`,
-  so the suite is destructive to whatever is on the phone. **Export a backup first**, or run it on
-  a build that holds nothing worth keeping.
+  so the suite is destructive to whatever is on the phone. It is therefore **row 2** of the device
+  checklist — the first thing after the install, before anything worth keeping exists. Running it
+  at any other point means exporting a backup first.
 - `malformedDeepLinkLandsOnDashboard` hands the intent to the already-running `MainActivity` with
   `startActivity` rather than to a second `ActivityScenario`. `MainActivity` is `singleTask`: a
   second `ActivityScenario.launch` is routed by the platform to the same instance, so the scenario
   would wait for an activity that is never created. `startActivity` is the delivery path a deep
   link actually takes when the app is already open, and it reaches the same `safeRouteFrom` branch
-  a cold start does. The cold-start case is covered by device row 11.
+  a cold start does. The cold-start case is covered by device row 13.
 
 ## 4. Device checklist (the owner's Android 17 phone; old `com.looseCannon.noteNFC` app uninstalled first — D13 §4)
 
-Run in order: Android 17 does not deliver NFC intents to a package in the *stopped* state, so a
-fresh `adb install` leaves noteNFC stopped until it is launched once. Rows 1–4 are the M1 restore
-proof and must be run as one unbroken sequence.
+Run in order, and start at the top: row 2 wipes the phone's noteNFC data, so it always goes
+first, before anything worth keeping exists. Android 17 does not deliver NFC intents to a package
+in the *stopped* state, so a fresh `adb install` leaves noteNFC stopped until it is launched once
+(row 1) — every close-the-app tap row below depends on that having happened. Rows 3–6 are the M1
+restore proof and must be run as one unbroken sequence.
 
 | # | Step | Expected | Criterion | Result |
 |---|---|---|---|---|
-| 1 | Dashboard → **Add your first asset** → name it → Save → on the asset, **Write a tag** → hold a blank tag | Write screen reports the tag written and read back byte-identical; the asset's plate shows the tag id | 1 | pending |
-| 2 | Dashboard → **Export now** (or Backup → **Export backup**) → save the zip somewhere off the phone | A `notenfc-backup-<stamp>.zip` is written; the nudge is gone when you come back to the dashboard | 1, 3 | pending |
-| 3 | Debug launcher → **noteNFC Backup (debug)** → **Wipe** → return to the app → Scan → tap the tag from row 1 | Counts read `0 / 0 / 0`; the scan result sheet says the tag is an unregistered v1 tag and offers Bind / New asset — it does **not** resolve to the asset | 1 | pending |
-| 4 | Backup → **Import (replace everything)** → pick the zip from row 2 → type `REPLACE` → Replace → Scan → tap the same tag | Import succeeds; the tag now resolves to the row-1 asset with its original id, and the asset's plate is as it was | 1 | pending |
-| 5 | Joplin → a note → *Copy external link* → share to noteNFC | The share card shows **JOPLIN NOTE**, the note's title and the URI in mono | 2 | pending |
-| 6 | On that card → **Write to a new tag** → hold a blank tag → Done | The tag is written and Done returns to Joplin, not into noteNFC. Then close noteNFC and tap the tag: Joplin opens the note directly, with no noteNFC screen in between | 2 | pending |
-| 7 | Reinstall (or Wipe + clear app data), create one asset, look at the dashboard, then export | The nudge "No backup yet · Tags survive a phone change only if you have one." is present before the export and absent after it; it is also absent on a genuinely empty install (Task 7 ruling, §6) | 3 | pending |
-| 8 | On the write screen, hold the tag from row 1 (which already holds a different noteNFC payload) | The confirmation names what is on the tag; **Keep it** leaves it unwritten and a later scan still resolves the original id | 4 (1B ex. 2) | pending |
-| 9 | Swipe noteNFC from recents → tap the tag from row 1 | The app opens on the tag result / asset, through `NfcDispatchActivity` | 4 (1B ex. 3) | pending |
-| 10 | Hold an old `md5_short` tag on the scan screen | Recognised as a legacy tag and offered Bind / Rewrite, never an error | 4 (D6) | pending |
-| 11 | `adb shell am force-stop com.loosecannon.notenfc`, then `adb shell am start -a android.intent.action.VIEW -d "notenfc://asset/nope"` | The app cold-starts on the dashboard and shows "That link doesn't point at anything here." — no crash, no half-drawn screen | — | pending |
-| 12 | `adb shell am start -a android.intent.action.VIEW -d "notenfc://asset/<id of the row-1 asset>"` | The asset's own screen opens on top of the dashboard; one back press returns to it | — | pending |
-| 13 | Settings → Appearance → Dark, then Light, then System | The theme changes; the status colours stay the semantic ones in both (dynamic colour never recolours the semantic layer, D12) | — | pending |
-| 14 | `adb shell am force-stop com.loosecannon.notenfc` → tap a written tag | Expected on Android 17: **no** dispatch until the app is launched once (platform rule, D3 §9). Record what happens; it is a result, not a defect. 1B could not capture this | — | pending |
-| 15 | `./gradlew :app:connectedDebugAndroidTest` with the phone unlocked (`adb shell svc power stayon usb` first, `svc power stayon false` after) | 12 instrumented tests pass; paste the per-test lines into §3 | — | pending |
+| 1 | Install the 1C build (`adb install -r`), uninstall nothing else; launch the app once | The app opens on the dashboard. This is what takes the package out of the Android 17 *stopped* state; until it happens no NFC intent is delivered at all | — | pending |
+| 2 | Run the instrumented smoke suite: `adb shell svc power stayon usb` → `./gradlew :app:connectedDebugAndroidTest` → `adb shell svc power stayon false` | 12 instrumented tests pass; paste the per-test lines into §3. **DESTRUCTIVE** — `@Before` clears `SharedPreferences("notenfc")` and empties the asset, tag and link tables, so this must run before any manual seeding below | — | pending |
+| 3 | Dashboard → **Add your first asset** → name it → Save → on the asset, **Write a tag** → hold a blank tag | Write screen reports the tag written and read back byte-identical; the asset's plate shows the tag id | 1 | pending |
+| 4 | Dashboard → **Export now** (or Backup → **Export backup**) → save the zip somewhere off the phone | A `notenfc-backup-<stamp>.zip` is written; the nudge is gone when you come back to the dashboard | 1, 3 | pending |
+| 5 | Debug launcher → **noteNFC Backup (debug)** → **Wipe** → return to the app → Scan → tap the tag from row 3 | Counts read `0 / 0 / 0`; the scan result sheet says the tag is an unregistered v1 tag and offers Bind / New asset — it does **not** resolve to the asset | 1 | pending |
+| 6 | Backup → **Import (replace everything)** → pick the zip from row 4 → type `REPLACE` → Replace → Scan → tap the same tag | Import succeeds; the tag now resolves to the row-3 asset with its original id, and the asset's plate is as it was | 1 | pending |
+| 7 | Joplin → a note → *Copy external link* → share to noteNFC | The share card shows **JOPLIN NOTE**, the note's title and the URI in mono | 2 | pending |
+| 8 | On that card → **Write to a new tag** → hold a blank tag → Done | The tag is written and Done returns to Joplin, not into noteNFC. Then close noteNFC and tap the tag: Joplin opens the note directly, with no noteNFC screen in between | 2 | pending |
+| 9 | Reinstall (or Wipe + clear app data), create one asset, look at the dashboard, then export | The nudge "No backup yet · Tags survive a phone change only if you have one." is present before the export and absent after it; it is also absent on a genuinely empty install (Task 7 ruling, §6) | 3 | pending |
+| 10 | On the write screen, hold the tag from row 3 (which already holds a different noteNFC payload) | The confirmation names what is on the tag; **Keep it** leaves it unwritten and a later scan still resolves the original id | 4 (1B ex. 2) | pending |
+| 11 | Swipe noteNFC from recents → tap the tag from row 3 | The app opens on the tag result / asset, through `NfcDispatchActivity` | 4 (1B ex. 3) | pending |
+| 12 | Hold an old `md5_short` tag on the scan screen | Recognised as a legacy tag and offered Bind / Rewrite, never an error | 4 (D6) | pending |
+| 13 | `adb shell am force-stop com.loosecannon.notenfc`, then `adb shell am start -a android.intent.action.VIEW -d "notenfc://asset/nope"` | The app cold-starts on the dashboard and shows "That link doesn't point at anything here." — no crash, no half-drawn screen | — | pending |
+| 14 | `adb shell am start -a android.intent.action.VIEW -d "notenfc://asset/<id of the row-3 asset>"` | The asset's own screen opens on top of the dashboard; one back press returns to it | — | pending |
+| 15 | Settings → Appearance → Dark, then Light, then System | The theme changes; the status colours stay the semantic ones in both (dynamic colour never recolours the semantic layer, D12) | — | pending |
+| 16 | `adb shell am force-stop com.loosecannon.notenfc` → tap a written tag | Expected on Android 17: **no** dispatch until the app is launched once (platform rule, D3 §9). Record what happens; it is a result, not a defect. 1B could not capture this | — | pending |
 
-Result column: filled in by whoever runs the phone session (see §5). Row 15 wipes the phone's
-noteNFC data — run it **after** rows 1–14 or before seeding anything worth keeping.
+Result column: filled in by whoever runs the phone session (see §5). The destructive suite is
+row 2 by construction: nothing above it exists to lose, and nothing below it can be wiped by it.
 
 ## 5. Status of the device proof
 
@@ -144,7 +148,7 @@ What is complete on this machine:
   ViewModels, the write controller over a fake `TagIo`, and the D12 contrast ratios.
 - The release APK contains exactly three exported activities of ours and no debug harness (§9).
 
-What the phone session must produce: §4 rows 1–15, and the per-test block in §3. Until then the
+What the phone session must produce: §4 rows 1–16, and the per-test block in §3. Until then the
 honest statement of M1 is **implemented and JVM-proven, not device-proven**.
 
 Privacy: this document records no device serial, phone model, tag UID, note link or any other
@@ -240,6 +244,9 @@ Parked minors from the task ledger — small, real, none of them blocking:
 - `LocalNoteNfcSemanticColors` has a light default rather than an `error()` default.
 - Raw brick hexes in `Color.kt` instead of named constants; `okIsNotGreen` is asserted for light
   only.
+- Task 2 was approved at `a8204d4` with two minors parked: `DeepLinkRoute` duplicates the
+  canonical-UUID regex that `TagRoute` already owns, and the malformed-asset message says
+  "tag id" where it means "asset id".
 - Check on the phone that `StatusBadge` is not double-announced by TalkBack (content description
   plus text).
 - `ActionButton`'s `modifier` parameter position.
@@ -283,7 +290,7 @@ Parked minors from the task ledger — small, real, none of them blocking:
 - **Android 17 stopped state.** A freshly installed package receives no NFC intents until it has
   been launched once; swiping from recents is *not* that state. Every device checklist from here on
   must launch the app before its close-the-app tap rows, and CI-style "install then tap" scripts
-  will silently do nothing. 1B could not capture the behaviour (row 13 there); §4 row 14 tries
+  will silently do nothing. 1B could not capture the behaviour (row 13 there); §4 row 16 tries
   again.
 - **Semantic colours are a separate layer.** `NoteNfcSemanticColors` sits beside the M3 scheme and
   is never derived from it, so dynamic colour (Phase 7) can recolour the app without touching what
