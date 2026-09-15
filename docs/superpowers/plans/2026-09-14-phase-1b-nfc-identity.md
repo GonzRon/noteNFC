@@ -2765,7 +2765,7 @@ git commit -m "nfc dispatch activity for :tag, md5_short and notenfc://tag; inte
 ```markdown
 # Phase 1B evidence — tag payload format v1, resolver, reader mode, safe writer
 
-Branch `phase-1b` from master `498a0e8`. Date 2026-09-14.
+Branch `phase-1b` from master `30525c7`. Date 2026-09-14.
 
 ## 1. Exit criteria (D7 §1B) → evidence
 

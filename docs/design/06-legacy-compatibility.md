@@ -122,7 +122,7 @@ recoverable by rewriting.
 The `ACTION_SEND text/plain` filter stays on the launcher activity. Behaviour becomes: extract the
 URI, classify it, show a small card ("Joplin note — write to a tag / attach to an asset / keep as
 link"), default action "write to a new tag" to preserve the one-tap flow. Return-to-caller after
-writing is preserved (`finish()` after write, as `745590c` intended).
+writing is preserved (`finish()` after write, as `0652023` intended).
 
 ## 9. Timeline
 

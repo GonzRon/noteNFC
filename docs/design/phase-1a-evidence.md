@@ -2,7 +2,7 @@
 
 Branch `phase-1a`, gathered 2026-09-14 at the tip of the Task 4 commit
 (`saf backup io, debug backup screen, restore proof test, phase 1a evidence`), on top of
-`fdfe4e7` → `a565323` → `b522d9d`. Base: `ccdb9d3` (Phase 0 merged).
+`63635be` → `970c739` → `13a7d54`. Base: `c84b881` (Phase 0 merged).
 
 The criteria below are the owner's authorisation for Phase 1A: 1–6 are the things that must be
 demonstrated, 7–9 are the things that must **not** have been built.

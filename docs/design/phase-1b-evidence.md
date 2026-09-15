@@ -1,6 +1,6 @@
 # Phase 1B evidence — tag payload format v1, resolver, reader mode, safe writer
 
-Branch `phase-1b` from master `498a0e8`. Date 2026-09-14.
+Branch `phase-1b` from master `30525c7`. Date 2026-09-14.
 
 ## 1. Exit criteria (D7 §1B) → evidence
 
@@ -13,18 +13,18 @@ Branch `phase-1b` from master `498a0e8`. Date 2026-09-14.
 
 ## 2. What shipped (by commit)
 
-- `fc34d58` — phase 1b plan: payload v1, resolver, reader mode, safe writer. The task plan for the whole slice.
-- `123a765` — drop the 2024 legacy activities, `LegacyKey` and the tech-discovered catch-all. Clears the ground before the new codec lands.
-- `27c7e91` — tag payload format v1: codec, AAR, overwrite policy. `NdefCodec` (`TagPayload` incl. `V1`/`LegacyMd5`/`Foreign`/`Malformed`/`NewerVersion`), the AAR record, `OverwritePolicy`.
-- `db780dc` — link launch policy, `notenfc://tag` route, save/open link use cases. `LinkLaunchPolicy`, `TagRoute`, `SaveLink`/`OpenLink`.
-- `05e8ec3` — resolve/bind/provision tag use cases + create asset. `ResolveTag`, `BindTag`, `ProvisionTag`, `CreateAsset`.
-- `e70592a` — resolve tag: look the row up inside the transaction. Closes a lost-update window found in review (ruling 6, §6).
-- `ebae784` — nfc adapter: ndef bridge, reader-mode session, tag writer with read-back; wire the use cases. `NfcReaderModeSession`, `TagWriter`, `TagWriter.inspect`/`write`.
-- `6bd28c7` — tag writer: say which calls throw; make the scan-clock assertions mean something. Documents `IOException`/`TagLostException` on `inspect`; `write` never throws for tag I/O (ruling 7, §6).
-- `6318223` — interim write-tag screen: read first, confirm overwrite, write, read back, optional lock. `WriteTagActivity` (View-based, ruling 1, §6).
-- `dcf3dee` — write screen: don't leave the lock armed on back; picker survives db errors. `TargetPicker` hardening.
-- `c45c33d` — nfc dispatch activity for `:tag`, `md5_short` and `notenfc://tag`; interim launcher + share entry; queries. `NfcDispatchActivity`, `TagToolsActivity`, `ShareLinkActivity`, manifest `<queries>`.
-- `14956ec` — dispatch/share: survive hostile extras, rotation and spanned share text. Defensive parsing on `EXTRA_TEXT`, config-change handling.
+- `46f290f` — phase 1b plan: payload v1, resolver, reader mode, safe writer. The task plan for the whole slice.
+- `26ec9d0` — drop the 2024 legacy activities, `LegacyKey` and the tech-discovered catch-all. Clears the ground before the new codec lands.
+- `f92a391` — tag payload format v1: codec, AAR, overwrite policy. `NdefCodec` (`TagPayload` incl. `V1`/`LegacyMd5`/`Foreign`/`Malformed`/`NewerVersion`), the AAR record, `OverwritePolicy`.
+- `8a94872` — link launch policy, `notenfc://tag` route, save/open link use cases. `LinkLaunchPolicy`, `TagRoute`, `SaveLink`/`OpenLink`.
+- `46b31b6` — resolve/bind/provision tag use cases + create asset. `ResolveTag`, `BindTag`, `ProvisionTag`, `CreateAsset`.
+- `7698e01` — resolve tag: look the row up inside the transaction. Closes a lost-update window found in review (ruling 6, §6).
+- `dc1bb1c` — nfc adapter: ndef bridge, reader-mode session, tag writer with read-back; wire the use cases. `NfcReaderModeSession`, `TagWriter`, `TagWriter.inspect`/`write`.
+- `bdcc475` — tag writer: say which calls throw; make the scan-clock assertions mean something. Documents `IOException`/`TagLostException` on `inspect`; `write` never throws for tag I/O (ruling 7, §6).
+- `18534bd` — interim write-tag screen: read first, confirm overwrite, write, read back, optional lock. `WriteTagActivity` (View-based, ruling 1, §6).
+- `485e110` — write screen: don't leave the lock armed on back; picker survives db errors. `TargetPicker` hardening.
+- `25026d7` — nfc dispatch activity for `:tag`, `md5_short` and `notenfc://tag`; interim launcher + share entry; queries. `NfcDispatchActivity`, `TagToolsActivity`, `ShareLinkActivity`, manifest `<queries>`.
+- `54f9aea` — dispatch/share: survive hostile extras, rotation and spanned share text. Defensive parsing on `EXTRA_TEXT`, config-change handling.
 
 ## 3. Tests
 
@@ -54,7 +54,7 @@ Totals: `:core` 104, `:app` 33.
 | # | Step | Expected | Result |
 |---|---|---|---|
 | 1 | Tools → Write a new tag… → New asset "Hot tub" → hold a blank NTAG213 | "Written and read back byte-identical", Tag id shown; Tools counts show 1 asset / 1 tag | **PASS** — "Written and read back byte-identical", tag id shown, row bound to the new asset with `written_at` and the hardware UID recorded. The tag used was in fact an old `md5_short` tag: the legacy dialog appeared and Overwrite was chosen, which also covers row 3's dialog. |
-| 2 | Write again for the same target → hold the tag from row 1 | dialog "The tag already holds a different noteNFC tag (…)"; choose Keep it → "Not written" — then hold the tag on the Tools screen: it still resolves to the original id (nothing was written) | **PASS with a finding** — dialog shown. On the pre-fix build the first Overwrite failed with "Tag is out of date" (the pre-dialog `Tag` handle had gone stale; nothing was written, the provisioned row was abandoned); a second attempt with the tag held steady wrote it. Fix `01e2656`: Overwrite is remembered and honoured on the next tap. On the fixed build: Keep it → "Not written", Tools scan still resolved the original id. |
+| 2 | Write again for the same target → hold the tag from row 1 | dialog "The tag already holds a different noteNFC tag (…)"; choose Keep it → "Not written" — then hold the tag on the Tools screen: it still resolves to the original id (nothing was written) | **PASS with a finding** — dialog shown. On the pre-fix build the first Overwrite failed with "Tag is out of date" (the pre-dialog `Tag` handle had gone stale; nothing was written, the provisioned row was abandoned); a second attempt with the tag held steady wrote it. Fix `0e1975f`: Overwrite is remembered and honoured on the next tap. On the fixed build: Keep it → "Not written", Tools scan still resolved the original id. |
 | 3 | Hold an old `md5_short` tag on the Write screen | dialog names "a legacy noteNFC tag (xxxxxxxx)"; Keep it → not written — then hold the tag on the Tools screen: it still resolves to the original legacy key (nothing was written) | **PASS** — legacy dialog ("a legacy noteNFC tag (…)") demonstrated in row 1 on the same physical tag; Keep-it path demonstrated in row 2. |
 | 4 | Hold a tag carrying a URL or text record (any commercial NFC sticker, or one written by another app) on the Write screen | dialog names "foreign NDEF content (tnf=1 …)"; choose Keep it → tapping the tag with noteNFC closed still opens it in the phone's default handler (not written) | **SKIPPED** — no foreign/commercial tag available; the `Foreign → Confirm` branch is JVM-proven only. |
 | 5 | Close the app (swipe from recents) → tap the tag from row 1 | app opens on the noteNFC tag screen: "Asset: Hot tub" | **PASS** — after the task was removed from recents (process killed by the system), the NFC service logged `matched AAR to NDEF` and started `NfcDispatchActivity`, which showed the asset. |
@@ -62,7 +62,7 @@ Totals: `:core` 104, `:app` 33.
 | 7 | Joplin → share a note's external link → noteNFC → hold a blank tag → Done | link saved, tag written; back in Joplin | **PASS** — share from Joplin → link saved → tag written → back in Joplin. Note: an earlier share attempt that was abandoned before writing left a link row with no tag (1C link card should defer the save or offer cleanup). |
 | 8 | Close the app → tap the tag from row 7 | Joplin opens the note, noteNFC shows no screen | **PASS** — tap with the app closed: dispatch resolved `LaunchLink`, launched `VIEW joplin://…openNote` directly, no noteNFC screen; `last_opened_at` stamped. |
 | 9 | `adb shell am start -a android.intent.action.VIEW -d notenfc://tag/<id from row 1>` | same screen as row 5 | not run (row 5 covers dispatch; the well-formed deep link was not exercised on the phone). |
-| 10 | `adb shell am start -a android.intent.action.VIEW -d notenfc://tag/nope` | "Unreadable noteNFC record: not a tag id" — no crash | pass on the attached phone (a0680e5): "Unreadable noteNFC record: not a tag id: 'nope'", no crash |
+| 10 | `adb shell am start -a android.intent.action.VIEW -d notenfc://tag/nope` | "Unreadable noteNFC record: not a tag id" — no crash | pass on the attached phone (b14fddd): "Unreadable noteNFC record: not a tag id: 'nope'", no crash |
 | 11 | Tap a blank/foreign tag with the app closed | nothing happens (no `TECH_DISCOVERED` filter): noteNFC is not offered | not run (no foreign/blank tag available). |
 | 12 | Debug build: Backup → Export; wipe; Import → tap the tag from row 1 | resolves to "Hot tub" with the same tag id (identity survives) | **PASS** — Export → Wipe → Import; the tag tapped afterwards resolved, and every asset, link and tag row came back with its original id. |
 | 13 | `adb shell am force-stop com.loosecannon.notenfc` → tap a written tag | expected on Android 17: **no** dispatch until the app is launched once (platform rule, D3 §9). Record the observed behaviour; it is a result, not a defect. | **NOT OBSERVED** — `am force-stop` issued (`stopped=true` confirmed) but no NFC discovery was logged afterwards, so the platform decision was not captured; inconclusive. |
@@ -77,7 +77,7 @@ Result column: filled in by whoever runs the phone session (see §5).
 ## 5. Status of the device proof
 
 The owner ran the checklist on their Android 17 (SDK 37) phone against the fixed build
-(`01e2656`; earlier rows on `00f16a9`). Evidence was collected over adb from the app's database
+(`0e1975f`; earlier rows on `e2cf1d0`). Evidence was collected over adb from the app's database
 (via `run-as`) and the NFC service log, never from the tag contents themselves; no device
 identifiers, tag UIDs or note links are recorded here. Summary:
 
@@ -93,7 +93,7 @@ identifiers, tag UIDs or note links are recorded here. Summary:
 One defect was found only on the device and fixed on the branch: the `Tag` handle captured before
 the overwrite-confirmation dialog can be refused as "out of date" once the dialog closes, so
 `WriteTagActivity` now remembers the confirmation and completes the write on the next tap
-(`01e2656`).
+(`0e1975f`).
 
 ## 6. Rulings made during execution
 
@@ -122,7 +122,7 @@ the overwrite-confirmation dialog can be refused as "out of date" once the dialo
   `openLink` against exceptions, `ShareLinkActivity` reads `EXTRA_TEXT` as `CharSequence`.
 
 - Device finding D-1 (2026-09-14): a confirmed overwrite must not depend on the pre-dialog `Tag`
-  handle; consent is stored per tag content and honoured on the next tap (`01e2656`).
+  handle; consent is stored per tag content and honoured on the next tap (`0e1975f`).
 - Privacy: the evidence records no device serial, tag UID, note id or phone model; paths are
   written relative to `~`.
 

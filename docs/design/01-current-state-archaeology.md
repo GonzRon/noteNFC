@@ -8,7 +8,7 @@ audit (read-only gate). Every consequential claim carries an evidence label:
 - **INFERRED** — strongly supported by evidence plus Android platform semantics, not executed
 - **UNKNOWN** — cannot be established from the repository
 
-Line references are to HEAD (`8fa5496`).
+Line references are to HEAD (`3a3c69a`).
 
 ---
 
@@ -63,7 +63,7 @@ Observations that matter for the redesign, all CURRENT-VERIFIED unless labelled:
 1. **The tag is identity-only already.** The payload is the 8-hex key; the mutable link lives on
    the phone. The new design keeps this principle and changes only the key format and the store.
 2. **The key is deterministic**: `MD5(stored text)[0:8]`. The same Joplin link always yields the
-   same key (`661f371`, 2023-08-07, "to avoid duplicate UUIDs pointing to the same evernote
+   same key (`d88b84d`, 2023-08-07, "to avoid duplicate UUIDs pointing to the same evernote
    link"). Consequence: a lost mapping can be **rebuilt** by re-sharing the same link. This is the
    single most useful property for legacy recovery (D6).
 3. **Silent collision**: `putString(id, link)` overwrites any existing entry with the same 32-bit
@@ -79,7 +79,7 @@ Observations that matter for the redesign, all CURRENT-VERIFIED unless labelled:
    UTF-8 on Android). Consistent for the ASCII hex keys in use.
 7. **Record type on the wire is lower-case** `com.loosecannon.notenfc:md5_short`: the framework
    lower-cases domain and type in `createExternal` (INFERRED, framework semantics), which is why
-   the manifest `pathPrefix` is lower-case and why the `65eb3f1`–`b545e7f` mixed-case filter
+   the manifest `pathPrefix` is lower-case and why the `f03d833`–`88e400a` mixed-case filter
    plausibly never matched (HISTORICAL-VERIFIED filter text; INFERRED consequence).
 8. **`TECH_DISCOVERED` fallback is a dead end.** The manifest also claims every `NfcA`/`Ndef`
    tag at tech level (`AndroidManifest.xml:45-52`), but the activity only acts on
@@ -88,7 +88,7 @@ Observations that matter for the redesign, all CURRENT-VERIFIED unless labelled:
 9. **Foreground dispatch writes to any tag presented**, including one that already holds another
    noteNFC record or foreign content, without confirmation. The `PendingIntent` is `FLAG_MUTABLE`
    with an explicit component; the earlier bug where extras were baked into the PendingIntent was
-   fixed in `50e7018` by keeping the id in an activity field (HISTORICAL-VERIFIED).
+   fixed in `f2c32aa` by keeping the id in an activity field (HISTORICAL-VERIFIED).
 10. **Ordering latent bug**: `NFCHandlerActivity.onCreate` checks `isNFCIntent(intent)` before
     `currentUniqueId` is assigned (`:29-33`). Unreachable today (the activity is not exported and
     has no NFC filter) but would misfire if either changed.
@@ -104,10 +104,10 @@ Observations that matter for the redesign, all CURRENT-VERIFIED unless labelled:
   no timestamp), no listing UI, no deletion, no export. CURRENT-VERIFIED.
 - History of the file (HISTORICAL-VERIFIED, see the commit table below): the Evernote-era names
   (`EvernoteURLs`, `EvernotePrefs`) only ever existed under the *other* applicationId
-  `com.looseCannon.evernotenfc` (renamed in `65eb3f1`, 2023-08-09, before any release APK). Inside
+  `com.looseCannon.evernotenfc` (renamed in `f03d833`, 2023-08-09, before any release APK). Inside
   a `com.looseCannon.noteNFC` install the mapping file has always been `noteNFCURLs`. The only
   possible stale content is an `EvernoteUserID` in `noteNFCPrefs` and `evernote:///view/…` values
-  from debug builds in the `65eb3f1`–`b545e7f` window; neither is read today. INFERRED.
+  from debug builds in the `f03d833`–`88e400a` window; neither is read today. INFERRED.
 - `android:allowBackup` is not declared → defaults to `true`, so Android Auto Backup **may** be
   carrying the prefs file to the user's Google account. Whether backup is enabled on the device is
   UNKNOWN; restore additionally requires a matching signing certificate (INFERRED platform
@@ -122,7 +122,7 @@ Observations that matter for the redesign, all CURRENT-VERIFIED unless labelled:
 | Write path | `Ndef.writeNdefMessage`, fallback `NdefFormatable.format`; no capacity check, no read-back, no lock | `:123-151` |
 | Read dispatch | `NDEF_DISCOVERED` filter on the ext type + `TECH_DISCOVERED` (NfcA, Ndef) | `AndroidManifest.xml:40-53`, `res/xml/nfc_tech_filter.xml` |
 | Read parsing | first record of first message, no TNF/type check | `LaunchNoteNFCLinkActivity.kt:31` |
-| Historic types | `com.loosecannon.evernotenfc:uuid8_link` (`5fb6aed`), `…evernotenfc:md5_short` (`661f371`), `…notenfc:md5_short` (`65eb3f1`→HEAD) | HISTORICAL-VERIFIED |
+| Historic types | `com.loosecannon.evernotenfc:uuid8_link` (`5fb6aed`), `…evernotenfc:md5_short` (`d88b84d`), `…notenfc:md5_short` (`f03d833`→HEAD) | HISTORICAL-VERIFIED |
 
 Tags written by the Evernote-era package (`…evernotenfc:*`) are unresolvable by the current app
 and would arrive via `TECH_DISCOVERED` and be dropped silently. Whether any such tags exist is
@@ -160,7 +160,7 @@ CURRENT-VERIFIED from `git diff`, `gradle/wrapper/gradle-wrapper.properties`,
 
 ## 6. The shipped binaries and the upgrade constraint
 
-`app/release/app-release.apk` (committed in `d1d7df7`, 2024-10-27; 4.7 MB, unminified, single
+`app/release/app-release.apk` (committed in `abaa193`, 2024-10-27; 4.7 MB, unminified, single
 dex) and `app/build/outputs/apk/debug/app-debug.apk` are both `versionCode 1`, package
 `com.looseCannon.noteNFC`, min 26 / target 33 / compile 34, AGP 8.7.1. CURRENT-VERIFIED via
 `aapt`, `apksigner`, `apkanalyzer`.
@@ -183,12 +183,12 @@ dex) and `app/build/outputs/apk/debug/app-debug.apk` are both `versionCode 1`, p
 | Commit | Date | Intent | Effect on the redesign |
 |---|---|---|---|
 | `5fb6aed` | 2023-08-05 | Initial working app; key = first 8 chars of a random UUID; type `uuid8_link` | Shows the key was never meant to carry meaning |
-| `745590c` | 2023-08-07 | `finish()` after launching the write screen so the user returns to the note app | Preserve: the share→write flow should return to the caller |
-| `661f371` | 2023-08-07 | Random key → `MD5(link)[0:8]` to avoid two keys for one link | Deterministic legacy key; recoverable (D6) |
-| `783a052` | 2023-08-07 | Rewrite `evernote://` links to dodge a tracker call blocked by DNS filtering | Historical; the author runs DNS-level blocking — external links must fail gracefully |
-| `50e7018` | 2023-08-08 | Fix: id baked into a cached mutable PendingIntent reused the first note's id for every later write | Use reader mode / explicit state, never data in a cached PendingIntent |
-| `65eb3f1` | 2023-08-09 | Rename package to `com.looseCannon.noteNFC`; prefs → `noteNFCURLs` | applicationId is fixed forever from here |
-| `d1d7df7` | 2024-10-27 | Remove Evernote; accept anything containing "joplin"; lower-case the ext filter; add `TECH_DISCOVERED`; commit release APK | Current behaviour; the tech filter is a workaround, not a feature |
+| `0652023` | 2023-08-07 | `finish()` after launching the write screen so the user returns to the note app | Preserve: the share→write flow should return to the caller |
+| `d88b84d` | 2023-08-07 | Random key → `MD5(link)[0:8]` to avoid two keys for one link | Deterministic legacy key; recoverable (D6) |
+| `2f75edc` | 2023-08-07 | Rewrite `evernote://` links to dodge a tracker call blocked by DNS filtering | Historical; the author runs DNS-level blocking — external links must fail gracefully |
+| `f2c32aa` | 2023-08-08 | Fix: id baked into a cached mutable PendingIntent reused the first note's id for every later write | Use reader mode / explicit state, never data in a cached PendingIntent |
+| `f03d833` | 2023-08-09 | Rename package to `com.looseCannon.noteNFC`; prefs → `noteNFCURLs` | applicationId is fixed forever from here |
+| `abaa193` | 2024-10-27 | Remove Evernote; accept anything containing "joplin"; lower-case the ext filter; add `TECH_DISCOVERED`; commit release APK | Current behaviour; the tech filter is a workaround, not a feature |
 
 HISTORICAL-VERIFIED (commit contents), intent INFERRED from messages and diffs.
 
