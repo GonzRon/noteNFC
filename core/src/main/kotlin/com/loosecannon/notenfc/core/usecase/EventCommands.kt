@@ -4,6 +4,7 @@ import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.ConsumableUsage
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
@@ -163,9 +164,14 @@ internal suspend fun buildEvent(
         // A profile field whose definition no longer resolves can't be measured; a required one
         // is still missing a value, so report it rather than silently dropping the field.
         val definition = definitions.get(defId) ?: run { if (required) problems += FieldProblem.Required(defId); return }
+        // A derived value is computed from the event's own measurements, never typed and never
+        // stored: whatever the caller sent for it is ignored, and it is not a field to demand.
+        if (definition.kind == DefinitionKind.DERIVED) return
         val raw = cmd.values[defId]?.trim()
         if (raw.isNullOrBlank()) {
-            if (required) problems += FieldProblem.Required(defId)
+            // An archived definition is off every form, so nothing can satisfy its `required`
+            // flag; a value carried over from before the archiving still saves below.
+            if (required && definition.archivedAt == null) problems += FieldProblem.Required(defId)
             return
         }
         val parsed = parsedValue(definition, raw)

@@ -25,6 +25,7 @@ class RoomDefinitionRepository(private val dao: DefinitionDao) : DefinitionRepos
         dao.forAsset(assetId.value).map { it.toDomain() }
 
     override suspend fun all(): List<MeasurementDefinition> = dao.all().map { it.toDomain() }
+    override suspend fun delete(id: DefinitionId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()
 
     override fun observeForAsset(assetId: AssetId): Flow<List<MeasurementDefinition>> =
@@ -45,6 +46,7 @@ class RoomProfileRepository(private val dao: ProfileDao) : ProfileRepository {
         dao.forAsset(assetId.value).map { it.toDomain() }
 
     override suspend fun all(): List<EventProfile> = dao.all().map { it.toDomain() }
+    override suspend fun delete(id: ProfileId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()
 
     override fun observeForAsset(assetId: AssetId): Flow<List<EventProfile>> =
@@ -64,6 +66,10 @@ class RoomEventRepository(private val dao: EventDao) : EventRepository {
         dao.forAsset(assetId.value).map { it.toDomain() }
 
     override suspend fun all(): List<AssetEvent> = dao.all().map { it.toDomain() }
+
+    override suspend fun countMeasurementsFor(definitionId: DefinitionId): Int =
+        dao.countMeasurementsFor(definitionId.value)
+
     override suspend fun delete(id: EventId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()
 

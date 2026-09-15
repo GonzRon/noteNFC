@@ -11,13 +11,21 @@ import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.usecase.ApplyTemplate
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
+import com.loosecannon.notenfc.core.usecase.ArchiveDefinition
+import com.loosecannon.notenfc.core.usecase.ArchiveProfile
 import com.loosecannon.notenfc.core.usecase.CreateAsset
+import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
+import com.loosecannon.notenfc.core.usecase.DeleteProfile
 import com.loosecannon.notenfc.core.usecase.ExportBackup
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
+import com.loosecannon.notenfc.core.usecase.ReorderDefinitions
+import com.loosecannon.notenfc.core.usecase.ReorderProfiles
+import com.loosecannon.notenfc.core.usecase.SaveDefinition
+import com.loosecannon.notenfc.core.usecase.SaveProfile
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.data.room.AppDatabase
@@ -66,6 +74,15 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
     val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
     val deleteEvent: DeleteEvent = DeleteEvent(events, uow)
+    val saveDefinition: SaveDefinition =
+        SaveDefinition(definitions, events, profiles, assets, uow, ids, clock)
+    val archiveDefinition: ArchiveDefinition = ArchiveDefinition(definitions, uow, clock)
+    val deleteDefinition: DeleteDefinition = DeleteDefinition(definitions, events, profiles, uow)
+    val reorderDefinitions: ReorderDefinitions = ReorderDefinitions(definitions, uow, clock)
+    val saveProfile: SaveProfile = SaveProfile(profiles, definitions, assets, uow, ids, clock)
+    val archiveProfile: ArchiveProfile = ArchiveProfile(profiles, uow, clock)
+    val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
+    val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
 
     /** Device-local preferences, in a map: a test can read back exactly what the UI wrote. */
     val prefs: AppPrefs = AppPrefs(InMemoryKeyValueStore())
@@ -80,7 +97,7 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
 
     private companion object {
         const val APP_VERSION = "test"
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
     }
 }
 

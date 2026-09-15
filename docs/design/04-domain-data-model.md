@@ -349,7 +349,9 @@ readings") is not a requirement; if it becomes one, `key` provides the join.
 What is data-driven: which fields, order, labels, units, required, ranges, suggested consumables,
 default event kind/title. What is compiled: the single generic entry form (numeric/text/boolean
 rows + consumables + notes + date), validation, range classification, the schedule-completion
-hook. Not supported by design: conditional fields, computed fields, custom widgets, expressions.
+hook. Not supported by design: conditional fields, custom widgets, expressions. Computed fields are
+supported only as a closed formula enum with same-event semantics — Phase 2B-1's DERIVED
+definition, whose one member is `PERCENT_DROP` — never as an expression language.
 Seed templates are JSON in app assets (`hot_tub`, `power_equipment`, `ups`, `generic`) that create
 definitions, profiles, and default schedules when an asset is created from a template; after that
 the rows belong to the asset and the template is not consulted again.
@@ -544,7 +546,7 @@ tasks) and skip the rest; derived tables are rebuilt after import.
 | Delete asset | Refused if children exist (RESTRICT). Otherwise, after a typed confirmation and an automatic snapshot: cascades to definitions, profiles, events, measurements, usages, schedules, states, links, asset_supply, attachments (bytes removed after commit); tags become `UNBOUND`; queued `WITHDRAW` ops for projections |
 | Delete event | Confirmation; cascades to measurements, usages, ledger deltas, attachments; then `ScheduleRecompute` for any schedule it completed |
 | Edit event date | `ScheduleRecompute` for the linked schedule |
-| Delete definition | Only if no measurement references it (RESTRICT); otherwise archive |
+| Delete definition | Only if nothing references it — no measurement, no DERIVED definition using it as a source, no profile field offering it (RESTRICT); the refusal names every referrer and archive is offered instead |
 | Pause schedule | `status = PAUSED`; no due date, no notifications; projection `PARK` (managed: task re-dated to a placeholder or undated; native recurring: due cleared while the recurrence string is retained, restored on resume) |
 | Archive schedule | Hidden; projection `WITHDRAW`; events keep `schedule_id` |
 | Delete schedule | Archive + `WITHDRAW` op; purge row after op `DONE` (events `SET NULL`) |

@@ -1,5 +1,8 @@
 package com.loosecannon.notenfc.core.backup
 
+import com.loosecannon.notenfc.core.journal.derivedProblems
+import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.shapeMatches
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -11,7 +14,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Backup format v2: a ZIP holding exactly two entries.
+ * Backup format v3: a ZIP holding exactly two entries.
  *
  * ```
  * manifest.json   { formatVersion, appVersion, schemaVersion, createdAt, counts, dataSha256 }
@@ -21,12 +24,13 @@ import kotlinx.serialization.json.Json
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
  * and the manifest carries the SHA-256 of the data entry, so the same input always produces the
- * same bytes and an edited file is refused. A format-1 file (the three original lists only) still
- * decodes: the new lists default to empty. JDK ZIP + JDK SHA-256 + kotlinx-serialization only; no
- * Android types anywhere in here.
+ * same bytes and an edited file is refused. A format-1 file (the three original lists only) and a
+ * format-2 file (measurementDefinitions without kind/formula/sourceAId/sourceBId — every DERIVED
+ * definition needs those) still decode: the new fields default to ENTERED with no formula and no
+ * sources. JDK ZIP + JDK SHA-256 + kotlinx-serialization only; no Android types anywhere in here.
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 2
+    const val FORMAT_VERSION = 3
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
 
@@ -187,6 +191,21 @@ object BackupCodec {
             }
         }
 
+        // Every row was already proven nameable (enum-check pass above), so toDomain() here
+        // cannot throw; it is only how we get at the derived spec and its DefinitionKind.
+        val domainDefinitionsById = data.measurementDefinitions.associate {
+            DefinitionId(it.id) to it.toDomain()
+        }
+        domainDefinitionsById.values.filter { it.kind == DefinitionKind.DERIVED }.forEach { definition ->
+            val problems = definition.derivedProblems(domainDefinitionsById)
+            if (problems.isNotEmpty()) {
+                throw BackupCorrupt(
+                    "measurementDefinitions: definition ${definition.id.value} is DERIVED but invalid: " +
+                        problems.first()::class.simpleName,
+                )
+            }
+        }
+
         uniqueIds("eventProfiles", data.eventProfiles.map { it.id })
         val profileAssetIds = data.eventProfiles.associate { it.id to it.assetId }
         val profileFieldIds = mutableListOf<String>()
@@ -251,6 +270,12 @@ object BackupCodec {
                     throw BackupCorrupt(
                         "assetEvents: measurement ${measurement.id} references definition " +
                             "${measurement.definitionId} from a different asset",
+                    )
+                }
+                if (definition.kind == DefinitionKind.DERIVED.name) {
+                    throw BackupCorrupt(
+                        "assetEvents: measurement ${measurement.id} references DERIVED definition " +
+                            "${definition.id}, which cannot be measured directly",
                     )
                 }
                 // The definition's valueType was already proven nameable in the enum-check pass

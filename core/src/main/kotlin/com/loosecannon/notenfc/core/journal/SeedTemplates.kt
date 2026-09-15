@@ -9,6 +9,7 @@ data class TemplateDefinition(
     val valueType: ValueType, val decimals: Int,
     val rangeLow: Double?, val rangeHigh: Double?,
     val isMeter: Boolean,
+    val derived: Pair<String, String>? = null,   // source keys, DERIVED rows only; resolved to ids by ApplyTemplate
 )
 
 data class TemplateConsumable(val name: String, val defaultQuantity: Double?, val unit: String)
@@ -138,6 +139,8 @@ object SeedTemplates {
             TemplateDefinition("tds_prefilter", "Pre-filter TDS", "ppm", ValueType.NUMBER, 0, null, null, isMeter = false),
             TemplateDefinition("tds_post_membrane", "Post-membrane TDS", "ppm", ValueType.NUMBER, 0, null, null, isMeter = false),
             TemplateDefinition("tds_output", "Output TDS", "ppm", ValueType.NUMBER, 0, null, null, isMeter = false),
+            TemplateDefinition("rejection_percent", "Rejection", "%", ValueType.NUMBER, 1, null, null,
+                isMeter = false, derived = "tds_prefilter" to "tds_post_membrane"),
         ),
         profiles = listOf(
             TemplateProfile(

@@ -6,11 +6,18 @@ import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
 
-// Schema v2, spec §8. Enums are stored as TEXT holding the Kotlin enum name and booleans as
+// Schema v3, spec §7-8. Enums are stored as TEXT holding the Kotlin enum name and booleans as
 // INTEGER 0/1 (Room's own `Boolean` mapping), exactly as the phase-1 tables already do. Every
 // child row carries a durable id of its own — the seven tables are seven identities, so a backup
 // round-trips them verbatim rather than minting replacements.
 
+/**
+ * A measurement definition. v3 adds the DERIVED shape: `kind` names it, and a DERIVED row carries
+ * `formula` plus the two source definitions it reads. The sources are foreign keys into this same
+ * table — the only self-reference in the schema — and they are **RESTRICT**, so a source cannot be
+ * deleted while something derives from it. A derived value is never stored: the columns say how to
+ * compute it, `:core`'s `Derived` does the computing.
+ */
 @Entity(
     tableName = "measurement_definition",
     foreignKeys = [
@@ -20,10 +27,24 @@ import androidx.room3.PrimaryKey
             childColumns = ["asset_id"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(
+            entity = MeasurementDefinitionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["source_a_id"],
+            onDelete = ForeignKey.RESTRICT,
+        ),
+        ForeignKey(
+            entity = MeasurementDefinitionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["source_b_id"],
+            onDelete = ForeignKey.RESTRICT,
+        ),
     ],
     indices = [
         Index("asset_id"),
         Index(value = ["asset_id", "key"], unique = true),
+        Index("source_a_id"),
+        Index("source_b_id"),
     ],
 )
 data class MeasurementDefinitionEntity(
@@ -41,6 +62,10 @@ data class MeasurementDefinitionEntity(
     @ColumnInfo(name = "archived_at") val archivedAt: Long?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "kind") val kind: String,
+    val formula: String?,
+    @ColumnInfo(name = "source_a_id") val sourceAId: String?,
+    @ColumnInfo(name = "source_b_id") val sourceBId: String?,
 )
 
 @Entity(

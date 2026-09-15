@@ -1,10 +1,13 @@
 package com.loosecannon.notenfc.backup
 
 import com.loosecannon.notenfc.core.backup.BackupCorrupt
+import com.loosecannon.notenfc.core.journal.derivedSpecValid
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.DerivedFormula
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.ExternalLink
@@ -213,7 +216,7 @@ class RestoreProofTest {
             assertEquals(before, after)
             assertEquals(
                 ImportReport(
-                    formatVersion = 2, assets = 2, tags = 3, links = 2,
+                    formatVersion = 3, assets = 2, tags = 3, links = 2,
                     definitions = 0, profiles = 0, events = 0,
                 ),
                 report,
@@ -310,7 +313,7 @@ class RestoreProofTest {
             val report = g.import.run(backup)
             assertEquals(
                 ImportReport(
-                    formatVersion = 2, assets = 2, tags = 3, links = 2,
+                    formatVersion = 3, assets = 2, tags = 3, links = 2,
                     definitions = 0, profiles = 0, events = 0,
                 ),
                 report,
@@ -378,7 +381,7 @@ class RestoreProofTest {
             val report = g2.import.run(bytes)
             assertEquals(
                 ImportReport(
-                    formatVersion = 2,
+                    formatVersion = 3,
                     assets = 1,
                     tags = 0,
                     links = 0,
@@ -402,8 +405,73 @@ class RestoreProofTest {
         }
     }
 
+    /**
+     * Phase 2B-1's half: a DERIVED definition and the two definitions it reads. The interesting
+     * part is not the row but the *self*-reference — `source_a_id` and `source_b_id` are foreign
+     * keys into `measurement_definition` itself, and they are RESTRICT, so a replace import has to
+     * clear the derived rows before the rows they point at and insert them after. If either order
+     * were wrong this test would not merely mismatch, it would throw.
+     */
+    @Test
+    fun theDerivedDefinitionSurvivesWithItsSources() = runTest {
+        val before: Snapshot
+        val bytes: ByteArray
+        val g1 = FakeGraph()
+        try {
+            val ro = g1.createAsset.run(name = "RO filter", templateKey = "ro_water")
+            val tdsTest = g1.profiles.forAsset(ro.id).first { it.name == "TDS test" }
+            g1.logEvent.run(
+                EventCommand(
+                    assetId = ro.id,
+                    profileId = tdsTest.id,
+                    kind = tdsTest.eventKind,
+                    title = "",
+                    occurredOn = "2026-09-15",
+                    occurredTime = null,
+                    tzId = "UTC",
+                    notes = "",
+                    values = tdsTest.fields.associate { it.definitionId to "250" },
+                    consumables = emptyList(),
+                ),
+            )
+            bytes = g1.exportBackup.run()
+            before = snapshot(graphOver(g1.db))
+        } finally {
+            g1.close()
+        }
+
+        val derivedBefore = before.definitions.single { it.kind == DefinitionKind.DERIVED }
+        assertEquals(DerivedFormula.PERCENT_DROP, derivedBefore.derived!!.formula)
+
+        val db2 = inMemoryDb()
+        try {
+            val g2 = graphOver(db2)
+            val report = g2.import.run(bytes)
+            assertEquals(before.definitions.size, report.definitions)
+
+            // The whole graph, compared whole: kind, formula and both source ids included.
+            assertEquals(before, snapshot(g2))
+
+            val restored = g2.definitions.get(derivedBefore.id)!!
+            assertEquals(derivedBefore, restored)
+            val byId = g2.definitions.forAsset(restored.assetId).associateBy { it.id }
+            assertTrue(
+                "the restored sources must still be the entered definitions of the same asset",
+                restored.derivedSpecValid(byId),
+            )
+
+            // Again, over data that now contains derived rows: the wipe half of a replace import
+            // has to clear a definition that points at another definition before clearing the one
+            // it points at. That is the order `clearInstall` on a device relies on too.
+            g2.import.run(bytes)
+            assertEquals(before, snapshot(g2))
+        } finally {
+            db2.close()
+        }
+    }
+
     private companion object {
         const val FIXED_NOW = 1_757_000_000_000L
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
     }
 }

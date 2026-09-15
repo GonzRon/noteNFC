@@ -27,6 +27,11 @@ push deep — around the original one-tap flow, which is still the spine:
 - **Log maintenance** — log maintenance events with typed readings and materials used; current
   readings and a service record per asset. Five starter templates (hot tub, power equipment, UPS,
   RO water, generic) seed the readings and the quick actions; nothing about them is hard-coded.
+- **Define your own readings and service forms per asset; derived readings such as RO rejection** —
+  a Readings & actions screen per asset with an editor for each: a reading has a label, unit,
+  target, decimals and a meter flag, an action names the readings it asks for and the materials it
+  suggests, and a derived reading is computed from two of the asset's own readings on the same
+  entry rather than entered.
 - **Write a tag** — share a note's external link (Joplin *Copy external link*, an Obsidian or
   Logseq URI, or any `https://` page) to noteNFC and you get a card naming the kind of link and
   showing the URI; write it to a blank tag and you are back in the notes app. The writer reads

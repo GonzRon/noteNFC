@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.data.room
 
 import android.database.SQLException
 import com.loosecannon.notenfc.core.model.AssetId
+import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.data.room.entities.AssetEntity
 import com.loosecannon.notenfc.data.room.entities.AssetEventEntity
 import com.loosecannon.notenfc.data.room.entities.ConsumableUsageEntity
@@ -19,8 +20,9 @@ import org.junit.Test
 
 /**
  * The journal tables at the DAO level: aggregate upserts really replace their children, the SQL
- * ordering is §4.1's, and the foreign keys behave the way schema v2 says they must — CASCADE from
- * the asset down, RESTRICT in front of a definition that has readings against it.
+ * ordering is §4.1's, and the foreign keys behave the way schema v3 says they must — CASCADE from
+ * the asset down, RESTRICT in front of a definition that has readings against it or that another
+ * definition derives from.
  */
 class JournalDaoTest {
 
@@ -33,7 +35,14 @@ class JournalDaoTest {
         id = id, assetId = assetId, key = key, label = key, unit = "ppm",
         valueType = "NUMBER", decimals = 1, rangeLow = null, rangeHigh = null,
         isMeter = false, sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 1L,
+        kind = "ENTERED", formula = null, sourceAId = null, sourceBId = null,
     )
+
+    /** A v3 DERIVED definition: NUMBER, not a meter, a formula and two source definitions. */
+    private fun derived(id: String, assetId: String, key: String, sourceA: String, sourceB: String) =
+        definition(id, assetId, key).copy(
+            kind = "DERIVED", formula = "PERCENT_DROP", sourceAId = sourceA, sourceBId = sourceB,
+        )
 
     private fun profile(id: String, assetId: String, sortOrder: Int = 0) = EventProfileEntity(
         id = id, assetId = assetId, name = "Water test", eventKind = "MEASUREMENT",
@@ -216,6 +225,94 @@ class JournalDaoTest {
                 thrown is SQLException,
             )
             assertEquals(1, db.definitionDao().all().size)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun deletingASourceOfADerivedDefinitionIsRefused() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1"))
+            db.definitionDao().upsert(definition("d-before", "a1", "before"))
+            db.definitionDao().upsert(definition("d-after", "a1", "after"))
+            db.definitionDao().upsert(derived("d-drop", "a1", "drop", "d-before", "d-after"))
+
+            // RESTRICT on source_a_id: the definition something derives from cannot be deleted out
+            // from under it. `:core`'s DeleteDefinition says so in a sentence first; this is the
+            // schema refusing to be talked out of it. (Only the type is asserted — under AGP's
+            // mockable android.jar `SQLException.getMessage()` is always null.)
+            val thrown = runCatching { db.definitionDao().delete("d-before") }.exceptionOrNull()
+            assertTrue(
+                "expected the RESTRICT source foreign key to refuse, got $thrown",
+                thrown is SQLException,
+            )
+            assertEquals(3, db.definitionDao().all().size)
+
+            // The derived row itself has nothing pointing at it, so it goes; and once it is gone
+            // its sources are ordinary definitions again.
+            db.definitionDao().delete("d-drop")
+            db.definitionDao().delete("d-before")
+            assertEquals(listOf("d-after"), db.definitionDao().all().map { it.id })
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun deleteDefinitionCascadesProfileFields() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1"))
+            db.definitionDao().upsert(definition("d1", "a1", "ph"))
+            db.definitionDao().upsert(definition("d2", "a1", "chlorine"))
+            db.profileDao().upsert(
+                profile("p1", "a1"),
+                listOf(field("f1", "p1", "d1", 0), field("f2", "p1", "d2", 1)),
+                listOf(suggestion("c1", "p1", "Chlorine")),
+            )
+
+            db.definitionDao().delete("d1")
+
+            // profile_field.definition_id CASCADEs: the field disappears with its definition, and
+            // the profile it belonged to stays, minus that one row.
+            val after = db.profileDao().byId("p1")!!
+            assertEquals(listOf("f2"), after.fields.map { it.id })
+            assertEquals(listOf("c1"), after.consumables.map { it.id })
+            assertEquals(listOf("d2"), db.definitionDao().all().map { it.id })
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun countMeasurementsForCountsOnlyThatDefinition() = runTest {
+        val db = inMemoryDb()
+        try {
+            db.assetDao().upsert(asset("a1"))
+            db.definitionDao().upsert(definition("d1", "a1", "ph"))
+            db.definitionDao().upsert(definition("d2", "a1", "chlorine"))
+            db.definitionDao().upsert(definition("d3", "a1", "alkalinity"))
+            val dao = db.eventDao()
+
+            dao.upsert(
+                event("e1", "a1"),
+                listOf(measurement("m1", "e1", "d1", 7.4), measurement("m2", "e1", "d2", 2.0)),
+                emptyList(),
+            )
+            dao.upsert(
+                event("e2", "a1", "2026-09-15"),
+                listOf(measurement("m3", "e2", "d1", 7.6)),
+                emptyList(),
+            )
+
+            assertEquals(2, dao.countMeasurementsFor("d1"))
+            assertEquals(1, dao.countMeasurementsFor("d2"))
+            assertEquals(0, dao.countMeasurementsFor("d3"))
+
+            // And through the port `:core` actually calls.
+            assertEquals(2, RoomEventRepository(dao).countMeasurementsFor(DefinitionId("d1")))
         } finally {
             db.close()
         }

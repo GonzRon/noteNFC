@@ -54,6 +54,7 @@ interface DefinitionRepository {
     suspend fun get(id: DefinitionId): MeasurementDefinition?
     suspend fun forAsset(assetId: AssetId): List<MeasurementDefinition>
     suspend fun all(): List<MeasurementDefinition>
+    suspend fun delete(id: DefinitionId)
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<MeasurementDefinition>>
 }
@@ -63,6 +64,7 @@ interface ProfileRepository {   // aggregate: upsert replaces fields and consuma
     suspend fun get(id: ProfileId): EventProfile?
     suspend fun forAsset(assetId: AssetId): List<EventProfile>
     suspend fun all(): List<EventProfile>
+    suspend fun delete(id: ProfileId)   // events keep their history; the schema SET NULLs profile_id
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<EventProfile>>
 }
@@ -72,6 +74,9 @@ interface EventRepository {     // aggregate: upsert replaces measurements and c
     suspend fun get(id: EventId): AssetEvent?
     suspend fun forAsset(assetId: AssetId): List<AssetEvent>
     suspend fun all(): List<AssetEvent>
+
+    /** How many stored measurements name [definitionId] — what makes a definition "in use". */
+    suspend fun countMeasurementsFor(definitionId: DefinitionId): Int
     suspend fun delete(id: EventId)
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<AssetEvent>>   // newest first by §4.1

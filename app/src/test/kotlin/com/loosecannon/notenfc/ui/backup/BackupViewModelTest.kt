@@ -91,7 +91,7 @@ class BackupViewModelTest {
         assertEquals(1, report.assets)
         assertEquals(0, report.tags)
         assertEquals(0, report.links)
-        assertEquals(2, report.formatVersion)
+        assertEquals(3, report.formatVersion)
         assertEquals(listOf(pump.id), graph.assets.all().map(Asset::id))
     }
 }

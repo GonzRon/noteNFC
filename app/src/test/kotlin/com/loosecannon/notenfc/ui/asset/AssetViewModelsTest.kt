@@ -15,6 +15,7 @@ import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.core.usecase.EventCommand
 import com.loosecannon.notenfc.testing.FakeGraph
+import com.loosecannon.notenfc.ui.journal.formatValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
@@ -216,6 +217,69 @@ class AssetViewModelsTest {
         val ready = vm.state.first { it?.definitions?.size == 4 && it.profiles.size == 2 }!!
         assertEquals("Battery voltage", ready.definitions.first().label)
         assertEquals(listOf("Load test", "Battery replacement"), ready.profiles.map(EventProfile::name))
+    }
+
+    /**
+     * "Set up from template" is offered only while there is genuinely nothing to log against, and
+     * archiving is not deleting (spec §9): an asset whose rows are all archived still has them, so
+     * the template — which would be refused anyway — is not offered again.
+     */
+    @Test fun bareIgnoresNothingArchivedCountsAsExisting() = runTest {
+        val thing = graph.createAsset.run("Thing", "Misc")
+        val vm = detailModel(thing.id)
+        backgroundScope.launch { vm.state.collect() }
+
+        assertTrue(vm.state.first { it != null }!!.bare)
+
+        vm.setUpFromTemplate("ups")
+        assertFalse(vm.state.first { it?.definitions?.size == 4 }!!.bare)
+
+        graph.definitions.forAsset(thing.id).forEach { graph.definitions.upsert(it.copy(archivedAt = 9_000L)) }
+        graph.profiles.forAsset(thing.id).forEach { graph.profiles.upsert(it.copy(archivedAt = 9_000L)) }
+
+        // The quick actions are gone because every profile is archived; the asset is still not bare.
+        val archived = vm.state.first { it?.profiles?.isEmpty() == true }!!
+        assertFalse(archived.bare)
+        assertEquals(4, archived.definitions.size)
+    }
+
+    /**
+     * The derived reading of spec §5 on the asset screen: computed from the newest event that can
+     * produce it, with no measurement behind it and nothing stored anywhere.
+     */
+    @Test fun readingsIncludeDerived() = runTest {
+        val ro = graph.createAsset.run("RO unit", "Water", templateKey = "ro_water")
+        val defs = graph.definitions.forAsset(ro.id).associateBy(MeasurementDefinition::key)
+        val profile = graph.profiles.forAsset(ro.id).first { it.name == "TDS test" }
+
+        val vm = detailModel(ro.id)
+        backgroundScope.launch { vm.state.collect() }
+
+        graph.logEvent.run(
+            EventCommand(
+                assetId = ro.id,
+                profileId = profile.id,
+                kind = EventKind.MEASUREMENT,
+                title = "TDS test",
+                occurredOn = "2026-09-15",
+                occurredTime = null,
+                tzId = "UTC",
+                notes = "",
+                values = mapOf(
+                    defs.getValue("tds_prefilter").id to "310",
+                    defs.getValue("tds_post_membrane").id to "18",
+                    defs.getValue("tds_output").id to "16",
+                ),
+                consumables = emptyList(),
+            ),
+        )
+
+        val state = vm.state.first { it?.events?.size == 1 }!!
+        val rejection = state.readings.first { it.definition.label == "Rejection" }
+        assertEquals(null, rejection.measurement)
+        assertEquals(94.19, rejection.derivedValue!!, 0.01)
+        assertEquals("94.2", formatValue(rejection))
+        assertEquals("2026-09-15", rejection.occurredOn)
     }
 
     @Test fun newAssetFormPassesTemplateKey() = runTest {

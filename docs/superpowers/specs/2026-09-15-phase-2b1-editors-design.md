@@ -61,7 +61,8 @@ data class MeasurementDefinition(
 Invariants (enforced by the use cases and by backup validation, one predicate
 `MeasurementDefinition.derivedSpecValid(sources: Map<DefinitionId, MeasurementDefinition>)`):
 a DERIVED definition has `valueType == NUMBER`, `isMeter == false`, a `derived` spec whose two
-sources are distinct, exist, belong to the same asset, are `ENTERED` and `NUMBER`; an ENTERED
+sources are distinct, exist, belong to the same asset, are `ENTERED`, `NUMBER` and not meters
+(a meter is a monotonic counter; a drop between two of its readings is a different question); an ENTERED
 definition has `derived == null`. Unit, decimals and range on a derived definition mean what they
 mean on any NUMBER definition.
 
@@ -91,9 +92,13 @@ mean on any NUMBER definition.
   definitions, substitutes the edited one in memory, and runs `derivedProblems` for every DERIVED
   definition of the asset; if any existing derived definition would become invalid — a source
   turning TEXT/BOOLEAN, turning DERIVED, or gaining the meter flag — the update is refused with
-  `DefinitionWouldBreakDerived(id, dependentDerivedIds)`. Label, unit, range, decimals and key
-  edits pass; archiving a source is allowed by design (§5). This is what keeps the editor from
-  writing a state the backup codec would later reject.
+  `DefinitionWouldBreakDerived(id, dependentDerivedIds)`. The same check covers the other
+  direction: turning an ENTERED definition DERIVED while a quick action still offers it as a field
+  is refused with `DefinitionWouldBreakProfiles(id, profileIds)`, **archived profiles included** —
+  unarchiving is one tap and does not re-validate, so exempting them would leave a derived profile
+  field behind. Label, unit, range, decimals and key edits pass; archiving a source is allowed by
+  design (§5). This is what keeps the editor from writing a state the backup codec would later
+  reject.
 - `ArchiveDefinition(id)` / `UnarchiveDefinition(id)`.
 - `DeleteDefinition(id)` refused with `DefinitionReferenced(measurements: Int, derivedBy: List<DefinitionId>, profiles: List<ProfileId>)`
   when any measurement, derived definition or profile field references it; otherwise deletes.

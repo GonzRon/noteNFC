@@ -32,4 +32,12 @@ class SeedTemplatesTest {
         assertEquals(ValueType.BOOLEAN, SeedTemplates.byKey("ups")!!.definitions.first { it.key == "test_passed" }.valueType)
         assertTrue(SeedTemplates.byKey("power_equipment")!!.definitions.single().isMeter)
     }
+
+    @Test fun roWaterHasADerivedRejection() {
+        val d = SeedTemplates.byKey("ro_water")!!.definitions.first { it.key == "rejection_percent" }
+        assertEquals("Rejection", d.label)
+        assertEquals(ValueType.NUMBER, d.valueType)
+        assertFalse(d.isMeter)
+        assertEquals("tds_prefilter" to "tds_post_membrane", d.derived)
+    }
 }

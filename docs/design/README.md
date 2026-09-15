@@ -23,6 +23,7 @@ outside `docs/design/` was changed; no GitHub issue was edited; nothing is commi
 | [phase-1b-evidence.md](phase-1b-evidence.md) | Phase 1B evidence: payload format v1, resolver, reader mode, safe writer; device checklist |
 | [phase-1c-evidence.md](phase-1c-evidence.md) | Phase 1C evidence: Compose shell, theme, Nav3, assets/links/scan/backup; milestone M1 exit criteria, device checklist, final gate |
 | [phase-2a-evidence.md](phase-2a-evidence.md) | Phase 2A evidence: event journal, measurement definitions, profiles, seed templates, schema v2, backup format 2; device checklist, final gate |
+| [phase-2b1-evidence.md](phase-2b1-evidence.md) | Phase 2B-1 evidence: definition and profile editors, derived readings, schema v3, backup format 3; automated device proof, v2→v3 device migration, final gate |
 | [g1/01-g1-visual-gate-report.md](g1/01-g1-visual-gate-report.md) | **G1 visual-design gate** (pre-1C): four archetype screens against D12, D12 corrections a–j, verdict PASS WITH CHANGES; input inventory in [g1/00-source-data-inventory.md](g1/00-source-data-inventory.md) |
 
 Terminology: the new NFC payload is **noteNFC tag payload format v1** (version byte `0x01`, record type `com.loosecannon.notenfc:tag`), the new-generation replacement for the legacy `md5_short` record. "v1" always refers to that payload version byte, never to an application generation.

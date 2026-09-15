@@ -199,7 +199,8 @@ class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {
     }
 }
 
-class InMemoryDefinitionRepository : DefinitionRepository, Rollbackable, Witnessed {
+/** Open so a test can subclass it to rig a check on upsert order (e.g. FK-like checks). */
+open class InMemoryDefinitionRepository : DefinitionRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, MeasurementDefinition>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("definition")
@@ -228,6 +229,8 @@ class InMemoryDefinitionRepository : DefinitionRepository, Rollbackable, Witness
         witness?.observeAll()
         return rows.values.toList()
     }
+
+    override suspend fun delete(id: DefinitionId) { rows.remove(id.value); version.value += 1 }
 
     override suspend fun deleteAll() { rows.clear(); version.value += 1 }
 
@@ -266,6 +269,18 @@ class InMemoryProfileRepository : ProfileRepository, Rollbackable, Witnessed {
         return rows.values.toList()
     }
 
+    /**
+     * Stands in for the schema's `ON DELETE SET NULL` on `event.profile_id`: production relies on
+     * the foreign key, so a test that cares wires this to [InMemoryEventRepository.clearProfile].
+     */
+    var onDeleted: (ProfileId) -> Unit = {}
+
+    override suspend fun delete(id: ProfileId) {
+        rows.remove(id.value)
+        onDeleted(id)
+        version.value += 1
+    }
+
     override suspend fun deleteAll() { rows.clear(); version.value += 1 }
 
     override fun observeForAsset(assetId: AssetId): Flow<List<EventProfile>> = version.map {
@@ -301,6 +316,16 @@ class InMemoryEventRepository : EventRepository, Rollbackable, Witnessed {
     override suspend fun all(): List<AssetEvent> {
         witness?.observeAll()
         return rows.values.toList()
+    }
+
+    override suspend fun countMeasurementsFor(definitionId: DefinitionId): Int =
+        rows.values.sumOf { e -> e.measurements.count { it.definitionId == definitionId } }
+
+    /** The SET NULL half of deleting a profile, driven by [InMemoryProfileRepository.onDeleted]. */
+    fun clearProfile(profileId: ProfileId) {
+        rows.values.filter { it.profileId == profileId }
+            .forEach { rows[it.id.value] = it.copy(profileId = null) }
+        version.value += 1
     }
 
     override suspend fun delete(id: EventId) { rows.remove(id.value); version.value += 1 }

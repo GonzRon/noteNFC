@@ -46,6 +46,9 @@ import com.loosecannon.notenfc.ui.theme.NoteNfcTheme
  *
  * [value] is already formatted; null means nothing has been logged for this definition yet, which
  * reads as an em dash and carries no state.
+ *
+ * [eyebrow] is the small word over the label that says where the number came from when that is not
+ * obvious — "DERIVED" on a computed row (spec §5), which is never an input and never stored.
  */
 @Composable
 fun InstrumentRow(
@@ -55,9 +58,17 @@ fun InstrumentRow(
     unit: String,
     state: RangeState?,
     modifier: Modifier = Modifier,
+    eyebrow: String? = null,
 ) {
     Row(modifier = modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.Top) {
         Column(modifier = Modifier.weight(1f)) {
+            if (eyebrow != null) {
+                Text(
+                    text = eyebrow.uppercase(),
+                    style = Eyebrow,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 text = label,
                 style = MaterialTheme.typography.titleSmall,

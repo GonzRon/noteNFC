@@ -248,11 +248,13 @@ class JournalDeviceProofTest {
             rule.onNodeWithText("RO water").performClick()
 
             rule.awaitText("CURRENT READINGS")
-            listOf("Pre-filter TDS", "Post-membrane TDS", "Output TDS").forEach {
+            // 2B-1 gave the template a fourth row: "Rejection", derived from the first two.
+            listOf("Pre-filter TDS", "Post-membrane TDS", "Output TDS", "Rejection").forEach {
                 rule.onNodeWithText(it).performScrollTo().assertIsDisplayed()
             }
-            // Three empty readings plus the three blank plate cells.
-            rule.onAllNodesWithText("—").assertCountEquals(6)
+            // Four empty readings — the three entered plus the derived one, which cannot compute
+            // from an asset with no events — plus the three blank plate cells.
+            rule.onAllNodesWithText("—").assertCountEquals(7)
             // `quickActionLabel` only lowercases the profile name's first character when the
             // second one is itself lowercase, so an acronym like "TDS test" reads "Log TDS test"
             // rather than the mangled "Log tDS test" a blanket decapitalize used to produce.
@@ -377,9 +379,10 @@ private fun ledgerDate(date: LocalDate): String =
 // -------------------------------------------------------------------- driving the screens
 
 /**
- * The entry form is one `LazyColumn`, so a row below the fold has to be scrolled to, not just
- * found. A focused `OutlinedTextField` carries `ScrollBy` of its own, so the list is the
- * scrollable that is *not* a text field.
+ * The entry form is one scrolling `Column` (2B-1 §9 — a lazy list disposed the focused row), so a
+ * row below the fold still has to be scrolled to before it can be tapped. A focused
+ * `OutlinedTextField` carries `ScrollBy` of its own, so the form is the scrollable that is *not* a
+ * text field.
  */
 private fun ComposeTestRule.entryList(): SemanticsNodeInteraction =
     onNode(hasScrollAction() and !hasSetTextAction())

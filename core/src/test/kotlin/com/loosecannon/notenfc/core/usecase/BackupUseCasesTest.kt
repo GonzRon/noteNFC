@@ -8,6 +8,9 @@ import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
 import com.loosecannon.notenfc.core.model.ConsumableUsage
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.DerivedFormula
+import com.loosecannon.notenfc.core.model.DerivedSpec
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
@@ -49,11 +52,10 @@ import org.junit.jupiter.api.Test
 
 class BackupUseCasesTest {
 
-    private class Fakes {
+    private class Fakes(val definitions: InMemoryDefinitionRepository = InMemoryDefinitionRepository()) {
         val assets = InMemoryAssetRepository()
         val tags = InMemoryTagRepository()
         val links = InMemoryLinkRepository()
-        val definitions = InMemoryDefinitionRepository()
         val profiles = InMemoryProfileRepository()
         val events = InMemoryEventRepository()
         val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events)
@@ -93,6 +95,14 @@ class BackupUseCasesTest {
         id = DefinitionId(id), assetId = AssetId(assetId), key = "key-$id", label = "Label $id", unit = "",
         valueType = valueType, decimals = 1, rangeLow = null, rangeHigh = null, isMeter = false,
         sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 2L,
+    )
+
+    private fun derivedDefinition(id: String, assetId: String, sourceA: String, sourceB: String) = MeasurementDefinition(
+        id = DefinitionId(id), assetId = AssetId(assetId), key = "key-$id", label = "Label $id", unit = "%",
+        valueType = ValueType.NUMBER, decimals = 1, rangeLow = null, rangeHigh = null, isMeter = false,
+        sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 2L,
+        kind = DefinitionKind.DERIVED,
+        derived = DerivedSpec(DerivedFormula.PERCENT_DROP, DefinitionId(sourceA), DefinitionId(sourceB)),
     )
 
     private fun profileField(id: String, definitionId: String, sortOrder: Int = 0) =
@@ -194,7 +204,7 @@ class BackupUseCasesTest {
             assertEquals(source.links.all().sortedBy { it.id.value }, target.links.all().sortedBy { it.id.value })
         }
         assertEquals(
-            ImportReport(formatVersion = 2, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0, events = 0),
+            ImportReport(formatVersion = 3, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0, events = 0),
             report,
         )
     }
@@ -299,8 +309,8 @@ class BackupUseCasesTest {
         runBlocking { target.assets.upsert(asset("untouched", "Untouched")) }
 
         val e = assertFailsWith<BackupNewerFormat> { importInto(target, bytes) }
-        assertEquals(3, e.found)
-        assertEquals(2, e.supported)
+        assertEquals(4, e.found)
+        assertEquals(3, e.supported)
 
         runBlocking {
             assertEquals(listOf("untouched"), target.assets.all().map { it.id.value })
@@ -331,7 +341,7 @@ class BackupUseCasesTest {
         val target = Fakes()
         runBlocking { target.assets.upsert(asset("gone", "Gone")) }
         val report = importInto(target, exportOf(f))
-        assertEquals(ImportReport(formatVersion = 2, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0, events = 0), report)
+        assertEquals(ImportReport(formatVersion = 3, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0, events = 0), report)
         runBlocking { assertTrue(target.assets.all().isEmpty()) }
     }
 
@@ -376,7 +386,7 @@ class BackupUseCasesTest {
         val report = importInto(target, bytes)
 
         assertEquals(
-            ImportReport(formatVersion = 2, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1, events = 1),
+            ImportReport(formatVersion = 3, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1, events = 1),
             report,
         )
         runBlocking {
@@ -427,7 +437,7 @@ class BackupUseCasesTest {
         val v2Bytes = exportOf(source)
 
         val v2Report = importInto(Fakes(), v2Bytes)
-        assertEquals(2, v2Report.formatVersion)
+        assertEquals(3, v2Report.formatVersion)
 
         // reseal the same, already-valid data under a manifest claiming format 1 — the same
         // trick BackupCodecTest's formatOneFileStillDecodes uses.
@@ -443,6 +453,47 @@ class BackupUseCasesTest {
         assertEquals(1, v1Report.formatVersion)
     }
 
+    /** Fails a DERIVED upsert whose sources are not yet in [rows], to prove insert order. */
+    private class FkCheckingDefinitionRepository : InMemoryDefinitionRepository() {
+        override suspend fun upsert(d: MeasurementDefinition) {
+            if (d.kind == DefinitionKind.DERIVED) {
+                val spec = requireNotNull(d.derived) { "definition ${d.id.value} is DERIVED with no spec" }
+                check(rows.containsKey(spec.sourceA.value)) {
+                    "definition ${d.id.value} is DERIVED but source ${spec.sourceA.value} is not inserted yet"
+                }
+                check(rows.containsKey(spec.sourceB.value)) {
+                    "definition ${d.id.value} is DERIVED but source ${spec.sourceB.value} is not inserted yet"
+                }
+            }
+            super.upsert(d)
+        }
+    }
+
+    @Test
+    fun importInsertsEnteredBeforeDerived() {
+        val source = Fakes()
+        runBlocking {
+            source.assets.upsert(asset("a1", "Furnace"))
+            // ids chosen so the file's own (alphabetical) sort order would put the DERIVED row
+            // first if import didn't partition by kind — that's what actually proves the fix.
+            source.definitions.upsert(definition("z_a", "a1"))
+            source.definitions.upsert(definition("z_b", "a1"))
+            source.definitions.upsert(derivedDefinition("a_derived", "a1", "z_a", "z_b"))
+        }
+        val bytes = exportOf(source)
+
+        val target = Fakes(definitions = FkCheckingDefinitionRepository())
+        val report = importInto(target, bytes)
+
+        assertEquals(3, report.definitions)
+        runBlocking {
+            assertEquals(
+                setOf("z_a", "z_b", "a_derived"),
+                target.definitions.all().map { it.id.value }.toSet(),
+            )
+        }
+    }
+
     // --- helper: rewrite the manifest to claim a newer format version --------------------------
 
     private fun bumpFormatVersion(bytes: ByteArray): ByteArray {
@@ -455,7 +506,7 @@ class BackupUseCasesTest {
             }
         }
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*2"), "\"formatVersion\": 3")
+            .replace(Regex("\"formatVersion\"\\s*:\\s*3"), "\"formatVersion\": 4")
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zos ->

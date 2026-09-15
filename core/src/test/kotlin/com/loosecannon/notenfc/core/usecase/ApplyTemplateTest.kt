@@ -56,6 +56,22 @@ class ApplyTemplateTest {
         assertFailsWith<NoSuchAsset> { apply.run(AssetId("nope"), hotTub) }
     }
 
+    @Test fun derivedSourcesResolveToMintedIds() = runTest {
+        asset()
+        val roWater = SeedTemplates.byKey("ro_water")!!
+        val r = apply.run(AssetId("a1"), roWater) as ApplyResult.Applied
+        val prefilter = r.definitions.first { it.key == "tds_prefilter" }
+        val postMembrane = r.definitions.first { it.key == "tds_post_membrane" }
+        val rejection = r.definitions.first { it.key == "rejection_percent" }
+        assertEquals(DefinitionKind.DERIVED, rejection.kind)
+        assertEquals(DerivedSpec(DerivedFormula.PERCENT_DROP, prefilter.id, postMembrane.id), rejection.derived)
+        r.definitions.filter { it.key != "rejection_percent" }.forEach {
+            assertEquals(DefinitionKind.ENTERED, it.kind); assertNull(it.derived)
+        }
+        // ENTERED definitions inserted before DERIVED ones
+        assertEquals(r.definitions.size - 1, r.definitions.indexOfFirst { it.key == "rejection_percent" })
+    }
+
     @Test fun createAssetWithTemplateSeedsInTheSameTransaction() = runTest {
         val create = CreateAsset(assets, uow, ids, Clock { 1_000L }, apply)
         val a = create.run("UPS", templateKey = "ups")
