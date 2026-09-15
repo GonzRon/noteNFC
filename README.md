@@ -26,6 +26,12 @@ deliberate look, lives under Settings.
 - **Assets** — a list you can filter to include archived ones, an asset screen built around the
   identity plate (category, name, description, tags and links), a create/edit form, and archive
   rather than delete.
+- **Describe equipment fully: make, model, serial, purchase and warranty, location, parts of a
+  larger system, seasons** — a grouped asset editor behind the plate and a DETAILS section that
+  renders what is filled in; a component names the system it is part of and the system lists its
+  components; a season window says OUT OF SEASON while today falls outside it; and retirement is
+  a date you pick, independent of archiving, with a service event offered afterwards rather than
+  demanded.
 - **Log maintenance** — log maintenance events with typed readings and materials used; current
   readings and a service record per asset. Five starter templates (hot tub, power equipment, UPS,
   RO water, generic) seed the readings and the quick actions; nothing about them is hard-coded.

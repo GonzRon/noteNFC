@@ -206,9 +206,9 @@ class EditorsDeviceProofTest {
             rule.onAllNodesWithText("Pre-filter TDS").assertCountEquals(0)
             rule.onAllNodesWithText("310").assertCountEquals(0)
             rule.onNodeWithText("Rejection").performScrollTo().assertIsDisplayed()
-            // The plate's three blank cells plus exactly one blank reading: the derived row.
-            rule.awaitText("—", count = 4)
-            rule.onAllNodesWithText("—").assertCountEquals(4)
+            // The plate's six blank cells (spec §9) plus exactly one blank reading: the derived row.
+            rule.awaitText("—", count = 7)
+            rule.onAllNodesWithText("—").assertCountEquals(7)
             rule.onAllNodesWithText("94.2").assertCountEquals(0)
 
             // The entry form no longer asks for it; the two live rows are still there.

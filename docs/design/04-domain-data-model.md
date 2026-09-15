@@ -170,8 +170,8 @@ NDEF message
 | `vendor`, `location` | TEXT | canonical | optional |
 | `warranty_expires_on`, `warranty_notes` | TEXT | canonical | optional |
 | `notes` | TEXT | canonical | |
-| `status` | TEXT | canonical | `ACTIVE` \| `ARCHIVED` \| `RETIRED` |
-| `retired_on` | TEXT date | canonical | |
+| `status` | TEXT | canonical | `ACTIVE` \| `ARCHIVED` (2B-2: `RETIRED` removed — retirement is the `retired_on` date, not a status) |
+| `retired_on` | TEXT date | canonical | null until retired; the one thing that makes an asset retired |
 | `parent_asset_id` | TEXT FK asset ON DELETE RESTRICT | canonical | optional component tree |
 | `season_start_mmdd`, `season_end_mmdd` | TEXT | canonical | both null = year-round; end < start wraps the year (Oct 15 → Apr 15) |
 | `created_at`, `updated_at` | INTEGER | audit | |
@@ -195,8 +195,10 @@ component) without improving the core workflow, and some assets belong to more t
 Hierarchy guidance: the UPS/battery question is answered without child assets in the common case
 (a completion-relative "replace batteries every 4 years" schedule gives the battery age as
 `last_completed_on`). Child assets are for users who want a component's own serial number,
-documents, and journal. Depth is unbounded but the UI shows one level. Deleting a parent with
-children is refused (`RESTRICT`); archive instead, or reparent.
+documents, and journal. Depth is unbounded and the UI shows one level at a time (2B-2: COMPONENTS
+lists the direct children and "Part of" names the direct parent; deeper levels are reached by
+tapping through). Deleting a parent with children is refused (`RESTRICT`); archive instead, or
+reparent.
 
 ### `external_link`
 
@@ -542,8 +544,8 @@ tasks) and skip the rest; derived tables are rebuilt after import.
 | Operation | Behaviour |
 |---|---|
 | Archive asset | `status = ARCHIVED`; hidden from dashboard; schedules implicitly inactive; tags still resolve (show "archived") |
-| Retire asset | `status = RETIRED`, `retired_on`; same as archive plus a `REPLACEMENT`/`NOTE` event is suggested |
-| Delete asset | Refused if children exist (RESTRICT). Otherwise, after a typed confirmation and an automatic snapshot: cascades to definitions, profiles, events, measurements, usages, schedules, states, links, asset_supply, attachments (bytes removed after commit); tags become `UNBOUND`; queued `WITHDRAW` ops for projections |
+| Retire asset | `retired_on` only (2B-2: independent of archive — an asset can be retired, archived, both or neither, and the `REPLACEMENT`/`NOTE` event offered afterwards is an optional follow-on that cannot undo the retirement) |
+| Delete asset | Refused if children exist (RESTRICT), and 2B-2's refusal names them so the dialog can list which components are in the way. Otherwise, after a typed confirmation and an automatic snapshot: cascades to definitions, profiles, events, measurements, usages, schedules, states, links, asset_supply, attachments (bytes removed after commit); tags become `UNBOUND`; queued `WITHDRAW` ops for projections |
 | Delete event | Confirmation; cascades to measurements, usages, ledger deltas, attachments; then `ScheduleRecompute` for any schedule it completed |
 | Edit event date | `ScheduleRecompute` for the linked schedule |
 | Delete definition | Only if nothing references it — no measurement, no DERIVED definition using it as a source, no profile field offering it (RESTRICT); the refusal names every referrer and archive is offered instead |
