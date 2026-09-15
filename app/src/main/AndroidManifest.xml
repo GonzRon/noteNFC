@@ -32,23 +32,35 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
 
-        <!-- Interim Phase 1B launcher: scan in-app, write tags. Replaced by the Compose shell in 1C. -->
+        <!-- The single activity: everything the app draws, and every deep link it answers. -->
         <activity
-            android:name="com.loosecannon.notenfc.ui.interim.TagToolsActivity"
+            android:name="com.loosecannon.notenfc.MainActivity"
             android:exported="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.NoteNfc">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- notenfc://asset|link|tag: navigation only, validated by shape then by existence. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="notenfc" android:host="asset" />
+                <data android:scheme="notenfc" android:host="link" />
+                <data android:scheme="notenfc" android:host="tag" />
+            </intent-filter>
         </activity>
 
-        <!-- Share a note link → save it → write it to a tag → back to the caller. -->
+        <!-- Share a note link from a notes app: its own task, never in recents. -->
         <activity
-            android:name="com.loosecannon.notenfc.ui.interim.ShareLinkActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:name="com.loosecannon.notenfc.ShareActivity"
             android:exported="true"
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.NoteNfc">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -56,12 +68,14 @@
             </intent-filter>
         </activity>
 
-        <!-- The only NFC-exported component (D3 §9). No tech-discovered catch-all filter. -->
+        <!-- The only NFC-exported component (D3 section 9). No tech-discovered catch-all filter.
+             UI-less trampoline: translucent so no window flashes on the way to MainActivity. -->
         <activity
             android:name="com.loosecannon.notenfc.nfc.NfcDispatchActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:label="@string/dispatch_title">
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -72,20 +86,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="vnd.android.nfc" android:host="ext" android:path="/com.loosecannon.notenfc:md5_short" />
             </intent-filter>
-            <!-- notenfc://tag/<uuid>: resolves exactly like a scan; navigation only. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="notenfc" android:host="tag" />
-            </intent-filter>
         </activity>
-
-        <activity
-            android:name="com.loosecannon.notenfc.ui.interim.WriteTagActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:exported="false"
-            android:label="@string/write_title" />
 
     </application>
 </manifest>

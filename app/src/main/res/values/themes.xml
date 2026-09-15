@@ -1,0 +1,7 @@
+<resources>
+    <!--
+      The window shell only. Compose paints everything inside it, so this theme exists to give the
+      activity a no-action-bar window that does not drag AppCompat onto the classpath.
+    -->
+    <style name="Theme.NoteNfc" parent="android:Theme.Material.NoActionBar" />
+</resources>
