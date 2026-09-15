@@ -892,7 +892,7 @@ Evidence §4 device checklist rows (fill Result on the phone; the destructive su
 - [ ] **Step 1: Write the instrumented test** and make it compile: `./gradlew :app:compileDebugAndroidTestKotlin`.
 - [ ] **Step 2: Run it on the phone if attached** (`adb devices`), else record "pending device" in the evidence exactly as 1C did, and say so in the report.
 - [ ] **Step 3: Write the evidence document** with §1–§9 (results pending where not run), update `docs/design/README.md`, root `README.md` (one line under features: "Log maintenance events with typed readings and materials used; current readings and a service record per asset"), bump `versionCode = 3` / `versionName = "2.1"`.
-- [ ] **Step 4: Final gate** — `./gradlew clean :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:compileDebugAndroidTestKotlin` → BUILD SUCCESSFUL; paste totals and APK sizes into evidence §9; privacy grep `git grep -nIiE '/home/[a-z]+|lcstyle' -- . ':!.superpowers'` empty; `grep -rn "hot_tub\|power_equipment\|ro_water\|\"ups\"" app/src/main core/src/main --include=*.kt` hits only `SeedTemplates.kt`, the two pickers and provenance mapping.
+- [ ] **Step 4: Final gate** — `./gradlew clean :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:compileDebugAndroidTestKotlin` → BUILD SUCCESSFUL; paste totals and APK sizes into evidence §9; privacy grep `git grep -nIiE '/home/[a-z]+|<the owner's username>' -- . ':!.superpowers'` empty; `grep -rn "hot_tub\|power_equipment\|ro_water\|\"ups\"" app/src/main core/src/main --include=*.kt` hits only `SeedTemplates.kt`, the two pickers and provenance mapping.
 - [ ] **Step 5: Commit** — `git commit -m "phase 2a evidence, journal smoke test, versionCode 3"`
 
 ---
