@@ -6,6 +6,9 @@ import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
 import com.loosecannon.notenfc.core.model.ConsumableUsage
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.DerivedFormula
+import com.loosecannon.notenfc.core.model.DerivedSpec
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.model.EventProfile
@@ -97,6 +100,10 @@ data class MeasurementDefinitionDto(
     val archivedAt: Long?,
     val createdAt: Long,
     val updatedAt: Long,
+    val kind: String = "ENTERED",
+    val formula: String? = null,
+    val sourceAId: String? = null,
+    val sourceBId: String? = null,
 )
 
 @Serializable
@@ -290,24 +297,54 @@ fun MeasurementDefinition.toDto(): MeasurementDefinitionDto = MeasurementDefinit
     archivedAt = archivedAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    kind = kind.name,
+    formula = derived?.formula?.name,
+    sourceAId = derived?.sourceA?.value,
+    sourceBId = derived?.sourceB?.value,
 )
 
-fun MeasurementDefinitionDto.toDomain(): MeasurementDefinition = MeasurementDefinition(
-    id = DefinitionId(id),
-    assetId = AssetId(assetId),
-    key = key,
-    label = label,
-    unit = unit,
-    valueType = enumOrCorrupt<ValueType>(valueType, "value type", "definition $id"),
-    decimals = decimals,
-    rangeLow = rangeLow,
-    rangeHigh = rangeHigh,
-    isMeter = isMeter,
-    sortOrder = sortOrder,
-    archivedAt = archivedAt,
-    createdAt = createdAt,
-    updatedAt = updatedAt,
-)
+fun MeasurementDefinitionDto.toDomain(): MeasurementDefinition {
+    val definitionKind = enumOrCorrupt<DefinitionKind>(kind, "definition kind", "definition $id")
+    val derived = when (definitionKind) {
+        DefinitionKind.ENTERED -> {
+            if (formula != null || sourceAId != null || sourceBId != null) {
+                throw BackupCorrupt("definition $id is ENTERED but carries a derived formula or sources")
+            }
+            null
+        }
+        DefinitionKind.DERIVED -> {
+            val formulaName = formula
+                ?: throw BackupCorrupt("definition $id is DERIVED but has no formula")
+            val sourceA = sourceAId
+                ?: throw BackupCorrupt("definition $id is DERIVED but has no sourceAId")
+            val sourceB = sourceBId
+                ?: throw BackupCorrupt("definition $id is DERIVED but has no sourceBId")
+            DerivedSpec(
+                formula = enumOrCorrupt<DerivedFormula>(formulaName, "derived formula", "definition $id"),
+                sourceA = DefinitionId(sourceA),
+                sourceB = DefinitionId(sourceB),
+            )
+        }
+    }
+    return MeasurementDefinition(
+        id = DefinitionId(id),
+        assetId = AssetId(assetId),
+        key = key,
+        label = label,
+        unit = unit,
+        valueType = enumOrCorrupt<ValueType>(valueType, "value type", "definition $id"),
+        decimals = decimals,
+        rangeLow = rangeLow,
+        rangeHigh = rangeHigh,
+        isMeter = isMeter,
+        sortOrder = sortOrder,
+        archivedAt = archivedAt,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        kind = definitionKind,
+        derived = derived,
+    )
+}
 
 fun ProfileField.toDto(): ProfileFieldDto = ProfileFieldDto(
     id = id,

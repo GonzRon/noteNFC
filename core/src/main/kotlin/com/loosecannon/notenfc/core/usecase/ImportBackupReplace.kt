@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.core.usecase
 
 import com.loosecannon.notenfc.core.backup.BackupCodec
 import com.loosecannon.notenfc.core.backup.toDomain
+import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.ports.AssetRepository
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
@@ -47,9 +48,14 @@ class ImportBackupReplace(
             links.deleteAll()
             assets.deleteAll()
 
-            // insert in reference order so foreign keys are satisfied at every step
+            // insert in reference order so foreign keys are satisfied at every step. Within
+            // measurementDefinitions, ENTERED rows go first and DERIVED rows after, so a
+            // DERIVED definition's source_a_id/source_b_id foreign keys (schema v3) resolve at
+            // insert time regardless of the file's own id ordering.
             data.assets.forEach { assets.upsert(it.toDomain()) }
-            data.measurementDefinitions.forEach { definitions.upsert(it.toDomain()) }
+            val (entered, derived) = data.measurementDefinitions.partition { it.kind == DefinitionKind.ENTERED.name }
+            entered.forEach { definitions.upsert(it.toDomain()) }
+            derived.forEach { definitions.upsert(it.toDomain()) }
             data.eventProfiles.forEach { profiles.upsert(it.toDomain()) }
             data.externalLinks.forEach { links.upsert(it.toDomain()) }
             data.nfcTags.forEach { tags.upsert(it.toDomain()) }

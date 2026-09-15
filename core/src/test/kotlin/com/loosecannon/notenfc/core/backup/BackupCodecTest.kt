@@ -45,11 +45,24 @@ class BackupCodecTest {
 
     private fun assetDto(id: String) = AssetDto(id, "Asset $id", "", "", "", "ACTIVE", 1L, 2L)
 
-    private fun definitionDto(id: String, assetId: String, valueType: String = "NUMBER") = MeasurementDefinitionDto(
+    private fun definitionDto(
+        id: String,
+        assetId: String,
+        valueType: String = "NUMBER",
+        isMeter: Boolean = false,
+        kind: String = "ENTERED",
+        formula: String? = null,
+        sourceAId: String? = null,
+        sourceBId: String? = null,
+    ) = MeasurementDefinitionDto(
         id = id, assetId = assetId, key = "key-$id", label = "Label $id", unit = "",
         valueType = valueType, decimals = 1, rangeLow = null, rangeHigh = null,
-        isMeter = false, sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 2L,
+        isMeter = isMeter, sortOrder = 0, archivedAt = null, createdAt = 1L, updatedAt = 2L,
+        kind = kind, formula = formula, sourceAId = sourceAId, sourceBId = sourceBId,
     )
+
+    private fun derivedDefinitionDto(id: String, assetId: String, sourceAId: String, sourceBId: String) =
+        definitionDto(id, assetId, kind = "DERIVED", formula = "PERCENT_DROP", sourceAId = sourceAId, sourceBId = sourceBId)
 
     private fun profileFieldDto(id: String, definitionId: String, sortOrder: Int = 0) =
         ProfileFieldDto(id, definitionId, required = true, sortOrder = sortOrder)
@@ -237,11 +250,11 @@ class BackupCodecTest {
     fun `a newer format version is refused`() {
         val entries = unzip(encoded())
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*2"), "\"formatVersion\": 3")
+            .replace(Regex("\"formatVersion\"\\s*:\\s*3"), "\"formatVersion\": 4")
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val e = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(rezip(entries)) }
-        assertEquals(3, e.found)
-        assertEquals(2, e.supported)
+        assertEquals(4, e.found)
+        assertEquals(3, e.supported)
     }
 
     @Test
@@ -525,6 +538,109 @@ class BackupCodecTest {
             assetEvents = listOf(event.copy(measurements = event.measurements.reversed(), consumables = event.consumables.reversed())),
         )
         assertContentEquals(encoded(data), encoded(shuffled))
+    }
+
+    // --- journal tables (format 3): derived definitions ------------------------------------------
+
+    @Test
+    fun formatTwoFileStillDecodes() {
+        val f = journalFixture()
+        val bytes = BackupCodec.encode(
+            f,
+            appVersion = "2.0",
+            schemaVersion = 1,
+            createdAt = 1_726_000_000_000L,
+            formatVersion = 2,
+        )
+        val decoded = BackupCodec.decode(bytes)
+        assertEquals(2, decoded.manifest.formatVersion)
+        val definition = decoded.data.measurementDefinitions.single()
+        assertEquals("ENTERED", definition.kind)
+        assertEquals(null, definition.formula)
+        assertEquals(null, definition.sourceAId)
+        assertEquals(null, definition.sourceBId)
+    }
+
+    @Test
+    fun formatThreeRoundTripsDerivedDefinition() {
+        val data = BackupData(
+            assets = listOf(assetDto("a1")),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+            measurementDefinitions = listOf(
+                definitionDto("da", "a1"),
+                definitionDto("db", "a1"),
+                derivedDefinitionDto("dd", "a1", "da", "db"),
+            ),
+        )
+        val decoded = BackupCodec.decode(encoded(data))
+        assertEquals(data, decoded.data)
+        val derived = decoded.data.measurementDefinitions.first { it.id == "dd" }
+        assertEquals("DERIVED", derived.kind)
+        assertEquals("PERCENT_DROP", derived.formula)
+        assertEquals("da", derived.sourceAId)
+        assertEquals("db", derived.sourceBId)
+    }
+
+    @Test
+    fun derivedDefinitionWithBadSourceIsCorrupt() {
+        val data = BackupData(
+            assets = listOf(assetDto("a1")),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+            measurementDefinitions = listOf(
+                definitionDto("da", "a1", valueType = "TEXT"), // not NUMBER: an invalid source
+                definitionDto("db", "a1"),
+                derivedDefinitionDto("dd", "a1", "da", "db"),
+            ),
+        )
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("dd") && e.message!!.contains("SourceNotNumber"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun derivedRowWithoutSourcesIsCorrupt() {
+        val bad = definitionDto("dd", "a1", kind = "DERIVED", formula = "PERCENT_DROP")
+        val data = BackupData(
+            assets = listOf(assetDto("a1")),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+            measurementDefinitions = listOf(bad),
+        )
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("dd"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun enteredRowWithFormulaIsCorrupt() {
+        val bad = definitionDto("d1", "a1", formula = "PERCENT_DROP")
+        val data = BackupData(
+            assets = listOf(assetDto("a1")),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+            measurementDefinitions = listOf(bad),
+        )
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("d1"), "unhelpful: ${e.message}")
+    }
+
+    @Test
+    fun measurementOnDerivedDefinitionIsCorrupt() {
+        val measurement = measurementDto("m1", "dd", valueNum = 1.0)
+        val event = assetEventDto("e1", "a1", measurements = listOf(measurement))
+        val data = BackupData(
+            assets = listOf(assetDto("a1")),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+            measurementDefinitions = listOf(
+                definitionDto("da", "a1"),
+                definitionDto("db", "a1"),
+                derivedDefinitionDto("dd", "a1", "da", "db"),
+            ),
+            assetEvents = listOf(event),
+        )
+        val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
+        assertTrue(e.message!!.contains("m1"), "unhelpful: ${e.message}")
     }
 
     // --- random fixture generation (ids pre-sorted, so the identity is literal) -----------------
