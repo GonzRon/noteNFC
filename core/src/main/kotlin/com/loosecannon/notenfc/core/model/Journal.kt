@@ -2,6 +2,10 @@ package com.loosecannon.notenfc.core.model
 
 enum class ValueType { NUMBER, TEXT, BOOLEAN }
 
+enum class DefinitionKind { ENTERED, DERIVED }
+enum class DerivedFormula { PERCENT_DROP }          // (a − b) / a × 100; closed; add members only with a consumer
+data class DerivedSpec(val formula: DerivedFormula, val sourceA: DefinitionId, val sourceB: DefinitionId)
+
 data class MeasurementDefinition(
     val id: DefinitionId, val assetId: AssetId,
     val key: String,            // slug, unique per asset, e.g. "ph", "engine_hours"
@@ -10,6 +14,8 @@ data class MeasurementDefinition(
     val rangeLow: Double?, val rangeHigh: Double?,   // NUMBER only; both null = no target
     val isMeter: Boolean,       // monotonic counter (hours); informational until Phase 3
     val sortOrder: Int, val archivedAt: Long?, val createdAt: Long, val updatedAt: Long,
+    val kind: DefinitionKind = DefinitionKind.ENTERED,
+    val derived: DerivedSpec? = null,               // non-null iff kind == DERIVED
 )
 
 enum class EventKind { MAINTENANCE, INSPECTION, MEASUREMENT, TREATMENT, INCIDENT, REPLACEMENT,

@@ -3,6 +3,9 @@ package com.loosecannon.notenfc.core.usecase
 import com.loosecannon.notenfc.core.journal.Template
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.DefinitionId
+import com.loosecannon.notenfc.core.model.DefinitionKind
+import com.loosecannon.notenfc.core.model.DerivedFormula
+import com.loosecannon.notenfc.core.model.DerivedSpec
 import com.loosecannon.notenfc.core.model.EventProfile
 import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.ProfileConsumable
@@ -53,9 +56,13 @@ class ApplyTemplate(
             return ApplyResult.AlreadySetUp
         }
         val now = clock.nowMillis()
-        val defs = template.definitions.mapIndexed { i, d ->
+        // ENTERED definitions before DERIVED ones, so a derived spec's sources always have a minted id
+        // to resolve against by the time it's built (§4: derived source keys resolved to fresh ids).
+        val ordered = template.definitions.sortedBy { it.derived != null }
+        val mintedIds = ordered.associate { it.key to DefinitionId(ids.newId()) }
+        val defs = ordered.mapIndexed { i, d ->
             MeasurementDefinition(
-                id = DefinitionId(ids.newId()),
+                id = mintedIds.getValue(d.key),
                 assetId = assetId,
                 key = d.key,
                 label = d.label,
@@ -69,6 +76,10 @@ class ApplyTemplate(
                 archivedAt = null,
                 createdAt = now,
                 updatedAt = now,
+                kind = if (d.derived != null) DefinitionKind.DERIVED else DefinitionKind.ENTERED,
+                derived = d.derived?.let { (sourceAKey, sourceBKey) ->
+                    DerivedSpec(DerivedFormula.PERCENT_DROP, mintedIds.getValue(sourceAKey), mintedIds.getValue(sourceBKey))
+                },
             )
         }
         val byKey = defs.associateBy { it.key }

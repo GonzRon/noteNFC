@@ -1,9 +1,11 @@
 package com.loosecannon.notenfc.core.journal
 
 import com.loosecannon.notenfc.core.model.*
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class LatestReadingsTest {
     private val ph = MeasurementDefinition(
@@ -13,6 +15,15 @@ class LatestReadingsTest {
     )
     private val temp = ph.copy(id = DefinitionId("d-t"), key = "water_temp", label = "Water temperature", unit = "°F", rangeLow = null, rangeHigh = null, sortOrder = 1)
     private val archived = ph.copy(id = DefinitionId("d-x"), key = "old", archivedAt = 1L, sortOrder = 2)
+
+    private val sourceA = ph.copy(id = DefinitionId("d-a"), key = "tds_prefilter", rangeLow = null, rangeHigh = null, sortOrder = 3)
+    private val sourceB = ph.copy(id = DefinitionId("d-b"), key = "tds_post_membrane", rangeLow = null, rangeHigh = null, sortOrder = 4)
+    private val rejection = MeasurementDefinition(
+        id = DefinitionId("d-rejection"), assetId = AssetId("a1"), key = "rejection_percent", label = "Rejection",
+        unit = "%", valueType = ValueType.NUMBER, decimals = 1, rangeLow = null, rangeHigh = null, isMeter = false,
+        sortOrder = 5, archivedAt = null, createdAt = 0L, updatedAt = 0L,
+        kind = DefinitionKind.DERIVED, derived = DerivedSpec(DerivedFormula.PERCENT_DROP, sourceA.id, sourceB.id),
+    )
 
     private fun event(id: String, on: String, created: Long, vararg values: Pair<DefinitionId, Double>) = AssetEvent(
         id = EventId(id), assetId = AssetId("a1"), kind = EventKind.MEASUREMENT, title = "Water test",
@@ -61,5 +72,17 @@ class LatestReadingsTest {
         val e1 = event("e1", "2026-09-12", 1L, ph.id to 7.4)
         val e2 = event("e2", "2026-09-15", 2L, temp.id to 100.0)   // newer but no pH
         assertEquals(7.4, LatestReadings.of(listOf(ph), listOf(e1, e2))[0].measurement?.valueNum)
+    }
+
+    @Test fun derivedRowComesFromNewestComputableEvent() {
+        val e1 = event("e1", "2026-09-12", 1L, sourceA.id to 310.0, sourceB.id to 18.0)
+        val e2 = event("e2", "2026-09-15", 2L, sourceA.id to 305.0)   // newer, only A: not computable
+        val r = LatestReadings.of(listOf(sourceA, sourceB, rejection), listOf(e1, e2))
+        val row = r.first { it.definition.key == "rejection_percent" }
+        assertNull(row.measurement)
+        val v = row.derivedValue
+        assertTrue(v != null && abs(v - 94.1935) < 0.001)
+        assertEquals("2026-09-12", row.occurredOn)   // from event 1, not the newer non-computable event 2
+        assertEquals(RangeState.NO_TARGET, row.state)
     }
 }
