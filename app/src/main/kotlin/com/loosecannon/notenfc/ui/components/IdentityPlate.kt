@@ -18,7 +18,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.loosecannon.notenfc.ui.theme.Eyebrow
 import com.loosecannon.notenfc.ui.theme.PlateShape
 
@@ -49,7 +51,9 @@ fun IdentityPlate(
             Row(verticalAlignment = Alignment.Top) {
                 Text(
                     text = category.uppercase(),
-                    style = Eyebrow,
+                    // G1 §1.1: the plate's category eyebrow is SemiBold; ordinary metadata
+                    // labels (LabelValue) keep the theme's Medium Eyebrow.
+                    style = Eyebrow.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
@@ -62,7 +66,11 @@ fun IdentityPlate(
             }
             Text(text = model, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             if (name != null) {
-                Text(text = name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),  // G1 §1.1: friendly name 15sp
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Spacer(Modifier.height(10.dp))
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)

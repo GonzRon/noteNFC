@@ -49,6 +49,8 @@ fun LedgerEntry(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
+                    // A long title yields space rather than squeezing the result badge to zero.
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 badge?.invoke()
             }
