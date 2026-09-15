@@ -3,15 +3,88 @@
     <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
+    <!-- Handler-present checks for the outbound link allowlist (D3 §10; API 30+ package visibility). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="joplin" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="obsidian" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="logseq" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:name="com.loosecannon.notenfc.NoteNfcApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
+
+        <!-- Interim Phase 1B launcher: scan in-app, write tags. Replaced by the Compose shell in 1C. -->
+        <activity
+            android:name="com.loosecannon.notenfc.ui.interim.TagToolsActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Share a note link → save it → write it to a tag → back to the caller. -->
+        <activity
+            android:name="com.loosecannon.notenfc.ui.interim.ShareLinkActivity"
+            android:exported="true"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- The only NFC-exported component (D3 §9). No tech-discovered catch-all filter. -->
+        <activity
+            android:name="com.loosecannon.notenfc.nfc.NfcDispatchActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:label="@string/dispatch_title">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="vnd.android.nfc" android:host="ext" android:path="/com.loosecannon.notenfc:tag" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="vnd.android.nfc" android:host="ext" android:path="/com.loosecannon.notenfc:md5_short" />
+            </intent-filter>
+            <!-- notenfc://tag/<uuid>: resolves exactly like a scan; navigation only. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="notenfc" android:host="tag" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name="com.loosecannon.notenfc.ui.interim.WriteTagActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false"
             android:label="@string/write_title" />
+
     </application>
 </manifest>
