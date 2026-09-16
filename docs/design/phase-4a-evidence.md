@@ -681,3 +681,14 @@ git log --format=%B 41af038..HEAD | grep -ciE 'co-authored|generated with'
 
 → **0.** No commit on this branch carries a `Co-Authored-By`, a `Generated-by` or any other
 attribution trailer.
+
+### CI on master
+
+The first merge (`19213dd`) failed CI on one JVM test and the follow-up merge (`1b1bd3c`) on
+another — both the flakiness the Task 8 re-review had flagged as a watch item once the DOCUMENTS
+ViewModel moved its work onto real IO threads. `4f497c5` gates the multi-file progress test on a
+latch so a fast IO thread cannot outrun the collector; `ee8231e` guards the presence/thumbnail scan
+in the ViewModel itself (cancellation rethrown, any other failure becomes one "Could not check the
+attachment folder" line and the collector lives on), which also closes a latent production crash
+path, with a test over a storage whose `exists` throws. Merged as `73fc463`; CI green. Final JVM
+totals **`:core` 351 / `:app` 215**. The phone runs this build.
