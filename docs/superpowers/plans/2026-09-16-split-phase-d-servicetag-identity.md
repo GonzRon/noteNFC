@@ -1241,11 +1241,11 @@ git mv app/src/main/kotlin/com/loosecannon/servicetag/ui/components/NoteNfcIcons
        app/src/main/kotlin/com/loosecannon/servicetag/ui/components/ServiceTagIcons.kt
 
 # every NoteNfc* symbol, ~170 occurrences across 40-odd files
-git ls-files -- 'app/*.kt' 'core/*.kt' | xargs perl -pi -e 's/\bNoteNfc/ServiceTag/g'
+git ls-files -- 'app/*.kt' 'core/*.kt' | xargs perl -pi -e 's/NoteNfc/ServiceTag/g'   # unanchored: LocalNoteNfcSemanticColors and resolveNoteNfcColorScheme carry the word mid-identifier
 
 # the product word in user-facing strings, KDoc and test assertions -- but NOT the export
 # file-name prefixes, which are task 10 and would break the backup tests if they moved now
-git ls-files -- 'app/*.kt' 'core/*.kt' | xargs perl -pi -e 's/noteNFC(?!-(?:data|artifacts))/ServiceTag/g'
+git ls-files -- 'app/*.kt' 'core/*.kt' | xargs perl -pi -e 's/noteNFC(?!-(?:data|artifacts|\(|<))/ServiceTag/g'
 ```
 
 The negative lookahead is load-bearing: `BackupSetNames` still writes `noteNFC-data-<stamp>.zip` until Task 10, and its three test fixtures must keep agreeing with it until then.
