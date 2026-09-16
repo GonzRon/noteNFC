@@ -38,7 +38,7 @@ class BackupViewModelTest {
     }
 
     private fun viewModel() =
-        BackupViewModel(graph.exportBackup, graph.importBackupReplace, graph.prefs, graph.clock)
+        BackupViewModel(graph.exportBackupSet, graph.importBackupReplace, graph.prefs, graph.clock)
 
     /** A document the user picked that keeps what it is given. */
     private class MemoryIO : BackupIO {
@@ -91,7 +91,7 @@ class BackupViewModelTest {
         assertEquals(1, report.assets)
         assertEquals(0, report.tags)
         assertEquals(0, report.links)
-        assertEquals(4, report.formatVersion)
+        assertEquals(5, report.formatVersion)
         assertEquals(listOf(pump.id), graph.assets.all().map(Asset::id))
     }
 }

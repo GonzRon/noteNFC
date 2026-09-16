@@ -286,7 +286,8 @@ class JournalDeviceProofTest {
         }
 
         val before = tableCounts()
-        val bytes = runBlocking { app.graph.exportBackup.run() }
+        // Task 9 replaces this with the two-file set export.
+        val bytes = runBlocking { app.graph.exportBackupSet.run().data }
         clearInstall()
         assertEquals("the wipe emptied the store", 0, tableCounts().values.sum())
         runBlocking { app.graph.importBackupReplace.run(bytes) }

@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.notenfc.core.ports.BackupIO
 import com.loosecannon.notenfc.core.ports.Clock
-import com.loosecannon.notenfc.core.usecase.ExportBackup
+import com.loosecannon.notenfc.core.usecase.ExportBackupSet
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.ImportReport
 import com.loosecannon.notenfc.di.AppGraph
@@ -31,14 +31,14 @@ data class BackupState(val lastBackupAt: Long? = null, val busy: Boolean = false
  * a promise that a file exists; a failed write made no file, so the nudge stays.
  */
 class BackupViewModel(
-    private val exportBackup: ExportBackup,
+    private val exportBackupSet: ExportBackupSet,
     private val importBackupReplace: ImportBackupReplace,
     private val prefs: AppPrefs,
     private val clock: Clock,
 ) : ViewModel() {
 
     constructor(graph: AppGraph) :
-        this(graph.exportBackup, graph.importBackupReplace, graph.prefs, graph.clock)
+        this(graph.exportBackupSet, graph.importBackupReplace, graph.prefs, graph.clock)
 
     private val _state = MutableStateFlow(BackupState(lastBackupAt = prefs.lastBackupAt))
     val state: StateFlow<BackupState> = _state.asStateFlow()
@@ -52,7 +52,8 @@ class BackupViewModel(
 
     /** Writes a v1 backup to [io] and returns how many bytes it took. */
     suspend fun export(io: BackupIO): Result<Int> = runCatching {
-        val bytes = exportBackup.run()
+        // Task 9 writes the whole set (data + artifacts) to a folder; for now only the data file.
+        val bytes = exportBackupSet.run().data
         io.write(bytes)
         // Only here: the document has the bytes.
         prefs.markBackupExported(clock.nowMillis())

@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.room3.Room
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import com.loosecannon.notenfc.BuildConfig
+import com.loosecannon.notenfc.attachments.NoAttachmentStorage
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.AttachmentRepository
+import com.loosecannon.notenfc.core.ports.AttachmentStorage
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
@@ -25,7 +28,7 @@ import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
 import com.loosecannon.notenfc.core.usecase.DeleteProfile
-import com.loosecannon.notenfc.core.usecase.ExportBackup
+import com.loosecannon.notenfc.core.usecase.ExportBackupSet
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.OpenLink
@@ -43,7 +46,9 @@ import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.MIGRATION_1_2
 import com.loosecannon.notenfc.data.room.MIGRATION_2_3
 import com.loosecannon.notenfc.data.room.MIGRATION_3_4
+import com.loosecannon.notenfc.data.room.MIGRATION_4_5
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
+import com.loosecannon.notenfc.data.room.RoomAttachmentRepository
 import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
 import com.loosecannon.notenfc.data.room.RoomEventRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
@@ -65,7 +70,7 @@ class AppGraph(context: Context) {
         )
         .setDriver(AndroidSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .build()
 
     val clock: Clock = Clock { System.currentTimeMillis() }
@@ -77,17 +82,25 @@ class AppGraph(context: Context) {
     val definitions: DefinitionRepository = RoomDefinitionRepository(db.definitionDao())
     val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
     val events: EventRepository = RoomEventRepository(db.eventDao())
+    val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
     val prefs: AppPrefs = AppPrefs(SharedPrefsStore(context))
 
-    /** Produces the bytes of a v2 backup; where they go is the caller's choice (a SAF document). */
-    val exportBackup: ExportBackup = ExportBackup(
-        assets, tags, links, definitions, profiles, events, uow, clock,
+    /** Task 7 replaces this with the SAF-tree resolver; until then no store, so nothing writes. */
+    val attachmentStorage: AttachmentStorage = NoAttachmentStorage
+
+    /**
+     * Produces a backup *set*: the data archive's bytes plus the plan for the artifacts archive
+     * beside them. Task 9 owns writing the two files; today only `data` is used.
+     */
+    val exportBackupSet: ExportBackupSet = ExportBackupSet(
+        assets, tags, links, definitions, profiles, events, attachments, uow, ids, clock,
         BuildConfig.VERSION_NAME, SCHEMA_VERSION,
     )
 
     /** Wipe-and-load import. Replace is the only mode Phase 1A ships (D7 1A). */
-    val importBackupReplace: ImportBackupReplace =
-        ImportBackupReplace(assets, tags, links, definitions, profiles, events, uow)
+    val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
+        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+    )
 
     /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -108,7 +121,7 @@ class AppGraph(context: Context) {
     // Phase 2B-2 — retirement is a date the person picks, not a status (spec §7), and delete is
     // the one destructive asset action: it refuses a parent that still has children.
     val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
-    val deleteAsset: DeleteAsset = DeleteAsset(assets, uow)
+    val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
 
     /** A link is a pointer, not a record, so it can be deleted — unless a tag still points at it. */
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
@@ -116,7 +129,7 @@ class AppGraph(context: Context) {
     // Phase 2A — the maintenance journal.
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
     val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
-    val deleteEvent: DeleteEvent = DeleteEvent(events, uow)
+    val deleteEvent: DeleteEvent = DeleteEvent(events, attachments, attachmentStorage, uow)
 
     // Phase 2B-1 — the definition and profile editors. Archive is the ordinary retirement; delete
     // exists only for a row nothing references yet, and each use case checks that before writing.
@@ -134,6 +147,6 @@ class AppGraph(context: Context) {
         const val DB_NAME = "notenfc.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
     }
 }

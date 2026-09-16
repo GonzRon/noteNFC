@@ -204,7 +204,8 @@ class DebugBackupActivity : Activity() {
         }
         when (requestCode) {
             REQUEST_EXPORT -> run("export") {
-                val bytes = graph.exportBackup.run()
+                // Task 9 replaces this with the two-file set export.
+                val bytes = graph.exportBackupSet.run().data
                 SafBackupIO(contentResolver, uri).write(bytes)
                 "exported ${bytes.size} bytes"
             }

@@ -1,6 +1,9 @@
 package com.loosecannon.notenfc.testing
 
+import com.loosecannon.notenfc.attachments.NoAttachmentStorage
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.AttachmentRepository
+import com.loosecannon.notenfc.core.ports.AttachmentStorage
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
@@ -19,7 +22,7 @@ import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
 import com.loosecannon.notenfc.core.usecase.DeleteProfile
-import com.loosecannon.notenfc.core.usecase.ExportBackup
+import com.loosecannon.notenfc.core.usecase.ExportBackupSet
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
@@ -32,6 +35,7 @@ import com.loosecannon.notenfc.core.usecase.UpdateAsset
 import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
+import com.loosecannon.notenfc.data.room.RoomAttachmentRepository
 import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
 import com.loosecannon.notenfc.data.room.RoomEventRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
@@ -66,18 +70,22 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val definitions: DefinitionRepository = RoomDefinitionRepository(db.definitionDao())
     val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
     val events: EventRepository = RoomEventRepository(db.eventDao())
+    val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
+
+    /** No store until Task 7's resolver: the answer a fresh install gives. */
+    val attachmentStorage: AttachmentStorage = NoAttachmentStorage
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
     val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
     val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
-    val deleteAsset: DeleteAsset = DeleteAsset(assets, uow)
+    val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
     val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
-    val deleteEvent: DeleteEvent = DeleteEvent(events, uow)
+    val deleteEvent: DeleteEvent = DeleteEvent(events, attachments, attachmentStorage, uow)
     val saveDefinition: SaveDefinition =
         SaveDefinition(definitions, events, profiles, assets, uow, ids, clock)
     val archiveDefinition: ArchiveDefinition = ArchiveDefinition(definitions, uow, clock)
@@ -91,17 +99,20 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     /** Device-local preferences, in a map: a test can read back exactly what the UI wrote. */
     val prefs: AppPrefs = AppPrefs(InMemoryKeyValueStore())
 
-    val exportBackup: ExportBackup = ExportBackup(
-        assets, tags, links, definitions, profiles, events, uow, clock, APP_VERSION, SCHEMA_VERSION,
+    /** Task 9 writes the set's two files; a test that only wants bytes takes `run().data`. */
+    val exportBackupSet: ExportBackupSet = ExportBackupSet(
+        assets, tags, links, definitions, profiles, events, attachments, uow, ids, clock,
+        APP_VERSION, SCHEMA_VERSION,
     )
-    val importBackupReplace: ImportBackupReplace =
-        ImportBackupReplace(assets, tags, links, definitions, profiles, events, uow)
+    val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
+        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+    )
 
     fun close() = db.close()
 
     private companion object {
         const val APP_VERSION = "test"
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
     }
 }
 
