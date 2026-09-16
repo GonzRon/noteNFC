@@ -1863,7 +1863,7 @@ and add `import com.loosecannon.servicetag.ui.scan.TagResultWire`.
 - [ ] **Step 5: Run the tests**
 
 Run: `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin --console=plain`
-Expected: PASS, with five new tests.
+Expected: PASS, with four new tests.
 
 ```bash
 git grep -n '"V1"\|"NONE"\|"LEGACY_MD5"' -- app/src/main app/src/debug | cat
@@ -2290,7 +2290,7 @@ The sheet wordings above are `TagResultSheet`'s after Task 8's prose pass; if a 
 ```bash
 export ANDROID_SERIAL=emulator-5554
 adb devices     # one emulator, no phone
-ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --tests '*NfcIdentityDeviceProofTest' --console=plain
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.loosecannon.servicetag.ui.NfcIdentityDeviceProofTest --console=plain
 ```
 
 Expected: PASS, four tests. A failure in `ourTagOpensTheAssetItIsBoundTo` is worth reading carefully: it is the whole ambient path — filter → trampoline → codec → `ResolveTag` → `MainActivity` — and it is the row §21 calls "ambient NFC as the normal read path".
@@ -2415,7 +2415,7 @@ git commit -m "phase d regression pass on the emulator, and the evidence"
 | 9 a new launcher icon | Task 9 | the owner's pack copied in; no `.webp` left in the APK; `dumpsys` + the tile looked at on the emulator |
 | 10 `servicetag.db` / prefs / export prefixes | Task 10 | JVM suites, plus the retired-prefix import test |
 | 11 Room schema export directory | Task 11 | every hop green; `identityHash` `157988f1…` unchanged |
-| 12 sibling isolation | Task 12 | `NdefEnvelopeIsolationTest`, five cases |
+| 12 sibling isolation | Task 12 | `NdefEnvelopeIsolationTest`, four cases |
 | 13 the string-typed wire vocabulary | Task 13 | `TagResultWireTest`; one literal left, its own definition |
 | 14 remaining carriers + three non-changes | Task 14 | greps recorded; `.gitignore` the only edit |
 | 15 README hygiene | Task 15 | `git grep 'CN=noteNFC'` clean outside `docs/` |
