@@ -35,6 +35,8 @@ class AttachmentPickers internal constructor(
 @Composable
 fun rememberAttachmentPickers(
     graph: AppGraph,
+    /** Where a stored document lives, as the section's ViewModel answers it. */
+    viewUri: (String) -> Uri?,
     onPicked: (List<PickedFile>) -> Unit,
     onNoViewer: () -> Unit,
     /** Nothing on this device can take a picture. Same shape as [onNoViewer], different wording. */
@@ -50,7 +52,13 @@ fun rememberAttachmentPickers(
     val pickFiles = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        if (!uris.isNullOrEmpty()) onPicked(uris.map { uri -> resolver.pickedFile(uri) })
+        // Reading a provider's display name and size is a query per URI, and there may be eight
+        // of them: the callback lands on the main thread, so the asking does not stay there.
+        if (!uris.isNullOrEmpty()) {
+            scope.launch {
+                onPicked(withContext(Dispatchers.IO) { uris.map { uri -> resolver.pickedFile(uri) } })
+            }
+        }
     }
 
     val capture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
@@ -82,7 +90,7 @@ fun rememberAttachmentPickers(
             scope.launch {
                 // Resolving a document under the tree is several provider queries: not the main
                 // thread's work, even for one tap (spec §8.2).
-                val uri = withContext(Dispatchers.IO) { graph.attachmentStorage.viewUri(row.locator) }
+                val uri = withContext(Dispatchers.IO) { viewUri(row.locator) }
                 val intent = uri?.let { viewIntent(it, row.mimeType) }
                 if (intent == null || intent.resolveActivity(context.packageManager) == null) {
                     onNoViewer()

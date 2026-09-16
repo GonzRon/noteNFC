@@ -80,10 +80,12 @@ fun DocumentsSection(
     SectionHeader(
         title = if (state.rows.isEmpty()) "Documents" else "Documents · ${state.rows.size}",
     )
-    if (state.rows.isEmpty()) {
-        QuietLine("No documents yet")
-    } else {
+    if (state.rows.isNotEmpty()) {
         Column { state.rows.forEach { row -> DocumentRow(row, onOpen, onEdit) } }
+    } else if (state.store is StoreState.Ready) {
+        // Only a folder that is actually there can be empty; without one the status block below
+        // is the whole story, and "No documents yet" over it would read as the wrong problem.
+        QuietLine("No documents yet")
     }
     Spacer(Modifier.height(4.dp))
     // Both add actions are hidden rather than disabled when there is no folder: there is nowhere
@@ -130,9 +132,17 @@ fun AttachmentsSection(
     var editing by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
+    // The sheet closes when the save lands or changed nothing; a refusal leaves it open holding
+    // what was typed, so the line the snackbar just showed can be acted on.
+    LaunchedEffect(model) { model.saved.collect { id -> if (editing == id) editing = null } }
+    LaunchedEffect(model) { model.deleted.collect { id -> if (editing == id) editing = null } }
+    // Entering composition is how this section learns that the person went to Settings, chose a
+    // folder and came back: the ViewModel outlives the push, so nothing else would tell it.
+    LaunchedEffect(model) { model.refreshStore() }
 
     val pickers = rememberAttachmentPickers(
         graph = graph,
+        viewUri = model::viewUri,
         onPicked = model::add,
         onNoViewer = { scope.launch { snackbars.showSnackbar("No app can open this file") } },
         onNoCamera = { scope.launch { snackbars.showSnackbar("No camera app on this device") } },
@@ -155,8 +165,8 @@ fun AttachmentsSection(
     state.rows.firstOrNull { it.id == editing }?.let { row ->
         AttachmentEditSheet(
             row = row,
-            onSave = { cmd -> model.save(row.id, cmd); editing = null },
-            onDelete = { model.delete(row.id); editing = null },
+            onSave = { cmd -> model.save(row.id, cmd) },
+            onDelete = { model.delete(row.id) },
             onDismiss = { editing = null },
         )
     }

@@ -2,26 +2,36 @@ package com.loosecannon.notenfc.ui.attachments
 
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.notenfc.core.model.AttachmentKind
+import com.loosecannon.notenfc.core.model.AttachmentLocator
 import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.ports.ByteSource
 import com.loosecannon.notenfc.core.ports.StoreState
+import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.core.usecase.AddAttachmentCommand
 import com.loosecannon.notenfc.core.usecase.AssetCommand
 import com.loosecannon.notenfc.core.usecase.AttachmentResult
+import com.loosecannon.notenfc.core.usecase.DeleteAttachment
 import com.loosecannon.notenfc.core.usecase.EventCommand
+import com.loosecannon.notenfc.core.usecase.UpdateAttachment
 import com.loosecannon.notenfc.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.notenfc.testing.FakeGraph
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -45,8 +55,22 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AttachmentsSectionViewModelTest {
 
+    private companion object {
+        val READY = StoreState.Ready("Attachments", "com.example.provider")
+
+        /** `AttachmentsSectionViewModel`'s own `SharingStarted.WhileSubscribed` window. */
+        const val SUBSCRIPTION_GRACE_MS = 5_000L
+    }
+
     private lateinit var graph: FakeGraph
     private lateinit var asset: Asset
+
+    /**
+     * Every model the test builds lives in here, so `tearDown` can clear it: `viewModelScope` is
+     * cancelled by the store in production and by nothing at all in a plain JVM test, which left
+     * the scan and the `stateIn` sharer running past `graph.close()` and `resetMain()`.
+     */
+    private val store = ViewModelStore()
 
     /** `AssetId` is a value class, so the seeded asset itself is what the test field holds. */
     private val assetId: AssetId get() = asset.id
@@ -58,15 +82,41 @@ class AttachmentsSectionViewModelTest {
     }
 
     @After fun tearDown() {
+        store.clear()
         graph.close()
         Dispatchers.resetMain()
     }
 
-    private fun model(owner: AttachmentOwner = AttachmentOwner.OfAsset(assetId)) =
-        AttachmentsSectionViewModel(
-            owner, graph.attachments, graph.attachmentStorage, graph.addAttachment,
-            graph.updateAttachment, graph.deleteAttachment, graph.thumbnails,
-        )
+    private fun model(
+        owner: AttachmentOwner = AttachmentOwner.OfAsset(assetId),
+        today: () -> String = { "2026-09-16" },
+        updateAttachment: UpdateAttachment = graph.updateAttachment,
+        deleteAttachment: DeleteAttachment = graph.deleteAttachment,
+    ): AttachmentsSectionViewModel {
+        val factory = viewModelFactory {
+            initializer {
+                AttachmentsSectionViewModel(
+                    owner, graph.attachments, graph.attachmentStorage, graph.addAttachment,
+                    updateAttachment, deleteAttachment, graph.thumbnails,
+                    today = today,
+                )
+            }
+        }
+        return ViewModelProvider.create(store, factory)[
+            AttachmentLocator.dirFor(owner),
+            AttachmentsSectionViewModel::class,
+        ]
+    }
+
+    /**
+     * A transaction that will not commit. Closing the database would do it too, but that also
+     * kills the row flow the section is collecting, which is a second failure the test is not
+     * about.
+     */
+    private val brokenUow = object : UnitOfWork {
+        override suspend fun <T> write(block: suspend () -> T): T = throw IOException("no disk")
+        override suspend fun <T> read(block: suspend () -> T): T = block()
+    }
 
     private fun picked(name: String, mime: String = "application/pdf", body: String = "x") =
         PickedFile(name, mime, body.length.toLong()) { body.toByteArray().inputStream() }
@@ -101,7 +151,7 @@ class AttachmentsSectionViewModelTest {
         vm.add(listOf(picked("Apple.pdf")))
 
         val state = vm.state.first { it.rows.size == 2 }
-        assertEquals(StoreState.Ready("Attachments", "com.example.provider"), state.store)
+        assertEquals(READY, state.store)
         assertEquals(listOf("Apple.pdf", "Zebra.pdf"), state.rows.map { it.displayName })
         assertEquals(
             listOf(AttachmentKind.DOCUMENT, AttachmentKind.DOCUMENT),
@@ -213,6 +263,8 @@ class AttachmentsSectionViewModelTest {
 
         val said = mutableListOf<String>()
         backgroundScope.launch(Dispatchers.Main) { vm.messages.collect { said += it } }
+        val closed = mutableListOf<String>()
+        backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
 
         vm.save(row.id, UpdateAttachmentCommand(row.displayName, row.kind, row.capturedOn, row.notes))
         // A real save behind it is the barrier: once its rename lands, the `Unchanged` one has
@@ -221,6 +273,8 @@ class AttachmentsSectionViewModelTest {
 
         vm.state.first { it.rows.singleOrNull()?.displayName == "Renamed.pdf" }
         assertEquals(emptyList<String>(), said)
+        // Silent, but not stuck: nothing to write still closes the sheet.
+        assertEquals(listOf(row.id, row.id), closed)
     }
 
     @Test fun deletingRemovesTheRowAndTheBytes() = runTest {
@@ -229,8 +283,12 @@ class AttachmentsSectionViewModelTest {
         vm.add(listOf(picked("guide.pdf")))
         val row = vm.state.first { it.rows.size == 1 }.rows.single()
 
+        // Subscribed before the call: `deleted` fires once the row and the bytes are both gone,
+        // which is the only barrier that says the sweep after the transaction has run.
+        val gone = async(Dispatchers.Main) { vm.deleted.first() }
         vm.delete(row.id)
 
+        assertEquals(row.id, gone.await())
         assertEquals(emptyList<AttachmentRowState>(), vm.state.first { it.rows.isEmpty() }.rows)
         assertFalse(row.locator in graph.attachmentStorage.store.files)
     }
@@ -267,14 +325,102 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun capturedOnDefaultsToTodayForAPickedFile() = runTest {
-        val vm = AttachmentsSectionViewModel(
-            AttachmentOwner.OfAsset(assetId), graph.attachments, graph.attachmentStorage,
-            graph.addAttachment, graph.updateAttachment, graph.deleteAttachment, graph.thumbnails,
-            today = { "2026-09-16" },
-        )
+        val vm = model(today = { "2026-09-16" })
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("guide.pdf")))
         assertEquals("2026-09-16", vm.state.first { it.rows.size == 1 }.rows.single().capturedOn)
+    }
+
+    @Test fun comingBackFromSettingsWithAFolderChosenFlipsTheSectionOver() = runTest {
+        graph.attachmentStorage.state = StoreState.NotConfigured
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        assertEquals(StoreState.NotConfigured, vm.state.first().store)
+
+        // Exactly what the status block asked for, and nothing else: no add, no save, no delete.
+        graph.attachmentStorage.state = READY
+        vm.refreshStore()
+
+        assertEquals(READY, vm.state.first { it.store is StoreState.Ready }.store)
+    }
+
+    @Test fun aResubscriptionAlsoReReadsTheFolder() = runTest {
+        graph.attachmentStorage.state = StoreState.NotConfigured
+        val vm = model()
+        val watching = launch { vm.state.collect() }
+        assertEquals(StoreState.NotConfigured, vm.state.first().store)
+
+        // The screen goes away (Settings is pushed over it) for longer than the sharing grace.
+        watching.cancelAndJoin()
+        advanceTimeBy(SUBSCRIPTION_GRACE_MS * 2)
+        graph.attachmentStorage.state = READY
+
+        backgroundScope.launch { vm.state.collect() }
+        assertEquals(READY, vm.state.first { it.store is StoreState.Ready }.store)
+    }
+
+    @Test fun aSaveThatCannotBeWrittenSaysSoAndLeavesTheSheetOpen() = runTest {
+        // The write throws rather than refusing: an escaping exception used to take the process.
+        val vm = model(updateAttachment = UpdateAttachment(graph.attachments, brokenUow, graph.clock))
+        backgroundScope.launch { vm.state.collect() }
+        graph.addAttachment.run(
+            AttachmentOwner.OfAsset(assetId),
+            AddAttachmentCommand(displayName = "guide.pdf", mimeType = "application/pdf"),
+            ByteSource { "x".byteInputStream() },
+        )
+        val row = vm.state.first { it.rows.size == 1 }.rows.single()
+
+        val closed = mutableListOf<String>()
+        backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+
+        vm.save(row.id, UpdateAttachmentCommand("Installation guide", row.kind, row.capturedOn, ""))
+
+        assertEquals("Could not save Installation guide", said.await())
+        assertEquals(emptyList<String>(), closed)
+    }
+
+    @Test fun aRefusedSaveKeepsTheSheetOpenAndAGoodOneClosesIt() = runTest {
+        val vm = model()
+        backgroundScope.launch { vm.state.collect() }
+        vm.add(listOf(picked("guide.pdf")))
+        val row = vm.state.first { it.rows.size == 1 }.rows.single()
+
+        val closed = mutableListOf<String>()
+        backgroundScope.launch(Dispatchers.Main) { vm.saved.collect { closed += it } }
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+
+        vm.save(row.id, UpdateAttachmentCommand("   ", row.kind, row.capturedOn, row.notes))
+        assertEquals("Give the file a name", said.await())
+        assertEquals(emptyList<String>(), closed)
+        assertEquals("guide.pdf", vm.state.value.rows.single().displayName)
+
+        vm.save(row.id, UpdateAttachmentCommand("Renamed.pdf", row.kind, row.capturedOn, row.notes))
+        vm.state.first { it.rows.singleOrNull()?.displayName == "Renamed.pdf" }
+        assertEquals(listOf(row.id), closed)
+    }
+
+    @Test fun aDeleteThatCannotBeWrittenSaysSoInsteadOfCrashing() = runTest {
+        val vm = model(
+            deleteAttachment = DeleteAttachment(graph.attachments, graph.attachmentStorage, brokenUow),
+        )
+        backgroundScope.launch { vm.state.collect() }
+        graph.addAttachment.run(
+            AttachmentOwner.OfAsset(assetId),
+            AddAttachmentCommand(displayName = "guide.pdf", mimeType = "application/pdf"),
+            ByteSource { "x".byteInputStream() },
+        )
+        val row = vm.state.first { it.rows.size == 1 }.rows.single()
+
+        val gone = mutableListOf<String>()
+        backgroundScope.launch(Dispatchers.Main) { vm.deleted.collect { gone += it } }
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+        vm.delete(row.id)
+
+        assertEquals("Could not delete that file", said.await())
+        assertEquals(emptyList<String>(), gone)
+        // The bytes are still there, because the row that names them is still there.
+        assertTrue(row.locator in graph.attachmentStorage.store.files)
     }
 
     /**

@@ -35,9 +35,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** How long the repository flow stays hot after the last collector leaves (a rotation, typically). */
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
@@ -126,9 +128,18 @@ class AttachmentsSectionViewModel(
      */
     private val storeState = MutableStateFlow(storage.state())
 
+    /**
+     * The same values, plus a fresh read whenever something starts collecting. Choosing a folder
+     * in Settings changes neither the rows nor anything this ViewModel wrote, and the ViewModel
+     * itself survives the push, so a resubscription is one of the two moments the section can
+     * learn that the person did what the status block asked ([refreshStore] is the other).
+     */
+    private val storeReads: Flow<StoreState> = storeState
+        .onStart { withContext(Dispatchers.IO) { storeState.value = storage.state() } }
+
     /** Pure mapping: everything expensive has already happened by the time a value gets here. */
     val state: StateFlow<AttachmentsSectionState> =
-        combine(rows, presence, thumbs, progress, storeState) { attachmentRows, present, thumbnails, line, store ->
+        combine(rows, presence, thumbs, progress, storeReads) { attachmentRows, present, thumbnails, line, store ->
             AttachmentsSectionState(
                 store = store,
                 rows = attachmentRows.map { row(it, present, thumbnails) },
@@ -144,6 +155,18 @@ class AttachmentsSectionViewModel(
     private val _messages = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
+    /**
+     * The id of an attachment whose edit sheet may close: the save landed, or it changed nothing.
+     * A refusal is deliberately absent — the sheet stays open holding what the person typed, so
+     * the line the snackbar just showed is something they can act on.
+     */
+    private val _saved = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    val saved: SharedFlow<String> = _saved.asSharedFlow()
+
+    /** The id of an attachment that is gone — row and bytes. A failed delete emits nothing. */
+    private val _deleted = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
+    val deleted: SharedFlow<String> = _deleted.asSharedFlow()
+
     init {
         // `collectLatest` drops a pass whose row list is already stale, so a delete or a rename
         // mid-scan restarts the checks rather than finishing the old ones.
@@ -155,10 +178,16 @@ class AttachmentsSectionViewModel(
         }
     }
 
-    /** Sequential, so a failure names its file and the rest still land (spec §8.1). */
+    /**
+     * Sequential, so a failure names its file and the rest still land (spec §8.1).
+     *
+     * On `Dispatchers.IO`, like [save] and [delete]: the first thing every one of these use cases
+     * does is ask the storage whether there is a folder, which is a handful of provider round
+     * trips before any of them reaches a suspension point of its own.
+     */
     fun add(files: List<PickedFile>) {
         if (files.isEmpty()) return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val capturedOn = today()
             files.forEachIndexed { index, file ->
                 // One file on its own is not a batch: nothing to count, so nothing to say.
@@ -172,18 +201,51 @@ class AttachmentsSectionViewModel(
     }
 
     fun save(id: String, cmd: UpdateAttachmentCommand) {
-        viewModelScope.launch {
-            val outcome = updateAttachment.run(AttachmentId(id), cmd)
-            if (outcome is AttachmentResult.Refused) say(outcome.problem)
+        viewModelScope.launch(Dispatchers.IO) {
+            val outcome = try {
+                updateAttachment.run(AttachmentId(id), cmd)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // A database that would not take the write. The sheet stays open with the values.
+                _messages.tryEmit("Could not save ${cmd.displayName}")
+                refresh.value++
+                return@launch
+            }
+            when (outcome) {
+                is AttachmentResult.Ok -> _saved.tryEmit(id)
+                // Nothing to write is not a failure: the sheet closes without claiming a save.
+                is AttachmentResult.Refused -> {
+                    if (outcome.problem == AttachmentProblem.Unchanged) _saved.tryEmit(id)
+                    say(outcome.problem)
+                }
+            }
             refresh.value++
         }
     }
 
     fun delete(id: String) {
-        viewModelScope.launch {
-            deleteAttachment.run(AttachmentId(id))
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                deleteAttachment.run(AttachmentId(id))
+                _deleted.tryEmit(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // The row write failed, or the store would not give the bytes up. Either way the
+                // person asked for one thing and it did not happen, so they hear about it.
+                _messages.tryEmit("Could not delete that file")
+            }
             refresh.value++
         }
+    }
+
+    /**
+     * Re-read the folder. The section calls this whenever it enters composition, which is how
+     * coming back from Settings with a folder chosen flips it over (spec §8.1).
+     */
+    fun refreshStore() {
+        refresh.value++
     }
 
     /** Null when the bytes are not on this device; the caller shows the snackbar. */
