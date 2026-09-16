@@ -5,6 +5,9 @@ import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.Attachment
+import com.loosecannon.notenfc.core.model.AttachmentId
+import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventProfile
@@ -17,6 +20,7 @@ import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.AttachmentRepository
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
 import com.loosecannon.notenfc.core.ports.LinkRepository
@@ -338,6 +342,47 @@ class InMemoryEventRepository : EventRepository, Rollbackable, Witnessed {
     }
 
     override fun observe(id: EventId): Flow<AssetEvent?> = version.map { rows[id.value] }
+}
+
+class InMemoryAttachmentRepository : AttachmentRepository, Rollbackable, Witnessed {
+    val rows = LinkedHashMap<String, Attachment>()
+    override var witness: TransactionWitness? = null
+    private val version = MutableStateFlow(0)
+    var failOnUpsert: Int? = null
+    private var upserts = 0
+
+    override fun snapshot(): () -> Unit {
+        val copy = LinkedHashMap(rows)
+        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+    }
+
+    override suspend fun upsert(a: Attachment) {
+        upserts += 1
+        if (upserts == failOnUpsert) throw RiggedFailure("rigged attachment upsert failure at #$upserts")
+        rows[a.id.value] = a
+        version.value += 1
+    }
+
+    override suspend fun get(id: AttachmentId): Attachment? = rows[id.value]
+
+    override suspend fun forOwner(owner: AttachmentOwner): List<Attachment> =
+        rows.values.filter { it.owner == owner }
+
+    override suspend fun forAsset(assetId: AssetId): List<Attachment> =
+        forOwner(AttachmentOwner.OfAsset(assetId))
+
+    override suspend fun all(): List<Attachment> {
+        witness?.observeAll()
+        return rows.values.toList()
+    }
+
+    override suspend fun delete(id: AttachmentId) { rows.remove(id.value); version.value += 1 }
+    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
+    override suspend fun count(): Int = rows.size
+
+    override fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>> = version.map {
+        rows.values.filter { it.owner == owner }.sortedBy { it.displayName.lowercase() }
+    }
 }
 
 /**

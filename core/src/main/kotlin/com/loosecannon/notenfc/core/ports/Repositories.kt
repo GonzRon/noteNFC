@@ -3,6 +3,9 @@ package com.loosecannon.notenfc.core.ports
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
+import com.loosecannon.notenfc.core.model.Attachment
+import com.loosecannon.notenfc.core.model.AttachmentId
+import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.EventProfile
@@ -89,4 +92,17 @@ interface EventRepository {     // aggregate: upsert replaces measurements and c
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<AssetEvent>>   // newest first by §4.1
     fun observe(id: EventId): Flow<AssetEvent?>
+}
+
+interface AttachmentRepository {
+    suspend fun upsert(a: Attachment)
+    suspend fun get(id: AttachmentId): Attachment?
+    suspend fun forOwner(owner: AttachmentOwner): List<Attachment>
+    /** The asset's own rows only — not its events'. `DeleteAsset` asks for both, separately. */
+    suspend fun forAsset(assetId: AssetId): List<Attachment>
+    suspend fun all(): List<Attachment>
+    suspend fun delete(id: AttachmentId)
+    suspend fun deleteAll()
+    suspend fun count(): Int
+    fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>>
 }
