@@ -1126,8 +1126,17 @@ private val storage = FakeAttachmentStorage()
 private val deleteEvent = DeleteEvent(events, attachments, storage, uow)
 
 @Test fun deletingAnEventRemovesItsAttachmentBytes() = runTest {
-    // Keep this file's existing setup unchanged: it already seeds the asset and the event
-    // that `EventId("e1")` below refers to. Add only the attachment row and the fake bytes.
+    // This file's seed helpers (`seedHotTub()` etc.) generate ids, so seed explicit ids here:
+    val assetId = seedHotTub()
+    events.upsert(
+        AssetEvent(
+            id = EventId("e1"), assetId = assetId, kind = EventKind.MAINTENANCE,
+            title = "Filter change", profileId = null, occurredOn = "2026-09-15",
+            occurredTime = null, tzId = "UTC", notes = "", source = EventSource.MANUAL,
+            sourceRef = null, createdAt = 1L, updatedAt = 1L,
+            measurements = emptyList(), consumables = emptyList(),
+        ),
+    )
     attachments.upsert(
         Attachment(
             id = AttachmentId("att-1"), owner = AttachmentOwner.OfEvent(EventId("e1")),
