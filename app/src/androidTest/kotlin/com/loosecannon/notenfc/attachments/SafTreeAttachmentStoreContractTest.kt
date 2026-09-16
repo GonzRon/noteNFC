@@ -79,6 +79,22 @@ class SafTreeAttachmentStoreContractTest {
     }
 
     /**
+     * A second `put` at one locator replaces the document rather than sitting beside it — the
+     * store's stale-document branch, which only a real provider can reach, and the path a restore
+     * takes when it lands over bytes that are already there (spec §5.2, §6).
+     */
+    @Test fun puttingTwiceAtOneLocatorReplacesTheDocument() = runBlocking {
+        val second = ByteArray(1_000) { (it % 97).toByte() }
+        store.put("assets/a1/att-1.pdf", ByteSource { payload.inputStream() })
+        val stored = store.put("assets/a1/att-1.pdf", ByteSource { second.inputStream() })
+
+        assertEquals(1, File(root, "assets/a1").listFiles()!!.size)
+        assertEquals(second.size.toLong(), stored.sizeBytes)
+        assertEquals(sha256Hex(second), stored.sha256)
+        assertArrayEquals(second, store.open("assets/a1/att-1.pdf")!!.use { it.readBytes() })
+    }
+
+    /**
      * The provider-renamed case: a locator still resolves by its `<id>.` prefix (spec §5.2).
      *
      * This provider renames on its own — `RawDocumentFile.createFile` appends the extension it

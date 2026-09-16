@@ -119,8 +119,16 @@ class AttachmentsDeviceProofTest {
             rule.onAllNodesWithText("No documents yet").assertCountEquals(0)
 
             // And the offer is a real one: it lands on the section that fixes it.
+            //
+            // The barrier is "Choose folder", which only Settings has: waiting on
+            // "ATTACHMENT STORAGE" would be satisfied by the status block we are still looking at
+            // — both screens render that headline — so it would return before Settings arrived and
+            // prove nothing. Waiting for the status block's own detail line to go as well means
+            // the push has finished, so each assertion below is about one node on one screen.
             rule.onNodeWithText("Open settings").performScrollTo().performClick()
-            rule.awaitText("ATTACHMENT STORAGE")
+            rule.awaitText("Choose folder")
+            rule.awaitGone("Choose a folder in Settings")
+            rule.onNodeWithText("Settings").assertIsDisplayed()
             rule.onNodeWithText("ATTACHMENT STORAGE").performScrollTo().assertIsDisplayed()
             rule.onNodeWithText("Not set").performScrollTo().assertIsDisplayed()
             rule.onNodeWithText("Choose folder").performScrollTo().assertIsDisplayed()
