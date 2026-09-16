@@ -22,14 +22,18 @@ import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -128,6 +132,53 @@ class BackupViewModelTest {
         }
     }
 
+    /**
+     * A sink that can be held open inside the artifacts write, so a test can cancel an export
+     * while it is in flight.
+     *
+     * `delete` suspends for real — `SafBackupSetWriter.delete` is a `withContext(Dispatchers.IO)`
+     * block — and that is the whole point: a cleanup that runs on an already-cancelled coroutine
+     * never gets past the first suspension point, so the file it was meant to take back survives.
+     * The other fakes here have no suspension point at all, which is why they cannot see it.
+     */
+    private class SuspendingSink(private val holdOnPrefix: String) : BackupSetSink {
+        val files = LinkedHashMap<String, ByteArray>()
+        val deleted = mutableListOf<String>()
+
+        /** Completes once the held write has been reached, so a test can stop guessing. */
+        val holding = CompletableDeferred<Unit>()
+
+        /** Nothing ever completes this: the test cancels instead. */
+        private val release = CompletableDeferred<Unit>()
+
+        override suspend fun write(name: String, body: suspend (OutputStream) -> Unit): String {
+            files[name] = ByteArray(0)          // created before a single byte is written
+            val out = ByteArrayOutputStream()
+            try {
+                if (name.startsWith(holdOnPrefix)) {
+                    holding.complete(Unit)
+                    release.await()
+                }
+                body(out)
+            } catch (t: Throwable) {
+                // The SAF writer's `document.delete()` is a blocking call inside its own
+                // `withContext`, so it runs even when the failure is a cancellation.
+                files.remove(name)
+                deleted += name
+                throw t
+            }
+            files[name] = out.toByteArray()
+            return name
+        }
+
+        override suspend fun delete(handle: String) {
+            withContext(Dispatchers.IO) {
+                deleted += handle
+                files.remove(handle)
+            }
+        }
+    }
+
     /** Takes [after] bytes and then fails, the way a disk that filled up does. */
     private class BreakingStream(
         private val sink: OutputStream,
@@ -180,6 +231,27 @@ class BackupViewModelTest {
             String(zin.readBytes(), Charsets.UTF_8)
         }
         return Regex(""""backupSetId"\s*:\s*"([^"]*)"""").find(manifest)!!.groupValues[1]
+    }
+
+    /**
+     * The same artifacts archive with its payload entries dropped and one entry the manifest never
+     * named put in their place: both kinds of damage `ArtifactsReadReport` can see, in one file.
+     */
+    private fun damagedArtifacts(artifacts: ByteArray): ByteArray {
+        val manifest = ZipInputStream(ByteArrayInputStream(artifacts)).use { zin ->
+            zin.nextEntry
+            zin.readBytes()
+        }
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zos ->
+            zos.putNextEntry(ZipEntry(ArtifactsCodec.MANIFEST_ENTRY))
+            zos.write(manifest)
+            zos.closeEntry()
+            zos.putNextEntry(ZipEntry(ArtifactsCodec.ENTRY_PREFIX + "stranger.bin"))
+            zos.write(ByteArray(8))
+            zos.closeEntry()
+        }
+        return out.toByteArray()
     }
 
     /**
@@ -337,6 +409,7 @@ class BackupViewModelTest {
             sink.deleted,
         )
         assertNull(graph.prefs.lastBackupAt)
+        assertNull(vm.state.value.lastBackupAt)
 
         val said = async(Dispatchers.Main) { vm.messages.first() }
         vm.exportSetTo(RecordingSink())
@@ -362,6 +435,29 @@ class BackupViewModelTest {
             listOf(BackupSetNames.artifacts(stamp), BackupSetNames.data(stamp)),
             sink.deleted,
         )
+        assertNull(graph.prefs.lastBackupAt)
+        assertNull(vm.state.value.lastBackupAt)
+    }
+
+    @Test fun cancellingMidExportStillTakesBothFilesBack() = runTest {
+        val pump = graph.createAsset.run("Pool pump", "Water")
+        addFile(pump.id)
+        graph.now = 7_000L
+        val vm = viewModel()
+        val sink = SuspendingSink(holdOnPrefix = "noteNFC-artifacts")
+
+        val export = launch(Dispatchers.Main) { vm.exportSet(sink) }
+        sink.holding.await()            // the data file is written and the artifacts one is open
+        export.cancelAndJoin()
+
+        val stamp = BackupSetNames.stamp(7_000L)
+        // The sink dropped the artifacts document it had created; the export's own cleanup ran
+        // under `NonCancellable`, which is the only way it could reach a suspending `delete`.
+        assertEquals(
+            listOf(BackupSetNames.artifacts(stamp), BackupSetNames.data(stamp)),
+            sink.deleted,
+        )
+        assertEquals(emptyList<String>(), sink.files.keys.toList())
         assertNull(graph.prefs.lastBackupAt)
         assertNull(vm.state.value.lastBackupAt)
     }
@@ -480,6 +576,32 @@ class BackupViewModelTest {
         vm.restoreFilesFrom(MemoryIO(artifacts))
 
         assertEquals("Choose an attachment folder in Settings first", said.await())
+        assertTrue(graph.attachmentStorage.store.files.isEmpty())
+    }
+
+    @Test fun aDamagedFilesArchiveSaysWhatItDidNotCarryAndWhatItCarriedUnasked() = runTest {
+        val pump = graph.createAsset.run("Pool pump", "Water")
+        addFile(pump.id)
+        graph.now = 7_000L
+        val vm = viewModel()
+        val sink = RecordingSink()
+        vm.exportSet(sink).getOrThrow()
+        val stamp = BackupSetNames.stamp(7_000L)
+
+        graph.attachmentStorage.store.files.clear()
+        vm.restoreData(MemoryIO(sink.files.getValue(BackupSetNames.data(stamp)))).getOrThrow()
+
+        val damaged = damagedArtifacts(sink.files.getValue(BackupSetNames.artifacts(stamp)))
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+        vm.restoreFilesFrom(MemoryIO(damaged))
+
+        // Restored 0 and skipped 0 on their own would read as a clean restore of nothing.
+        assertEquals(
+            "Restored 0 files, skipped 0" +
+                "; 1 listed files were not in the archive" +
+                "; 1 files in the archive were not listed",
+            said.await(),
+        )
         assertTrue(graph.attachmentStorage.store.files.isEmpty())
     }
 

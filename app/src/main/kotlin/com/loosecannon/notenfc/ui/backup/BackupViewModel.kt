@@ -21,6 +21,7 @@ import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.prefs.AppPrefs
 import java.io.OutputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** A destination for one export: two named files, and a way to take one back. */
 interface BackupSetSink {
@@ -108,10 +110,17 @@ class BackupViewModel(
                 throw BackupSetIncomplete(written.missing, written.mismatched)
             }
         } catch (t: Throwable) {
+            // [NonCancellable] because the failure being handled is often a cancellation, and a
+            // sink's `delete` suspends: on an already-cancelled coroutine it would throw before
+            // doing anything and leave the data archive behind — the one thing the invariant
+            // forbids. Each delete stands alone, so one that fails cannot stop the other.
+            //
             // The SAF sink already removed a partial artifacts document; deleting a handle it
             // never returned cannot happen, and deleting one it did is harmless.
-            artifactsHandle?.let { sink.delete(it) }
-            sink.delete(dataHandle)
+            withContext(NonCancellable) {
+                artifactsHandle?.let { handle -> runCatching { sink.delete(handle) } }
+                runCatching { sink.delete(dataHandle) }
+            }
             // Past the data write, the owner's news is the same whatever failed down here: the
             // second half did not happen and the first half is gone again. The completeness
             // ruling keeps its own wording, and a cancellation is not a failure at all.
@@ -148,10 +157,7 @@ class BackupViewModel(
     }
 
     fun restoreFilesFrom(io: BackupIO) = once {
-        restoreFiles(io).fold(
-            { "Restored ${it.restored} files, skipped ${it.skipped}" },
-            ::filesReason,
-        )
+        restoreFiles(io).fold(::restoredFilesLine, ::filesReason)
     }
 
     /**
@@ -183,6 +189,22 @@ class BackupViewModel(
                 ""
             }
 
+    /**
+     * Restored and skipped, and then the archive's own damage if it had any: entries the manifest
+     * promised and the file did not carry (those rows are still without bytes), and bytes the
+     * manifest never named. Reporting only the first two numbers would call a damaged archive a
+     * clean restore.
+     */
+    private fun restoredFilesLine(report: ArtifactsReport): String = buildString {
+        append("Restored ${report.restored} files, skipped ${report.skipped}")
+        if (report.missingEntries.isNotEmpty()) {
+            append("; ${report.missingEntries.size} listed files were not in the archive")
+        }
+        if (report.unexpectedEntries.isNotEmpty()) {
+            append("; ${report.unexpectedEntries.size} files in the archive were not listed")
+        }
+    }
+
     private fun exportReason(error: Throwable): String = when (error) {
         is BackupSetIncomplete -> "Backup not saved: " + error.wording()
         is ArtifactsWriteFailed ->
@@ -206,7 +228,12 @@ class BackupViewModel(
     }
 }
 
-/** "1 attachment file is missing", "2 attachment files have changed since they were added". */
+/**
+ * "1 attachment file is missing", "2 attachment files have changed since they were added".
+ *
+ * The fallback is for the count-and-total half of `covers`: a write can fall short of the plan
+ * with both lists empty, and "Backup not saved: " with nothing after it is not a sentence.
+ */
 private fun BackupSetIncomplete.wording(): String = listOfNotNull(
     missing.size.takeIf { it > 0 }?.let { n ->
         "$n attachment ${if (n == 1) "file is" else "files are"} missing"
@@ -215,7 +242,7 @@ private fun BackupSetIncomplete.wording(): String = listOfNotNull(
         "$n attachment ${if (n == 1) "file has" else "files have"} changed since " +
             if (n == 1) "it was added" else "they were added"
     },
-).joinToString(" and ")
+).joinToString(" and ").ifEmpty { "the file archive did not cover every attachment" }
 
 /**
  * `runCatching` catches everything, including the cancellation a cleared ViewModel throws at its

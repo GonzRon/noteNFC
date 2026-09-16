@@ -206,11 +206,13 @@ class AppSmokeTest {
         rule.onNodeWithText("Export now").performClick()
 
         rule.awaitText("Export backup set")
-        rule.onNodeWithText("Export backup set").assertIsDisplayed()
-        rule.onNodeWithText("Restore data").assertIsDisplayed()
-        rule.onNodeWithText("Restore files").assertIsDisplayed()
+        // Three actions on a scrolling column now, so each one is scrolled to before it is asked
+        // whether it is on screen.
+        rule.onNodeWithText("Export backup set").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Restore data").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Restore files").performScrollTo().assertIsDisplayed()
         // "Last backup: Never" — the screen agrees with the nudge that sent us here.
-        rule.onNodeWithText("Never").assertIsDisplayed()
+        rule.onNodeWithText("Never").performScrollTo().assertIsDisplayed()
     }
 }
 

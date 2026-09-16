@@ -125,9 +125,15 @@ fun SettingsScreen(
                 stored?.takeIf { it != picked.toString() }?.let { old ->
                     runCatching { resolver.releasePersistableUriPermission(old.toUri(), flags) }
                 }
-                resolver.takePersistableUriPermission(picked, flags)
-                prefs.attachmentTreeUri = picked.toString()
-                store = graph.attachmentStorage.state()
+                // A provider that will not give a lasting grant (some cloud ones will not) throws
+                // here, inside an activity-result callback, where an escaping exception is a
+                // crash. The pref is only written once the grant is really ours.
+                if (runCatching { resolver.takePersistableUriPermission(picked, flags) }.isFailure) {
+                    scope.launch { snackbars.showSnackbar("Could not keep access to that folder") }
+                } else {
+                    prefs.attachmentTreeUri = picked.toString()
+                    store = graph.attachmentStorage.state()
+                }
             }
         }
     }
