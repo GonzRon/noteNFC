@@ -9,6 +9,9 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.loosecannon.notenfc.core.model.AttachmentKind
 import com.loosecannon.notenfc.core.model.AttachmentLocator
 import com.loosecannon.notenfc.core.model.AttachmentOwner
+import com.loosecannon.notenfc.core.ports.StoreIoException
+import com.loosecannon.notenfc.core.ports.AttachmentStore
+import com.loosecannon.notenfc.core.ports.AttachmentStorage
 import com.loosecannon.notenfc.core.model.EventKind
 import com.loosecannon.notenfc.core.ports.ByteSource
 import com.loosecannon.notenfc.core.ports.StoreState
@@ -92,11 +95,12 @@ class AttachmentsSectionViewModelTest {
         today: () -> String = { "2026-09-16" },
         updateAttachment: UpdateAttachment = graph.updateAttachment,
         deleteAttachment: DeleteAttachment = graph.deleteAttachment,
+        storage: AttachmentStorage = graph.attachmentStorage,
     ): AttachmentsSectionViewModel {
         val factory = viewModelFactory {
             initializer {
                 AttachmentsSectionViewModel(
-                    owner, graph.attachments, graph.attachmentStorage, graph.addAttachment,
+                    owner, graph.attachments, storage, graph.addAttachment,
                     updateAttachment, deleteAttachment, graph.thumbnails,
                     today = today,
                 )
@@ -167,6 +171,29 @@ class AttachmentsSectionViewModelTest {
         )
         assertEquals(listOf(true, true), state.rows.map { it.present })
         assertNull(state.progress)
+    }
+
+    @Test fun aScanThatCannotReachTheFolderSaysSoAndKeepsTheRowsAndTheCollectorAlive() = runTest {
+        // Seed one row through a healthy model, drop that model (the provider caches by owner),
+        // then watch the same owner through a storage whose presence check throws: the row
+        // stays, the section says so, and once the store behaves a refresh recovers — so the
+        // collector did not die with the first failed pass.
+        val healthy = model()
+        backgroundScope.launch { healthy.state.collect() }
+        healthy.add(listOf(picked("Guide.pdf")))
+        healthy.state.first { it.rows.size == 1 }
+        store.clear()
+
+        val flaky = FlakyExistsStorage(graph.attachmentStorage)
+        val vm = model(storage = flaky)
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+        backgroundScope.launch { vm.state.collect() }
+        assertEquals(SCAN_FAILED, said.await())
+        assertEquals("Guide.pdf", vm.state.first { it.rows.size == 1 }.rows.single().displayName)
+
+        flaky.healthy = true
+        vm.refreshStore()
+        assertEquals(true, vm.state.first { it.rows.singleOrNull()?.present == true }.rows.single().present)
     }
 
     @Test fun theProgressLineNamesTheFileNumberAndTheTotal() {
@@ -451,5 +478,19 @@ class AttachmentsSectionViewModelTest {
         val row = vm.state.first { it.rows.size == 1 }.rows.single()
         assertEquals(AttachmentKind.PHOTO, row.kind)
         assertFalse(row.isImage)
+    }
+
+    /** A storage whose store answers `exists` with an IO failure until told to behave. */
+    private class FlakyExistsStorage(private val real: AttachmentStorage) : AttachmentStorage {
+        @Volatile var healthy = false
+        override fun state() = real.state()
+        override fun store(): AttachmentStore? = real.store()?.let { inner ->
+            object : AttachmentStore by inner {
+                override suspend fun exists(locator: String): Boolean {
+                    if (!healthy) throw StoreIoException("rigged presence failure")
+                    return inner.exists(locator)
+                }
+            }
+        }
     }
 }
