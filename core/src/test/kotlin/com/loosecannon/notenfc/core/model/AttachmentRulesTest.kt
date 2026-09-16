@@ -1,0 +1,80 @@
+package com.loosecannon.notenfc.core.model
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class AttachmentRulesTest {
+
+    private val id = AttachmentId("att-1")
+    private val ofAsset = AttachmentOwner.OfAsset(AssetId("a1"))
+    private val ofEvent = AttachmentOwner.OfEvent(EventId("e1"))
+
+    @Test fun locatorUsesTheOwnerDirectoryAndTheAttachmentId() {
+        assertEquals(
+            "assets/a1/att-1.pdf",
+            AttachmentLocator.forOwner(ofAsset, id, "Owners Manual.pdf", "application/pdf"),
+        )
+        assertEquals(
+            "events/e1/att-1.jpg",
+            AttachmentLocator.forOwner(ofEvent, id, "IMG_0042.JPG", "image/jpeg"),
+        )
+        // the display name is never in the path (privacy, and a rename must not move bytes)
+        assertFalse("Manual" in AttachmentLocator.forOwner(ofAsset, id, "Manual.pdf", "application/pdf"))
+    }
+
+    @Test fun theExtensionComesFromTheNameThenTheMimeTypeThenBin() {
+        assertEquals("docx", AttachmentLocator.extension("Chemistry.docx", "application/pdf"))
+        // a name with no usable extension falls through to the mime table
+        assertEquals("pdf", AttachmentLocator.extension("scan", "application/pdf"))
+        assertEquals("jpg", AttachmentLocator.extension("photo", "image/jpeg"))
+        // nine characters, or anything that is not [a-z0-9], is not an extension
+        assertEquals("bin", AttachmentLocator.extension("thing.abcdefghi", "application/unknown"))
+        assertEquals("bin", AttachmentLocator.extension("thing.tar gz", "application/unknown"))
+        assertEquals("bin", AttachmentLocator.extension("noextension", "application/unknown"))
+    }
+
+    @Test fun mimeTypesKnowsTheSevenExtensionsAndTheFourCompressedTypes() {
+        assertEquals("zip", MimeTypes.extensionFor("application/zip"))
+        assertEquals("txt", MimeTypes.extensionFor("text/plain"))
+        assertEquals("xlsx", MimeTypes.extensionFor(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ))
+        assertEquals("jpg", MimeTypes.extensionFor("IMAGE/JPEG; charset=binary"))
+        assertNull(MimeTypes.extensionFor("application/x-nothing"))
+        assertTrue(MimeTypes.isCompressed("application/pdf"))
+        assertTrue(MimeTypes.isCompressed("image/png"))
+        assertFalse(MimeTypes.isCompressed("text/plain"))
+        assertEquals("application/octet-stream", MimeTypes.normalise("  "))
+    }
+
+    @Test fun locatorShapeIsCheckedAgainstItsOwnerAndId() {
+        assertTrue(AttachmentLocator.matchesShape("assets/a1/att-1.pdf", ofAsset, id))
+        assertTrue(AttachmentLocator.matchesShape("events/e1/att-1.bin", ofEvent, id))
+        assertFalse(AttachmentLocator.matchesShape("assets/a1/att-1.pdf", ofEvent, id))
+        assertFalse(AttachmentLocator.matchesShape("assets/a2/att-1.pdf", ofAsset, id))
+        assertFalse(AttachmentLocator.matchesShape("assets/a1/other.pdf", ofAsset, id))
+        assertFalse(AttachmentLocator.matchesShape("assets/a1/att-1", ofAsset, id))
+        assertFalse(AttachmentLocator.matchesShape("../assets/a1/att-1.pdf", ofAsset, id))
+    }
+
+    @Test fun kindIsInferredAndIsOnlyADefault() {
+        assertEquals(AttachmentKind.PHOTO, AttachmentKinds.inferFrom("application/pdf", fromCamera = true))
+        assertEquals(AttachmentKind.PHOTO, AttachmentKinds.inferFrom("image/heic", fromCamera = false))
+        assertEquals(AttachmentKind.DOCUMENT, AttachmentKinds.inferFrom("application/pdf", fromCamera = false))
+        assertEquals(AttachmentKind.OTHER, AttachmentKinds.inferFrom("application/zip", fromCamera = false))
+    }
+
+    @Test fun isImageIsTheOnlyThingTheThumbnailPathAsks() {
+        val row = Attachment(
+            id = id, owner = ofAsset, kind = AttachmentKind.PHOTO, displayName = "a.jpg",
+            mimeType = "image/jpeg", sizeBytes = 10L, sha256 = "0".repeat(64),
+            storageLocator = "assets/a1/att-1.jpg", capturedOn = null, createdAt = 1L, updatedAt = 1L,
+        )
+        assertTrue(row.isImage)
+        assertFalse(row.copy(mimeType = "application/pdf").isImage)
+        assertEquals(268_435_456L, MAX_ATTACHMENT_BYTES)
+    }
+}
