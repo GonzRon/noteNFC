@@ -1,11 +1,13 @@
 package com.loosecannon.servicetag.nfc
 
+import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
+import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.UuidGenerator
@@ -27,6 +29,18 @@ import org.junit.Test
 /** The Phase 1B use cases against the real schema: unique (format,key) lookup, FK targets, cleanup. */
 class TagUseCasesRoomTest {
 
+    /**
+     * This file builds its repositories by hand rather than through `FakeGraph`, so it builds the
+     * codec the same way the app does: from the Gradle-owned BuildConfig fields (C9).
+     */
+    private val ndefCodec = NdefCodec(
+        TagIdentity(
+            externalDomain = BuildConfig.NDEF_EXTERNAL_DOMAIN,
+            typeName = BuildConfig.NDEF_TYPE_NAME,
+            aarPackage = BuildConfig.NDEF_AAR_PACKAGE,
+        ),
+    )
+
     @Test
     fun provisionWriteScanResolvesThroughRoom() = runTest {
         val db = inMemoryDb()
@@ -41,7 +55,7 @@ class TagUseCasesRoomTest {
 
             uow.write { assets.upsert(Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)) }
             val row = provision.begin(TagTarget.AssetTarget(AssetId("a1")), "lid")
-            val onTag = NdefCodec.decode(NdefCodec.encodeV1(row.id))   // what the phone will read back
+            val onTag = ndefCodec.decode(ndefCodec.encodeV1(row.id))   // what the phone will read back
             provision.complete(row.id, "04aabbcc")
 
             val r = resolve.run(onTag)

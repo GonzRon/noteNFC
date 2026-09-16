@@ -47,7 +47,7 @@ object TagWriter {
      * @throws java.io.IOException (including `android.nfc.TagLostException`) when the tag leaves
      * the field or I/O fails mid-read; callers run this off the main thread inside a try/catch.
      */
-    fun inspect(tag: Tag): TagInspection? {
+    fun inspect(tag: Tag, codec: NdefCodec): TagInspection? {
         val uid = tag.id.toHexOrNull()
         Ndef.get(tag)?.let { ndef ->
             return try {
@@ -57,7 +57,7 @@ object TagWriter {
                 } catch (e: FormatException) {
                     return TagInspection(uid, TagPayload.Malformed("NDEF on tag could not be parsed"), emptyList(), ndef.maxSize, ndef.isWritable, false, ndef.canMakeReadOnly())
                 }
-                TagInspection(uid, NdefCodec.decode(records), records, ndef.maxSize, ndef.isWritable, needsFormat = false, canLock = ndef.canMakeReadOnly())
+                TagInspection(uid, codec.decode(records), records, ndef.maxSize, ndef.isWritable, needsFormat = false, canLock = ndef.canMakeReadOnly())
             } finally {
                 runCatching { ndef.close() }
             }

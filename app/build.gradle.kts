@@ -13,6 +13,13 @@ val keystoreProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// The single source of truth for this app's tag identity (C9, target §4.8). It produces the
+// manifest filter path AND the BuildConfig fields the app builds its TagIdentity from, so the
+// two cannot drift. android:path stays an EXACT match, never pathPrefix.
+val tagExternalDomain = "com.loosecannon.servicetag"   // NFC Forum external-type domain
+val tagTypeName = "tag"
+val tagAarPackage: String? = "com.loosecannon.servicetag"  // null would mean "no AAR" (O13/P21)
+
 android {
     namespace = "com.loosecannon.servicetag"
     compileSdk = 37
@@ -24,6 +31,11 @@ android {
         versionCode = 7
         versionName = "2.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders["ndefTagPath"] = "/$tagExternalDomain:$tagTypeName"
+        buildConfigField("String", "NDEF_EXTERNAL_DOMAIN", "\"$tagExternalDomain\"")
+        buildConfigField("String", "NDEF_TYPE_NAME", "\"$tagTypeName\"")
+        buildConfigField("String", "NDEF_AAR_PACKAGE", tagAarPackage?.let { "\"$it\"" } ?: "null")
     }
 
     signingConfigs {

@@ -35,7 +35,6 @@ class ResolveTag(
 ) {
     suspend fun run(payload: TagPayload): Resolution = when (payload) {
         is TagPayload.V1 -> known(PayloadFormat.V1, payload.tagId.value) ?: Resolution.UnknownV1(payload.tagId)
-        is TagPayload.LegacyMd5 -> known(PayloadFormat.LEGACY_MD5, payload.key) ?: Resolution.UnknownLegacy(payload.key)
         is TagPayload.NewerVersion -> Resolution.NeedsNewerApp(payload.version)
         is TagPayload.Foreign, is TagPayload.Malformed, TagPayload.Empty -> Resolution.NotOurs(payload)
     }

@@ -9,7 +9,6 @@ import android.widget.Toast
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.NoteNfcApp
 import com.loosecannon.servicetag.core.model.ExternalLink
-import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.nfc.TagRoute
 import com.loosecannon.servicetag.core.usecase.OpenLink
@@ -75,7 +74,7 @@ class NfcDispatchActivity : Activity() {
     }
 
     private fun payloadOf(intent: Intent): TagPayload? = when (intent.action) {
-        NfcAdapter.ACTION_NDEF_DISCOVERED -> NdefCodec.decode(intent.ndefRecords().orEmpty())
+        NfcAdapter.ACTION_NDEF_DISCOVERED -> graph.ndefCodec.decode(intent.ndefRecords().orEmpty())
         Intent.ACTION_VIEW -> tagRoute(intent.data)
         else -> null
     }

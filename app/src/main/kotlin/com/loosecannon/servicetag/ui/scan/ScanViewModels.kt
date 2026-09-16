@@ -87,7 +87,7 @@ class ScanViewModel(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.resolveTag, graph.openLink, RealTagIo)
+    constructor(graph: AppGraph) : this(graph.resolveTag, graph.openLink, RealTagIo(graph.ndefCodec))
 
     private val _state = MutableStateFlow(ScanState())
     val state: StateFlow<ScanState> = _state.asStateFlow()
@@ -270,7 +270,7 @@ class WriteTagViewModel(
         graph.links,
         target,
         label,
-        { scope -> TagWriteController(graph, RealTagIo, target, label, scope) },
+        { scope -> TagWriteController(graph, RealTagIo(graph.ndefCodec), target, label, scope) },
     )
 
     private val controller: TagWriteController = controllerFor(viewModelScope)

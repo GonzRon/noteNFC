@@ -49,8 +49,8 @@ class ResolveTagTest {
     }
     @Test fun boundToALinkLaunchesIt() = runTest {
         links.rows["l1"] = link
-        tags.rows["t1"] = row("t1", PayloadFormat.LEGACY_MD5, "63b37acf", TagTarget.LinkTarget(LinkId("l1")))
-        val r = resolve.run(TagPayload.LegacyMd5("63b37acf"))
+        tags.rows[v1Id.value] = row(v1Id.value, PayloadFormat.V1, v1Id.value, TagTarget.LinkTarget(LinkId("l1")))
+        val r = resolve.run(TagPayload.V1(v1Id))
         assertIs<Resolution.LaunchLink>(r)
         assertEquals(link, r.link)
     }
@@ -74,7 +74,7 @@ class ResolveTagTest {
     }
     @Test fun unknownV1AndLegacyAreDistinct() = runTest {
         assertEquals(Resolution.UnknownV1(v1Id), resolve.run(TagPayload.V1(v1Id)))
-        assertEquals(Resolution.UnknownLegacy("63b37acf"), resolve.run(TagPayload.LegacyMd5("63b37acf")))
+        // the legacy half of this claim goes with Resolution.UnknownLegacy, in task 6
         assertTrue(tags.rows.isEmpty())
     }
     @Test fun lookupIsByFormatAndKeyNotById() = runTest {

@@ -54,8 +54,8 @@ interface TagIo {
 }
 
 /** [TagWriter] behind the seam; the only place an `android.nfc.Tag` comes back out of a handle. */
-object RealTagIo : TagIo {
-    override fun inspect(tag: TagHandle): TagInspection? = TagWriter.inspect(tag.nfc())
+class RealTagIo(private val codec: NdefCodec) : TagIo {
+    override fun inspect(tag: TagHandle): TagInspection? = TagWriter.inspect(tag.nfc(), codec)
     override fun write(tag: TagHandle, records: List<NdefRecordData>, lock: Boolean): WriteResult =
         TagWriter.write(tag.nfc(), records, lock)
     override fun lock(tag: TagHandle): Boolean = TagWriter.lock(tag.nfc())
@@ -92,13 +92,14 @@ class TagWriteController(
     /** Outlives the screen: abandoning a row must finish even though the screen is going away. */
     private val appScope: CoroutineScope,
     private val io: TagIo,
+    private val codec: NdefCodec,
     private val target: TagTarget,
     private val label: String?,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     constructor(graph: AppGraph, io: TagIo, target: TagTarget, label: String?, scope: CoroutineScope) :
-        this(graph.provisionTag, graph.appScope, io, target, label, scope)
+        this(graph.provisionTag, graph.appScope, io, graph.ndefCodec, target, label, scope)
 
     private val _state = MutableStateFlow<WriteState>(InitialState)
     val state: StateFlow<WriteState> = _state.asStateFlow()
@@ -154,7 +155,7 @@ class TagWriteController(
     /** Returns true when the confirmation sheet now owns the [busy] flag. */
     private suspend fun handle(tag: TagHandle): Boolean {
         val row = pending ?: provisionTag.begin(target, label).also { pending = it }
-        val intended = NdefCodec.encodeV1(row.id)
+        val intended = codec.encodeV1(row.id)
         val inspection = withContext(ioDispatcher) { io.inspect(tag) }
         if (inspection == null) {
             _state.value = WriteState.Error("This tag does not support NDEF. Use an NTAG213/215/216 or similar.")

@@ -13,6 +13,8 @@ import com.loosecannon.servicetag.attachments.AttachmentRoot
 import com.loosecannon.servicetag.attachments.DocumentTreeRoot
 import com.loosecannon.servicetag.attachments.SafAttachmentStorage
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.core.nfc.NdefCodec
+import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -160,6 +162,18 @@ class AppGraph(private val context: Context) {
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     // Phase 1B — NFC identity
+    /**
+     * This product's wire identity, built from the Gradle-owned value and nothing else: the same
+     * three fields produce the manifest's NDEF filter path, so the filter and the bytes we write
+     * cannot drift apart (C9, target §4.8).
+     */
+    val tagIdentity: TagIdentity = TagIdentity(
+        externalDomain = BuildConfig.NDEF_EXTERNAL_DOMAIN,
+        typeName = BuildConfig.NDEF_TYPE_NAME,
+        aarPackage = BuildConfig.NDEF_AAR_PACKAGE,
+    )
+    val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
+
     val resolveTag: ResolveTag = ResolveTag(tags, assets, links, uow, clock)
     val bindTag: BindTag = BindTag(tags, assets, links, uow, ids, clock)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)

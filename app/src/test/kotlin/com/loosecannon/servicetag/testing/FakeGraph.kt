@@ -1,6 +1,9 @@
 package com.loosecannon.servicetag.testing
 
+import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.core.nfc.NdefCodec
+import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock
@@ -97,6 +100,15 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
     val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
     val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
+
+    /** The same identity the app builds, read from the same BuildConfig fields (C9). */
+    val tagIdentity: TagIdentity = TagIdentity(
+        externalDomain = BuildConfig.NDEF_EXTERNAL_DOMAIN,
+        typeName = BuildConfig.NDEF_TYPE_NAME,
+        aarPackage = BuildConfig.NDEF_AAR_PACKAGE,
+    )
+    val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
+
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)

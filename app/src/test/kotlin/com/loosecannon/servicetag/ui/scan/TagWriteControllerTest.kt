@@ -1,7 +1,6 @@
 package com.loosecannon.servicetag.ui.scan
 
 import com.loosecannon.servicetag.core.model.TagTarget
-import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.NdefRecordData
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.nfc.TagInspection
@@ -51,6 +50,7 @@ class TagWriteControllerTest {
             provisionTag = graph.provisionTag,
             appScope = scope,
             io = io,
+            codec = graph.ndefCodec,
             target = target,
             label = label,
             scope = scope,
@@ -134,7 +134,7 @@ class TagWriteControllerTest {
         c.state.first { it is WriteState.Verifying }
         assertEquals("a formatted tag is never locked blind", 0, io.lockCalls)
 
-        val intended = NdefCodec.encodeV1(theRow().id)
+        val intended = graph.ndefCodec.encodeV1(theRow().id)
         io.inspection = inspection(TagPayload.V1(theRow().id), records = intended)
         c.onTag(FakeTag)
 

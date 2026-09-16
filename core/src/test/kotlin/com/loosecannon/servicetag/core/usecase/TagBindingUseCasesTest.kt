@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
+import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
@@ -28,6 +29,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TagBindingUseCasesTest {
+    /** Any identity will do here: what is under test is that a provisioned id encodes at all. */
+    private val ndefCodec = NdefCodec(TagIdentity("com.example.app", "tag", "com.example.app"))
     private val assets = InMemoryAssetRepository()
     private val tags = InMemoryTagRepository()
     private val links = InMemoryLinkRepository()
@@ -104,7 +107,7 @@ class TagBindingUseCasesTest {
         assertEquals(PayloadFormat.V1, row.payloadFormat)
         assertEquals(TagStatus.ACTIVE, row.status)
         assertNull(row.writtenAt)
-        assertEquals(2, NdefCodec.encodeV1(row.id).size)   // the id is a canonical UUID
+        assertEquals(2, ndefCodec.encodeV1(row.id).size)   // the id is a canonical UUID
         assertEquals(row, tags.rows[row.id.value])
     }
     @Test fun beginWithNoTargetIsASpare() = runTest {

@@ -19,7 +19,6 @@ object OverwritePolicy {
         is TagPayload.V1 ->
             if (existing.tagId == intended) OverwriteDecision.Proceed
             else OverwriteDecision.Confirm("a different noteNFC tag (${existing.tagId.value})")
-        is TagPayload.LegacyMd5 -> OverwriteDecision.Confirm("a legacy noteNFC tag (${existing.key})")
         is TagPayload.NewerVersion -> OverwriteDecision.Confirm("a noteNFC tag written by a newer app (format ${existing.version})")
         is TagPayload.Foreign -> OverwriteDecision.Confirm("foreign NDEF content (${existing.description})")
         is TagPayload.Malformed -> OverwriteDecision.Confirm("unreadable NDEF content (${existing.reason})")
