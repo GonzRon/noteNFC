@@ -3,6 +3,7 @@ package com.loosecannon.notenfc.data.room
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import com.loosecannon.notenfc.data.room.dao.AssetDao
+import com.loosecannon.notenfc.data.room.dao.AttachmentDao
 import com.loosecannon.notenfc.data.room.dao.DefinitionDao
 import com.loosecannon.notenfc.data.room.dao.EventDao
 import com.loosecannon.notenfc.data.room.dao.ExternalLinkDao
@@ -10,6 +11,7 @@ import com.loosecannon.notenfc.data.room.dao.NfcTagDao
 import com.loosecannon.notenfc.data.room.dao.ProfileDao
 import com.loosecannon.notenfc.data.room.entities.AssetEntity
 import com.loosecannon.notenfc.data.room.entities.AssetEventEntity
+import com.loosecannon.notenfc.data.room.entities.AttachmentEntity
 import com.loosecannon.notenfc.data.room.entities.ConsumableUsageEntity
 import com.loosecannon.notenfc.data.room.entities.EventProfileEntity
 import com.loosecannon.notenfc.data.room.entities.ExternalLinkEntity
@@ -31,8 +33,9 @@ import com.loosecannon.notenfc.data.room.entities.ProfileFieldEntity
         AssetEventEntity::class,
         MeasurementEntity::class,
         ConsumableUsageEntity::class,
+        AttachmentEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -42,4 +45,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun definitionDao(): DefinitionDao
     abstract fun profileDao(): ProfileDao
     abstract fun eventDao(): EventDao
+    abstract fun attachmentDao(): AttachmentDao
 }

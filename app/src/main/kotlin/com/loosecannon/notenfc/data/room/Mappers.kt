@@ -3,15 +3,23 @@ package com.loosecannon.notenfc.data.room
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.Attachment
+import com.loosecannon.notenfc.core.model.AttachmentId
+import com.loosecannon.notenfc.core.model.AttachmentKind
+import com.loosecannon.notenfc.core.model.AttachmentMode
+import com.loosecannon.notenfc.core.model.AttachmentOwner
+import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.LinkId
 import com.loosecannon.notenfc.core.model.LinkKind
 import com.loosecannon.notenfc.core.model.PayloadFormat
+import com.loosecannon.notenfc.core.model.StorageProvider
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.data.room.entities.AssetEntity
+import com.loosecannon.notenfc.data.room.entities.AttachmentEntity
 import com.loosecannon.notenfc.data.room.entities.ExternalLinkEntity
 import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
 
@@ -127,5 +135,55 @@ fun ExternalLink.toEntity(): ExternalLinkEntity = ExternalLinkEntity(
     uri = uri,
     createdAt = createdAt,
     lastOpenedAt = lastOpenedAt,
+    updatedAt = updatedAt,
+)
+
+/**
+ * D4 §11's exactly-one-owner rule, enforced where the row enters the table. The domain's
+ * `AttachmentOwner` already makes both-at-once unrepresentable; this guards rows built any other
+ * way, and it is the reason the schema carries no `CHECK` (spec §11.5).
+ */
+fun AttachmentEntity.requireExactlyOneOwner(): AttachmentEntity = apply {
+    require((assetId == null) != (eventId == null)) {
+        "attachment '$id' must name exactly one owner, found asset_id=$assetId event_id=$eventId"
+    }
+}
+
+fun AttachmentEntity.toDomain(): Attachment = Attachment(
+    id = AttachmentId(id),
+    owner = when {
+        assetId != null -> AttachmentOwner.OfAsset(AssetId(assetId))
+        eventId != null -> AttachmentOwner.OfEvent(EventId(eventId))
+        else -> error("attachment '$id' has no owner")
+    },
+    kind = AttachmentKind.valueOf(kind),
+    mode = AttachmentMode.valueOf(mode),
+    displayName = displayName,
+    mimeType = mimeType,
+    sizeBytes = sizeBytes,
+    sha256 = sha256,
+    storageProvider = StorageProvider.valueOf(storageProvider),
+    storageLocator = storageLocator,
+    capturedOn = capturedOn,
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun Attachment.toEntity(): AttachmentEntity = AttachmentEntity(
+    id = id.value,
+    assetId = (owner as? AttachmentOwner.OfAsset)?.assetId?.value,
+    eventId = (owner as? AttachmentOwner.OfEvent)?.eventId?.value,
+    kind = kind.name,
+    mode = mode.name,
+    displayName = displayName,
+    mimeType = mimeType,
+    sizeBytes = sizeBytes,
+    sha256 = sha256,
+    storageProvider = storageProvider.name,
+    storageLocator = storageLocator,
+    capturedOn = capturedOn,
+    notes = notes,
+    createdAt = createdAt,
     updatedAt = updatedAt,
 )
