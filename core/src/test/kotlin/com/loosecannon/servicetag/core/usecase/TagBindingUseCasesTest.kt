@@ -37,7 +37,7 @@ class TagBindingUseCasesTest {
     private var seq = 0
     private val ids = IdGenerator { "00000000-0000-4000-8000-%012d".format(++seq) }
     private val clock = Clock { 7_000L }
-    private val bind = BindTag(tags, assets, links, uow, ids, clock)
+    private val bind = BindTag(tags, assets, links, uow, clock)
     private val provision = ProvisionTag(tags, assets, links, uow, ids, clock)
     private val defs = InMemoryDefinitionRepository()
     private val profiles = InMemoryProfileRepository()

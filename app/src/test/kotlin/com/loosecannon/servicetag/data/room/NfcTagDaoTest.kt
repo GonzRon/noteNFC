@@ -75,8 +75,9 @@ class NfcTagDaoTest {
         val db = inMemoryDb()
         try {
             val dao = db.nfcTagDao()
-            // The column pair is the unique key, and the DAO stores the format as an opaque
-            // string: a format this app does not write yet shares the key space without clashing.
+            // The column pair is the unique key. "V2" is a stand-in the mapper cannot read by
+            // design — PayloadFormat.valueOf("V2") throws — so it never leaves the DAO, which
+            // stores the format as an opaque string.
             dao.upsert(tag(id = "t1", format = "V1", key = "11111111-1111-4111-8111-111111111111"))
             dao.upsert(tag(id = "t2", format = "V2", key = "11111111-1111-4111-8111-111111111111"))
             assertEquals(2, dao.all().size)

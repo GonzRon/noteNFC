@@ -8,7 +8,6 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
-import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
@@ -23,19 +22,18 @@ class BindTag(
     private val assets: AssetRepository,
     private val links: LinkRepository,
     private val uow: UnitOfWork,
-    private val ids: IdGenerator,
     private val clock: Clock,
 ) {
     suspend fun run(format: PayloadFormat, key: String, target: TagTarget, label: String? = null): TagBinding {
         require(target != TagTarget.None) { "bind needs an asset or a link" }
-        if (format == PayloadFormat.V1) NdefCodec.requireCanonicalUuid(TagId(key))
+        NdefCodec.requireCanonicalUuid(TagId(key))
         return uow.write {
             requireTargetExists(target, assets, links)
             val now = clock.nowMillis()
             val existing = tags.findByPayload(format, key)
             val bound = existing?.copy(target = target, status = TagStatus.ACTIVE, label = label ?: existing.label, updatedAt = now)
                 ?: TagBinding(
-                    id = TagId(if (format == PayloadFormat.V1) key else ids.newId()),
+                    id = TagId(key),
                     payloadFormat = format,
                     payloadKey = key,
                     target = target,

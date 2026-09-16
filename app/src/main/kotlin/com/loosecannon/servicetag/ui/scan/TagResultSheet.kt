@@ -42,7 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
@@ -156,7 +155,7 @@ fun TagResultSheet(
                 border = NoteNfcTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
                 sentence = "This noteNFC tag is not in this phone's records.",
-                identifier = identityLine(PayloadFormat.V1.name, result.tagId),
+                identifier = identityLine(result.tagId),
                 problem = problem,
                 actions = {
                     FilledAction("Bind to asset or note") { picking = true }

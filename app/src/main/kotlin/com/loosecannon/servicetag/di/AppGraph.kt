@@ -175,7 +175,7 @@ class AppGraph(private val context: Context) {
     val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
 
     val resolveTag: ResolveTag = ResolveTag(tags, assets, links, uow, clock)
-    val bindTag: BindTag = BindTag(tags, assets, links, uow, ids, clock)
+    val bindTag: BindTag = BindTag(tags, assets, links, uow, clock)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)

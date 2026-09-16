@@ -306,7 +306,7 @@ fun TagBinding.identityLine(): String =
     "${id.value.take(8)} · v1"
 
 /** The same line for a tag that has no row yet. */
-fun identityLine(format: String, key: String): String =
+fun identityLine(key: String): String =
     "${key.take(8)} · v1"
 
 /** The honest name for a target that has none: a spare tag is bound on its first scan. */
