@@ -346,7 +346,7 @@ adb devices                        # exactly one emulator-* line, and no physica
 adb shell am start -W -n com.loosecannon.servicetag/com.loosecannon.servicetag.MainActivity
 ```
 
-Expected: `Status: ok` and `LaunchState: COLD`, no `ActivityNotFoundException`, no crash dialog. **If a phone is attached, stop and unplug it before any `adb` command in this plan.**
+Expected: `Status: ok` and `LaunchState: COLD`, no `ActivityNotFoundException`, no crash dialog. **If a phone is attached, pin every adb and gradle command to `ANDROID_SERIAL=emulator-5554` / `-s emulator-5554` and never address the phone's serial.**
 
 - [ ] **Step 5: Run the gate**
 
@@ -2109,7 +2109,7 @@ export ANDROID_SERIAL=emulator-5554
 adb devices
 ```
 
-Expected: exactly one `emulator-5554  device` line **and no physical device**. If a phone is listed, stop and unplug it: the suite wipes app data and the phone holds the owner's real journal.
+Expected: exactly one `emulator-5554  device` line **and no physical device**. If a phone is listed, pin every adb and gradle command to `ANDROID_SERIAL=emulator-5554` / `-s emulator-5554` and never address the phone's serial.
 
 Run: `ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain`
 Expected: PASS — `AppSmokeTest`, `DeepLinkSmokeTest`, `NavigationSmokeTest`, `JournalSmokeTest`, `ComponentsSmokeTest`, `EditorsDeviceProofTest`, `JournalDeviceProofTest`, `AssetModelDeviceProofTest`, `AttachmentsDeviceProofTest`, `SafTreeAttachmentStoreContractTest`, and the new `TagIdentityDispatchTest`. The deep-link tests now drive `servicetag://`, and the label assertions now read `ServiceTag`.
