@@ -5,7 +5,6 @@ import com.loosecannon.servicetag.core.nfc.TagIdentity
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 
 /**
@@ -58,7 +57,6 @@ class TagIdentityBindingTest {
     }
 
     /** Exactly one NDEF_DISCOVERED filter, and exactly one place that defines the placeholder. */
-    @Ignore("two filters until task 6 drops md5_short")
     @Test fun oneFilterAndOneDefinition() {
         assertEquals(
             "one NDEF_DISCOVERED filter", 1,

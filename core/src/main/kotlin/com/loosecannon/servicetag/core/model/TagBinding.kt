@@ -1,6 +1,6 @@
 package com.loosecannon.servicetag.core.model
 
-enum class PayloadFormat { LEGACY_MD5, V1 }
+enum class PayloadFormat { V1 }
 
 enum class TagStatus { ACTIVE, UNBOUND, LOST, RETIRED }
 

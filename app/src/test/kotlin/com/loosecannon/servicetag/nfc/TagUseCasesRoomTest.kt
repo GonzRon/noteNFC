@@ -3,15 +3,11 @@ package com.loosecannon.servicetag.nfc
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.PayloadFormat
-import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.TagIdentity
-import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.UuidGenerator
-import com.loosecannon.servicetag.core.usecase.BindTag
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.Resolution
@@ -85,34 +81,6 @@ class TagUseCasesRoomTest {
             provision.abandon(written.id)
             assertNull(tags.get(spare.id))
             assertEquals(written, tags.get(written.id))
-        } finally {
-            db.close()
-        }
-    }
-
-    @Test
-    fun bindingAnUnknownLegacyTagThenRescanningFindsIt() = runTest {
-        val db = inMemoryDb()
-        try {
-            val assets = RoomAssetRepository(db.assetDao())
-            val tags = RoomTagRepository(db.nfcTagDao())
-            val links = RoomLinkRepository(db.externalLinkDao())
-            val uow = RoomUnitOfWork(db)
-            val bind = BindTag(tags, assets, links, uow, UuidGenerator, Clock { 42L })
-            val resolve = ResolveTag(tags, assets, links, uow, Clock { 43L })
-            uow.write { assets.upsert(Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)) }
-
-            assertEquals(Resolution.UnknownLegacy("63b37acf"), resolve.run(TagPayload.LegacyMd5("63b37acf")))
-            val row = bind.run(PayloadFormat.LEGACY_MD5, "63b37acf", TagTarget.AssetTarget(AssetId("a1")))
-            assertEquals(TagStatus.ACTIVE, row.status)
-            val r = resolve.run(TagPayload.LegacyMd5("63b37acf"))
-            assertTrue(r.toString(), r is Resolution.OpenAsset)
-            r as Resolution.OpenAsset
-            assertEquals(43L, r.tag.lastScannedAt)
-            // binding again retargets the same row: still exactly one row for this payload
-            bind.run(PayloadFormat.LEGACY_MD5, "63b37acf", TagTarget.AssetTarget(AssetId("a1")), label = "old sticker")
-            assertEquals(1, tags.all().size)
-            assertEquals("old sticker", tags.all().single().label)
         } finally {
             db.close()
         }

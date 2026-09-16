@@ -72,15 +72,14 @@ class ResolveTagTest {
         tags.rows[v1Id.value] = row(v1Id.value, PayloadFormat.V1, v1Id.value, TagTarget.AssetTarget(AssetId("gone")))
         assertIs<Resolution.Unbound>(resolve.run(TagPayload.V1(v1Id)))
     }
-    @Test fun unknownV1AndLegacyAreDistinct() = runTest {
+    @Test fun unknownV1ScanResolvesUnknownV1WithoutTouchingTheStore() = runTest {
         assertEquals(Resolution.UnknownV1(v1Id), resolve.run(TagPayload.V1(v1Id)))
-        // the legacy half of this claim goes with Resolution.UnknownLegacy, in task 6
         assertTrue(tags.rows.isEmpty())
     }
-    @Test fun lookupIsByFormatAndKeyNotById() = runTest {
-        // a LEGACY row whose payload key happens to equal a v1 id string must not resolve a v1 scan
-        tags.rows["t9"] = row("t9", PayloadFormat.LEGACY_MD5, v1Id.value, TagTarget.None)
-        assertEquals(Resolution.UnknownV1(v1Id), resolve.run(TagPayload.V1(v1Id)))
+    @Test fun lookupIsByPayloadKeyNotByRowId() = runTest {
+        // the row id is "t9"; the scan only ever matches on the payload key it carries
+        tags.rows["t9"] = row("t9", PayloadFormat.V1, v1Id.value, TagTarget.None)
+        assertIs<Resolution.Unbound>(resolve.run(TagPayload.V1(v1Id)))
     }
     @Test fun newerVersionAndForeignContentNeverTouchTheStore() = runTest {
         assertEquals(Resolution.NeedsNewerApp(3), resolve.run(TagPayload.NewerVersion(3)))

@@ -53,9 +53,9 @@ class NfcTagDaoTest {
         val db = inMemoryDb()
         try {
             val dao = db.nfcTagDao()
-            dao.upsert(tag(id = "t1", format = "LEGACY_MD5", key = "deadbeef"))
+            dao.upsert(tag(id = "t1", format = "V1", key = "11111111-1111-4111-8111-111111111111"))
             try {
-                dao.upsert(tag(id = "t2", format = "LEGACY_MD5", key = "deadbeef"))
+                dao.upsert(tag(id = "t2", format = "V1", key = "11111111-1111-4111-8111-111111111111"))
                 fail("expected a UNIQUE constraint violation on (payload_format, payload_key)")
             } catch (e: Exception) {
                 // The driver reports this as androidx.sqlite.SQLiteException, which on Android is a
@@ -75,8 +75,10 @@ class NfcTagDaoTest {
         val db = inMemoryDb()
         try {
             val dao = db.nfcTagDao()
-            dao.upsert(tag(id = "t1", format = "LEGACY_MD5", key = "deadbeef"))
-            dao.upsert(tag(id = "t2", format = "V1", key = "deadbeef"))
+            // The column pair is the unique key, and the DAO stores the format as an opaque
+            // string: a format this app does not write yet shares the key space without clashing.
+            dao.upsert(tag(id = "t1", format = "V1", key = "11111111-1111-4111-8111-111111111111"))
+            dao.upsert(tag(id = "t2", format = "V2", key = "11111111-1111-4111-8111-111111111111"))
             assertEquals(2, dao.all().size)
         } finally {
             db.close()
@@ -88,11 +90,11 @@ class NfcTagDaoTest {
         val db = inMemoryDb()
         try {
             val dao = db.nfcTagDao()
-            val t = tag(id = "t1", format = "LEGACY_MD5", key = "cafebabe")
+            val t = tag(id = "t1", format = "V1", key = "22222222-2222-4222-8222-222222222222")
             dao.upsert(t)
-            assertEquals(t, dao.byPayload("LEGACY_MD5", "cafebabe"))
-            assertNull(dao.byPayload("V1", "cafebabe"))
-            assertNull(dao.byPayload("LEGACY_MD5", "nope"))
+            assertEquals(t, dao.byPayload("V1", "22222222-2222-4222-8222-222222222222"))
+            assertNull(dao.byPayload("V2", "22222222-2222-4222-8222-222222222222"))
+            assertNull(dao.byPayload("V1", "nope"))
         } finally {
             db.close()
         }

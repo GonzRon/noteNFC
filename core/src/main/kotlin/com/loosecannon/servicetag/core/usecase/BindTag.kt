@@ -15,8 +15,8 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /**
  * Binds the tag that carries ([format], [key]) to [target]. Works for a tag this phone has never
- * seen (a v1 tag from before a wipe, or a legacy tag bound as-is, D13 §3) and for a known row,
- * which is retargeted and re-activated in place — its history and label survive.
+ * seen (a v1 tag from before a wipe, or another phone's tag) and for a known row, which is
+ * retargeted and re-activated in place — its history and label survive.
  */
 class BindTag(
     private val tags: TagRepository,

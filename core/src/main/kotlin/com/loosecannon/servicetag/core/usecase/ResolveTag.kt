@@ -21,7 +21,6 @@ sealed interface Resolution {
     data class Unbound(val tag: TagBinding) : Resolution
     data class Revoked(val tag: TagBinding) : Resolution
     data class UnknownV1(val tagId: TagId) : Resolution
-    data class UnknownLegacy(val key: String) : Resolution
     data class NeedsNewerApp(val version: Int) : Resolution
     data class NotOurs(val payload: TagPayload) : Resolution
 }

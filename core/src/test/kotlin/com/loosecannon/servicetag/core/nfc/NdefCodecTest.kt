@@ -27,7 +27,7 @@ class NdefCodecTest {
     }
 
     @Test fun anotherTypeNameInOurDomainIsForeign() {
-        assertIs<TagPayload.Foreign>(codec.decode(listOf(external("com.example.app:md5_short", "63b37acf"))))
+        assertIs<TagPayload.Foreign>(codec.decode(listOf(external("com.example.app:other", "63b37acf"))))
     }
 
     @Test fun uriRecordIsForeign() {

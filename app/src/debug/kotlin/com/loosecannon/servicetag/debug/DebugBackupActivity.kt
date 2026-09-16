@@ -113,7 +113,7 @@ class DebugBackupActivity : Activity() {
             g.tags.upsert(
                 seedTag(
                     id = g.ids.newId(),
-                    format = PayloadFormat.LEGACY_MD5,
+                    format = PayloadFormat.V1,
                     target = TagTarget.AssetTarget(assetIds[0]),
                     status = TagStatus.ACTIVE,
                     label = "on the asset",

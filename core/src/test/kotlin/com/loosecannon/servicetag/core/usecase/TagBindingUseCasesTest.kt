@@ -24,7 +24,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -63,13 +62,6 @@ class TagBindingUseCasesTest {
         assertEquals("lid", row.label)
         assertEquals(7_000L, row.createdAt)
         assertEquals(row, tags.rows[scanned.value])
-    }
-    @Test fun bindingAnUnknownLegacyTagGetsAFreshRowId() = runTest {
-        seedAsset()
-        val row = bind.run(PayloadFormat.LEGACY_MD5, "63b37acf", a1)
-        assertNotEquals("63b37acf", row.id.value)
-        assertEquals("63b37acf", row.payloadKey)
-        assertEquals(PayloadFormat.LEGACY_MD5, row.payloadFormat)
     }
     @Test fun bindingAKnownRowRetargetsItAndReactivates() = runTest {
         seedAsset()

@@ -61,8 +61,8 @@ import com.loosecannon.servicetag.ui.theme.SheetSentence
  * What a scanned (format, key) pair turned out to be — including "not ours" (format NONE).
  *
  * The sheets here are the D12 §11 / G1 §1.4 set: eyebrow, one sentence, the mono identifier,
- * actions stacked with the filled one first. None of them is an error: an unregistered tag, a
- * legacy tag and a foreign tag are all offers, and only the wording and the glyph change.
+ * actions stacked with the filled one first. None of them is an error: an unregistered tag and a
+ * foreign tag are both offers, and only the wording and the glyph change.
  *
  * @param key the scanned tag's identifier — but only while [format] names a payload format we
  *   wrote. When `format == "NONE"` there is no identifier to show and `key` carries a prose reason
@@ -161,21 +161,6 @@ fun TagResultSheet(
                 actions = {
                     FilledAction("Bind to asset or note") { picking = true }
                     OutlinedAction("Write a new tag over it") { onWriteTag(Route.WriteTag("none", null, null)) }
-                    TextAction("Cancel", onDismiss)
-                },
-            )
-
-            is TagResult.Legacy -> NfcSheet(
-                // A migration opportunity, not damaged data (D12 §11, D13 §3).
-                eyebrow = "Legacy tag",
-                accent = MaterialTheme.colorScheme.tertiary,
-                glyph = NoteNfcIcons.History,
-                sentence = "This tag uses the 2024 noteNFC identifier.",
-                identifier = identityLine(PayloadFormat.LEGACY_MD5.name, result.key),
-                problem = problem,
-                actions = {
-                    FilledAction("Rewrite in format v1") { onWriteTag(Route.WriteTag("none", null, null)) }
-                    OutlinedAction("Bind as-is") { picking = true }
                     TextAction("Cancel", onDismiss)
                 },
             )

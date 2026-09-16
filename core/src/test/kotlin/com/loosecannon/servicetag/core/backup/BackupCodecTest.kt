@@ -30,8 +30,8 @@ class BackupCodecTest {
             AssetDto("a3", "Water heater", "40 gal", "plumbing", "", "ACTIVE", 102L, 202L),
         ),
         nfcTags = listOf(
-            // bound to an asset, legacy payload
-            NfcTagDto("t1", "LEGACY_MD5", "9e107d9d372bb6826bd81d3542a419d6", "a1", null, "ACTIVE", "furnace tag", "04A224B2", 300L, 400L, 103L, 203L),
+            // bound to an asset, every optional field filled in
+            NfcTagDto("t1", "V1", "11111111-1111-4111-8111-111111111111", "a1", null, "ACTIVE", "furnace tag", "04A224B2", 300L, 400L, 103L, 203L),
             // bound to a standalone link
             NfcTagDto("t2", "V1", "key-t2", null, "l3", "ACTIVE", null, null, null, null, 104L, 204L),
             // unbound, everything optional is null
@@ -305,7 +305,7 @@ class BackupCodecTest {
     @Test
     fun `an unknown payload format is corrupt`() {
         val data = String(unzip(encoded()).getValue(BackupCodec.DATA_ENTRY), Charsets.UTF_8)
-            .replace("\"LEGACY_MD5\"", "\"LEGACY_SHA9\"")
+            .replace("\"V1\"", "\"V9\"")
         assertFailsWith<BackupCorrupt> { BackupCodec.decode(resealed(encoded(), data.toByteArray(Charsets.UTF_8))) }
     }
 
@@ -1002,7 +1002,7 @@ class BackupCodecTest {
             val target = rng.nextInt(0, 3)
             NfcTagDto(
                 id = id("t", i),
-                payloadFormat = rng.pick(listOf("LEGACY_MD5", "V1")),
+                payloadFormat = "V1",
                 payloadKey = rng.word(),
                 assetId = if (target == 0 && assetIds.isNotEmpty()) rng.pick(assetIds) else null,
                 linkId = if (target == 1 && linkIds.isNotEmpty()) rng.pick(linkIds) else null,

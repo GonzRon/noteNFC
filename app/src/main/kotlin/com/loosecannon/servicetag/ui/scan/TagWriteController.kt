@@ -290,7 +290,6 @@ class TagWriteController(
 
         fun describe(p: TagPayload): String = when (p) {
             is TagPayload.V1 -> "noteNFC tag ${p.tagId.value}"
-            is TagPayload.LegacyMd5 -> "legacy tag ${p.key}"
             is TagPayload.NewerVersion -> "a newer noteNFC format (${p.version})"
             is TagPayload.Foreign -> "foreign content (${p.description})"
             is TagPayload.Malformed -> "unreadable content (${p.reason})"

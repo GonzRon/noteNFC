@@ -60,7 +60,6 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
-import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.ValueType
@@ -685,10 +684,7 @@ private fun componentLine(child: ComponentRow): String = listOfNotNull(
 ).joinToString(" · ")
 
 /** The tag's own id, not the chip's hardware UID (G1 §3 correction a), with the payload format. */
-private fun tagIdentity(tag: TagBinding): String {
-    val format = if (tag.payloadFormat == PayloadFormat.V1) "v1" else "legacy"
-    return "${tag.id.value.take(8)} · $format"
-}
+private fun tagIdentity(tag: TagBinding): String = "${tag.id.value.take(8)} · v1"
 
 @Composable
 private fun TagsSection(tags: List<TagBinding>) {

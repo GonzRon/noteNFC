@@ -51,7 +51,6 @@ internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
     is Resolution.Unbound -> Route.TagResult(tag.payloadFormat.name, tag.payloadKey)
     is Resolution.Revoked -> Route.TagResult(tag.payloadFormat.name, tag.payloadKey)
     is Resolution.UnknownV1 -> Route.TagResult(PayloadFormat.V1.name, tagId.value)
-    is Resolution.UnknownLegacy -> Route.TagResult(PayloadFormat.LEGACY_MD5.name, key)
     is Resolution.NeedsNewerApp ->
         Route.TagResult(FORMAT_NONE, "written by a newer noteNFC (payload format $version)")
     is Resolution.NotOurs -> Route.TagResult(FORMAT_NONE, describe(payload))
@@ -148,9 +147,6 @@ sealed interface TagResult {
     /** A v1 tag this phone has no row for — another phone's tag, or one from before a wipe. */
     data class NotInRecords(val tagId: String) : TagResult
 
-    /** The 2024 identifier, offered a migration rather than treated as damage (D13 §3). */
-    data class Legacy(val key: String) : TagResult
-
     /** Not ours at all; [reason] is prose, never an id. An offer, never an error. */
     data class NotOurs(val reason: String) : TagResult
 }
@@ -201,7 +197,6 @@ class TagResultViewModel(
     private suspend fun resolve() {
         val payload = when (format) {
             PayloadFormat.V1.name -> TagPayload.V1(TagId(key))
-            PayloadFormat.LEGACY_MD5.name -> TagPayload.LegacyMd5(key)
             // Format NONE: the key is the prose reason the tag could not be used, not an id.
             else -> null
         }
@@ -215,7 +210,6 @@ class TagResultViewModel(
             is Resolution.Unbound -> TagResult.Unregistered(resolution.tag)
             is Resolution.Revoked -> TagResult.Revoked(resolution.tag)
             is Resolution.UnknownV1 -> TagResult.NotInRecords(resolution.tagId.value)
-            is Resolution.UnknownLegacy -> TagResult.Legacy(resolution.key)
             is Resolution.NeedsNewerApp ->
                 TagResult.NotOurs("written by a newer noteNFC (payload format ${resolution.version})")
             is Resolution.NotOurs -> TagResult.NotOurs(describe(resolution.payload))
@@ -231,9 +225,8 @@ class TagResultViewModel(
         }
 
     /**
-     * Binds this tag to [target]. A legacy tag binds as-is, keeping its 2024 key (D13 §3); a v1
-     * key that is not a canonical UUID is refused by `BindTag`, and the refusal is shown, not
-     * swallowed.
+     * Binds this tag to [target]. A v1 key that is not a canonical UUID is refused by `BindTag`,
+     * and the refusal is shown, not swallowed.
      */
     fun bind(target: TagTarget) {
         viewModelScope.launch {
@@ -310,11 +303,11 @@ class WriteTagViewModel(
 
 /** The tag row the sheet is talking about, as the plate spells identity (G1 §3 correction a). */
 fun TagBinding.identityLine(): String =
-    "${id.value.take(8)} · ${if (payloadFormat == PayloadFormat.V1) "v1" else "legacy"}"
+    "${id.value.take(8)} · v1"
 
 /** The same line for a tag that has no row yet. */
 fun identityLine(format: String, key: String): String =
-    "${key.take(8)} · ${if (format == PayloadFormat.V1.name) "v1" else "legacy"}"
+    "${key.take(8)} · v1"
 
 /** The honest name for a target that has none: a spare tag is bound on its first scan. */
 private fun unnamed(target: TagTarget): String =

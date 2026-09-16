@@ -86,11 +86,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="vnd.android.nfc" android:host="ext" android:path="${ndefTagPath}" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="vnd.android.nfc" android:host="ext" android:path="/com.loosecannon.notenfc:md5_short" />
-            </intent-filter>
         </activity>
 
         <!-- The camera writes into cacheDir/camera/ and hands the URI straight back (spec 9.3). -->

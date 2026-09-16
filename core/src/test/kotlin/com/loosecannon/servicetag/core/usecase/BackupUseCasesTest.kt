@@ -97,7 +97,7 @@ class BackupUseCasesTest {
 
     private fun tag(id: String, target: TagTarget, status: TagStatus = TagStatus.ACTIVE) = TagBinding(
         id = TagId(id),
-        payloadFormat = if (id == "t1") PayloadFormat.LEGACY_MD5 else PayloadFormat.V1,
+        payloadFormat = PayloadFormat.V1,
         payloadKey = "key-$id",
         target = target,
         status = status,
@@ -260,7 +260,7 @@ class BackupUseCasesTest {
             assertEquals(TagTarget.AssetTarget(AssetId("a1")), target.tags.get(TagId("t1"))!!.target)
             assertEquals(TagTarget.LinkTarget(LinkId("l3")), target.tags.get(TagId("t2"))!!.target)
             assertEquals(TagTarget.None, target.tags.get(TagId("t3"))!!.target)
-            assertEquals(PayloadFormat.LEGACY_MD5, target.tags.get(TagId("t1"))!!.payloadFormat)
+            assertEquals(PayloadFormat.V1, target.tags.get(TagId("t1"))!!.payloadFormat)
             assertEquals(1, target.links.standalone().size)
         }
     }

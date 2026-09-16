@@ -102,8 +102,7 @@ class RestoreProofTest {
 
     /**
      * Two assets, one link hanging off an asset and one standalone link, and three tags covering
-     * every shape of `TagTarget`: bound to an asset (legacy MD5 payload), bound to a standalone
-     * link, and unbound.
+     * every shape of `TagTarget`: bound to an asset, bound to a standalone link, and unbound.
      */
     private suspend fun seed(g: Graph) {
         g.uow.write {
@@ -158,8 +157,8 @@ class RestoreProofTest {
             g.tags.upsert(
                 TagBinding(
                     id = TagId("tag-on-furnace"),
-                    payloadFormat = PayloadFormat.LEGACY_MD5,
-                    payloadKey = "0123456789abcdef",
+                    payloadFormat = PayloadFormat.V1,
+                    payloadKey = "11111111-1111-4111-8111-111111111111",
                     target = TagTarget.AssetTarget(AssetId("asset-furnace")),
                     status = TagStatus.ACTIVE,
                     label = "sticker on the cover",
@@ -250,8 +249,8 @@ class RestoreProofTest {
             assertEquals(listOf(LinkId("link-standalone")), g2.links.standalone().map { it.id })
             assertEquals(TagTarget.None, g2.tags.get(TagId("tag-spare"))!!.target)
             assertEquals(
-                PayloadFormat.LEGACY_MD5,
-                g2.tags.findByPayload(PayloadFormat.LEGACY_MD5, "0123456789abcdef")!!.payloadFormat,
+                PayloadFormat.V1,
+                g2.tags.findByPayload(PayloadFormat.V1, "11111111-1111-4111-8111-111111111111")!!.payloadFormat,
             )
         } finally {
             db2.close()

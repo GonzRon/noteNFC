@@ -130,8 +130,8 @@ class RoomRepositoriesTest {
             assets.upsert(asset("a1"))
             val t = TagBinding(
                 id = TagId("t1"),
-                payloadFormat = PayloadFormat.LEGACY_MD5,
-                payloadKey = "deadbeef",
+                payloadFormat = PayloadFormat.V1,
+                payloadKey = "11111111-1111-4111-8111-111111111111",
                 target = TagTarget.AssetTarget(AssetId("a1")),
                 status = TagStatus.LOST,
                 label = "Tag on cover",
@@ -144,8 +144,8 @@ class RoomRepositoriesTest {
             tags.upsert(t)
             assertEquals(t, tags.get(TagId("t1")))
             assertEquals(listOf(t), tags.forAsset(AssetId("a1")))
-            assertEquals(t, tags.findByPayload(PayloadFormat.LEGACY_MD5, "deadbeef"))
-            assertNull(tags.findByPayload(PayloadFormat.V1, "deadbeef"))
+            assertEquals(t, tags.findByPayload(PayloadFormat.V1, "11111111-1111-4111-8111-111111111111"))
+            assertNull(tags.findByPayload(PayloadFormat.V1, "22222222-2222-4222-8222-222222222222"))
         } finally {
             db.close()
         }
