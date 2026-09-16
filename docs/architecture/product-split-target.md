@@ -134,6 +134,7 @@ search-and-replace (§11).
 | `Application` class | NoteTag's own, if it needs one | `ServiceTagApp`; the nav-root composable also named `NoteNfcApp` becomes `ServiceTagRoot`, resolving the two-classes-one-name collision (arch §4.6) | ratified P3 |
 | Manifest `android:name` **FQN literals** | NoteTag's own | **five literals that do not follow `namespace` and must be edited by hand** (review correction 4): `com.loosecannon.notenfc.NoteNfcApp` (application), `…MainActivity`, `…ShareActivity`, `…nfc.NfcDispatchActivity`, plus `…debug.DebugBackupActivity` in the debug manifest | arch §5.1 **[code]** |
 | FileProvider authority | only if NoteTag ever needs one (it has no attachments) | `com.loosecannon.servicetag.files` — **derived**, no literal to change: the manifest uses `${applicationId}.files` and `AppGraph` uses `BuildConfig.APPLICATION_ID` (arch §4.6, §7.7 item 6) | **[code]** |
+| Persisted SAF tree grant | n/a — NoteTag has no attachment store | **ServiceTag must take its own.** A persisted grant is scoped to the *calling* application, so a different `applicationId` — a genuinely different app to the OS, even from the same source with the same signing key — holds none of another app's grants. **[platform-doc]**, not observed here (arch §7.4 records it as such, and `archaeology-data.md` notes it was written from public API documentation rather than a byte-for-byte fetch). It is the load-bearing reason for §15's ordering and for C.9's "uninstall last", so the runbook adds an **emulator observation** before C.9 rather than resting on the document | §13, arch §7.4 |
 | Deep-link scheme | `notetag` — **reserved; no `VIEW` filter declared at reconstruction** (ratified P4). Held for #6/#36 | `servicetag`, hosts `asset`, `link`, `tag` | O1 / O3 |
 | NDEF external type | `com.loosecannon.notetag:tag` | `com.loosecannon.servicetag:tag` | O1 / O3 |
 | Decode-only types | **none** | **none** | O2 / O3. Neither product understands `md5_short`. A legacy decoder was permitted only if "essentially free and harmless" (O2); it is not — it would need a manifest filter, a payload branch and a UI state, which is architecture for a dead format (O11) |
@@ -157,6 +158,7 @@ search-and-replace (§11).
 | Directories in that repo | `nfc-core/` (pure Kotlin/JVM, **zero third-party, application or framework runtime dependencies — the Kotlin stdlib only**, which the `kotlin.jvm` plugin adds), `nfc-android/` (Android NFC adapter) |
 | Submodule path inside each app | `libs/nfc-tag-core/` |
 | Gradle project paths **as each app sees them** | `:nfc-core`, `:nfc-android` — the same paths in both apps, because the modules are included as ordinary subprojects |
+| Plugins applied | `:nfc-core` → `kotlin.jvm`. `:nfc-android` → **`com.android.library` and nothing else**: AGP 9.4 carries Kotlin built in, so no `kotlin.android` plugin is applied and `jvmTarget` is set inside `android { kotlin { compilerOptions { … } } }`, exactly as `app/build.gradle.kts` already does **[code]**. The catalog alias `android-library` must be **added** to every consumer's catalog and to the library's own — no catalog has it today (§6.1) |
 | Maven coordinates | **none.** Nothing is published: no Maven, no publication, no credentials, no composite build (O15). The project paths are the whole interface |
 | Kotlin package roots | `com.loosecannon.nfc.tagcore`, `com.loosecannon.nfc.tagcore.android` — ratified P6 |
 | Android library `namespace` | `com.loosecannon.nfc.tagcore.android` |
@@ -192,7 +194,12 @@ nfc-tag-core/                     (its own repository, its own root build — O1
 │   │                             java.nio.ByteBuffer and java.util.UUID (review addition 5).
 │   │                             tests: JUnit 5 + kotlin.test only.
 │   └── src/{main,test}/kotlin/com/loosecannon/nfc/tagcore/
-├── nfc-android/                   ANDROID LIBRARY. plugins: com.android.library + kotlin.android.
+├── nfc-android/                   ANDROID LIBRARY. plugin: `com.android.library` ONLY.
+│   │                             AGP 9.4 carries Kotlin built in, so NO `kotlin.android` plugin is
+│   │                             applied anywhere; Kotlin is configured inside the android block,
+│   │                             exactly as `app/build.gradle.kts` already does:
+│   │                               android { kotlin { compilerOptions {
+│   │                                 jvmTarget.set(JvmTarget.JVM_17) } } }
 │   │                             minSdk 26, compileSdk 37. NO Compose, NO Room, NO KSP, NO
 │   │                             serialization, NO lifecycle, NO Material.
 │   │                             deps: api(project(":nfc-core")) and nothing else while
@@ -500,6 +507,16 @@ Expected entries, and how each was inspected rather than accepted:
 A hit inside a test fixture is as much a failure as one in `main`, because a fixture is how product
 vocabulary usually gets in.
 
+**What the scan covers, and what it deliberately does not.** The paths passed to `grep` are
+`nfc-core/src`, `nfc-android/src` and `settings.gradle.kts` — so the `--include='*.md'` flag reaches
+only Markdown *inside those source trees*, and the repository's **root documents are outside the scan
+on purpose**. `README.md` must be able to say "extracted from the noteNFC/ServiceTag tree", to carry
+the provenance table naming `ServiceTag`, `NoteTag` and `TagBinding`, and to explain which app
+vocabulary was left behind — and a scan that forbade those words in the very document whose job is to
+name them would be self-defeating. The rule the scan enforces is about *code and its fixtures*: what
+the library can compile against and test with. The rule for root documents is editorial and is
+enforced at review: they may **describe** the consumers, and must never **depend** on them.
+
 ### 4.5 Test plan (§22)
 
 **`nfc-core` — pure JVM, JUnit 5, every push.** Generalised from the three existing `:core` test
@@ -514,7 +531,7 @@ classes (provenance in §4.6).
 | TNF gate | our exact type under a non-external TNF is `Foreign`, not `Recognised` — from `tagRecordUnderWrongTnfIsForeign` |
 | First-record-only | extra records after the first are ignored (`onlyFirstRecordMatters`); an AAR-only message is `Foreign` (`applicationRecordAloneIsForeign`); an empty list is `Empty` (`emptyMessageIsEmpty`) |
 | Malformed input | a truncated body, an empty body and a body under the wrong type all come back without an exception; the envelope never throws on hostile bytes |
-| Generic payload limits | `serialisedSize()` for representative messages, asserted to be exactly `toNdefMessage().toByteArray().size` with **no TLV allowance added**, and compared against the message-size budget an NTAG213 reports; parameterised so each consumer asserts its own budget (O14). A second case pins the boundary: a message of exactly `maxSize` bytes is accepted and one of `maxSize + 1` is `TooSmall` (invariant 7) |
+| Generic payload limits | `serialisedSize()` for representative messages, asserted to be exactly `toNdefMessage().toByteArray().size` with **no TLV allowance added**, and compared against **`NTAG213_MAX_MESSAGE_BYTES`** — one named constant, re-pinned to the `Ndef.maxSize` measured from a physical NTAG213 in Session 1 and recorded in the evidence file (§4.9). Parameterised so each consumer asserts its own budget (O14). A second case pins the boundary: a message of exactly `maxSize` bytes is accepted and one of `maxSize + 1` is `TooSmall` (invariant 7) |
 | `UuidBytes` | `toBytes`/`fromBytes` round-trip over random UUIDs and the all-zero / all-ones edges; big-endian layout pinned as bytes; `requireCanonical` refuses a non-UUID and an upper-case UUID, accepts the canonical form |
 | `TagIdentity` | refuses a mixed-case external type; `externalType` is `"$domain:$name"`; `aarPackage` defaults to null |
 | `OverwritePolicy` | the full `ExistingContent` × `isSameIdentity` matrix → the six `OverwriteReason` tokens; `Proceed` only for `Empty` and for `Ours` with `isSameIdentity` — generalised from `OverwritePolicyTest` |
@@ -547,6 +564,7 @@ the ServiceTag repository** — the renamed continuation of this one, which is w
 | `nfc-core/…/TagIdentity.kt` | **NEW type** parameterising `NdefCodec.DOMAIN` (`:37`), `V1_TYPE_NAME` (`:39`), `PACKAGE_NAME` (`:46`) | `76b751a` (`DOMAIN`, normalised at `b9f7e51`), `f92a391` (`V1_TYPE_NAME`, `PACKAGE_NAME`) | three constants become a value type; domain and AAR package stay separate fields even when equal (C9) |
 | `nfc-core/…/NdefEnvelope.kt` | `NdefCodec.decode` (`:56-65`), `encodeV1` (`:90`), `v1Record` (`:93-102`), `applicationRecord` (`:104-109`) | `76b751a` (decode skeleton), `f92a391` "tag payload format v1: codec, AAR, overwrite policy" | identity becomes a parameter; the type switch collapses to "my type / not my type"; the body is returned unparsed; the AAR becomes optional, appended only when `aarPackage != null` (O13). The legacy branch does **not** come along (O2) |
 | `nfc-core/…/TagContent.kt` | `TagPayload.Foreign` / `.Empty` (`NdefCodec.kt:21-26`) | `76b751a` | `Recognised(body)` replaces the product arms `V1`/`LegacyMd5`; `NewerVersion` does not come along — version negotiation is a *body* concern and each app owns its body (§4.7) |
+| `nfc-core/…/TagContent.kt` — **`Malformed` does NOT come along** | `TagPayload.Malformed` (`NdefCodec.kt:25`), raised by `decodeV1`/`decodeLegacy` for a bad version byte, a wrong length or non-zero flags | `76b751a` (the type), `f92a391` (the v1 reasons) | **stays per app, by the same rule that keeps the layout out** (§4.7): "malformed" is a judgment about a *body*, and only the app that owns the body scheme can make it. The envelope's vocabulary is `Recognised` / `Foreign` / `Empty`; a recognised body that then fails to parse is the consumer's `Malformed`, in the consumer's words. The library does keep the *classification slot* — `ExistingContent.Unreadable` — so the overwrite decision can still be made about a tag whose body nobody could read |
 | `nfc-core/…/UuidBytes.kt` | the `ByteBuffer`/`UUID` halves of `NdefCodec.decodeV1` and `v1Record`, plus `requireCanonicalUuid` (`:111-120`) | `f92a391` | takes a `String`/`ByteArray` instead of a `TagId`, so the `TagId` wrapper stays in the app. **The layout it used to live in stays behind** (§4.7) |
 | `nfc-core/…/OverwritePolicy.kt` | `core/…/core/nfc/OverwritePolicy.kt` (whole file) | `f92a391` | `decide(existing: TagPayload, intended: TagId)` → `decide(existing: ExistingContent, isSameIdentity: Boolean)`; the five hard-coded sentences — each of which says "noteNFC" — become tokens plus a `detail` string |
 | `nfc-android/…/NdefBridge.kt` | `app/…/nfc/NdefBridge.kt` (whole file) | `dc1bb1c` "nfc adapter: ndef bridge, reader-mode session, tag writer with read-back" | wholesale; imports only `android.*` and `NdefRecordData`, so nothing to strip. `Intent.nfcTag()` is dead code in the app today (arch §6.2) and becomes live API. `serialisedSize()` is **NEW**, lifting `message.toByteArray().size` out of `TagWriter.write` so a consumer can ask before a tap |
@@ -636,7 +654,7 @@ byte 3.. kind body
 
 | kind | Name | Body | Read as |
 |---|---|---|---|
-| `0x01` | `JOPLIN_NOTE` | 16 raw bytes of the 32-hex note id | the note id is re-rendered as hex and opened as `joplin://x-callback-url/openNote?id=<hex>` |
+| `0x01` | `JOPLIN_NOTE` | 16 raw bytes of the **32 lower-case hex** note id | the 16 bytes are re-rendered as **32 lower-case hex** and opened as `joplin://x-callback-url/openNote?id=<hex>` |
 | `0x02` | `URI` | the full canonical URI as UTF-8, **no abbreviation byte** | launched through NoteTag's own safe-launch allowlist |
 | `0x03` | `LOCAL_REF` | a 16-byte UUID | resolved through NoteTag's minimal local store to a target |
 | `0x04`+ | reserved | — | a compact provider kind is allocated only when a stable compact identifier earns one; otherwise providers use `URI` or `LOCAL_REF` |
@@ -645,14 +663,44 @@ byte 3.. kind body
 write it; else the full `URI` **fits**, decided by encoding the exact NDEF message and comparing with
 the tag's **measured `Ndef.maxSize`** → write `URI`; else `LOCAL_REF`, and store the target locally.
 
-**NTAG213 is the minimum supported tag.** Sizes are stated as **NDEF message sizes**, because that
-is the only unit the runtime comparison uses (invariant 7): a `JOPLIN_NOTE` message is ~52 B, and
-ServiceTag's existing record already costs ~92 B *with* its AAR — both comfortably inside what an
-NTAG213 reports through `Ndef.getMaxSize()`. No usable-area figure is derived here and no TLV
-allowance is subtracted or added; the platform already accounts for its own framing when it reports
-`maxSize`. NTAG215 and NTAG216 hold more by the same logic and are never required. **There are no
-character-count promises anywhere in this design**: capacity is always the measured tag against the
-exact encoded message, and a tag that cannot hold the message is refused cleanly (O13, O14).
+**`JOPLIN_NOTE` is lower-case hex on both sides, and the write side validates rather than assumes.**
+The 16-byte body is only a legitimate compact representation when the source id really is 32
+hexadecimal characters; a Joplin id that arrives upper-case, mixed-case, shortened, hyphenated or
+otherwise non-conforming must not be silently truncated or mangled into 16 bytes. So the writer:
+
+1. accepts a candidate id **only** if it matches `^[0-9a-fA-F]{32}$`;
+2. **normalises it to lower case** before packing the 16 bytes;
+3. and on any other shape **falls through to `URI`** — the explicit fallback, carrying the full
+   `joplin://…` URI as UTF-8 — rather than refusing the write or guessing.
+
+The read side renders the 16 bytes back as 32 lower-case hex, so a mixed-case input round-trips to a
+lower-case output. A **mixed-case round-trip test** pins exactly that: encode from an upper- or
+mixed-case id, decode, and assert the reconstructed id is lower case and equal to the normalised
+input. A non-conforming id gets its own test asserting the `URI` fallback was chosen.
+
+**NTAG213 is the minimum supported tag**, and every figure below is labelled by unit, because the two
+units differ by exactly the framing G1 removed from the write comparison:
+
+| Message | **NDEF message size — the unit the write check uses** | message + Type-2 TLV — *physical-tag scale only* |
+|---|---|---|
+| NoteTag `JOPLIN_NOTE`, one external record, no AAR | **49 B** | 52 B |
+| NoteTag `JOPLIN_NOTE` *if* an AAR were appended | **90 B** | 93 B |
+| ServiceTag's existing record + AAR | **89 B** | 92 B |
+
+The right-hand column is the figure the archaeology quotes (arch §5.7) and is useful for one purpose
+only — sanity-checking against a datasheet's user-memory number. **It is never the write
+comparison**: `needed` is the left-hand column, compared directly against `Ndef.getMaxSize()`
+(invariant 7). The extracted limits test asserts the left-hand column against a single named
+constant, **`NTAG213_MAX_MESSAGE_BYTES`**, seeded from the datasheet figure and **re-pinned to the
+value actually measured from a physical NTAG213** during the runbook's Session 1 and recorded in the
+evidence file — so the budget the tests defend is a number this project has observed, not one it read.
+
+For reference and clearly labelled as such: NTAG213's **144 B** of user memory, of which roughly
+**139 B** remain for NDEF after NXP's lock-control TLV, are **[platform-doc]** datasheet figures, not
+observations, and nothing in the design computes from them. NTAG215 and NTAG216 hold more by the same
+logic and are never required. **There are no character-count promises anywhere in this design**:
+capacity is always the measured tag against the exact encoded message, and a tag that cannot hold the
+message is refused cleanly (O13, O14).
 
 **Persistence.** NoteTag gets a **minimal local store** — `LOCAL_REF` targets plus convenience
 metadata (label, kind, written-at, last-opened) — and it is **never required to resolve a
@@ -696,7 +744,8 @@ is not paid for by default — and why **a dispatch spike is a coexistence-phase
 external-type-only dispatch reliability when the app *is* installed, and observed behaviour when it
 is not. Note too that NoteTag's `URI` kind travels **inside** the external record, not as an NDEF URI
 record, so the platform never sees a URI and never offers a browser — only NoteTag's filter matches
-(compare **[platform-doc]** C10, where a genuine web-link tag triggers `ACTION_VIEW` from Android 16
+(compare **[platform-doc] PD10** in arch §8.1, where a genuine web-link tag triggers `ACTION_VIEW`
+from Android 16
 and an "open link" notification from Android 17).
 
 ---
@@ -740,10 +789,34 @@ The reasoning is worth keeping, because it is what review correction 14 identifi
 | `gradle.properties` | not shared: caching and **configuration cache on** (review correction 14) would need reproducing | shared |
 | Dependency wiring | coordinates plus automatic substitution — an indirection that can silently resolve a real artifact if substitution ever misses | `implementation(project(":nfc-android"))` — unambiguous, and impossible to satisfy from a repository |
 | Standalone library build | natural | also fine: the library has its own root build, read only when it *is* the root (Gradle reads the root settings file alone) |
+| Repository declarations | each build declares its own | **the library declares repositories ONLY in its own root `settings.gradle.kts`, never in a module script.** Both apps set `repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)` **[code]**, so a `repositories { … }` block inside `nfc-core/build.gradle.kts` or `nfc-android/build.gradle.kts` would fail the *app* build the moment the module is included as a subproject — while passing the library's own standalone build. That is the nastiest shape of failure: green where it is authored, red where it is consumed |
 
 The one real cost of subprojects is that the library's module build files may use only catalog
-**alias names** that exist in all three catalogs: `kotlin.jvm`, `android.library`, `kotlin.android`,
-`junit.bom`, `junit.jupiter`, `junit.platform.launcher`, `kotlin.test`, and the androidx.test set.
+**alias names that exist in all three catalogs**: `kotlin.jvm`, **`android-library`**, `junit.bom`,
+`junit.jupiter`, `junit.platform.launcher`, `kotlin.test`, and the androidx.test set. Two of those
+need attention before any of this compiles:
+
+- **`android-library` does not exist in either app's catalog today** — the apps only ever needed
+  `android-application` (`gradle/libs.versions.toml` **[code]**). Every consumer's catalog, and the
+  library's own, must gain
+  `android-library = { id = "com.android.library", version.ref = "agp" }`. That is the first task of
+  §A.4 in the runbook, before the submodule is wired at all.
+- **`kotlin-android` is deliberately absent and stays absent.** No catalog has one and none needs
+  one: AGP 9.4 has Kotlin built in, `app/build.gradle.kts` already configures `jvmTarget` inside its
+  `android { kotlin { compilerOptions { … } } }` block **[code]**, and `nfc-android` copies that
+  exact shape. Adding a `kotlin.android` alias would be the wrong fix for a problem that does not
+  exist.
+
+**The library's standalone catalog pins the same `agp` and `kotlin` versions as the apps'** — AGP
+9.4.0 and Kotlin 2.4.20 today (arch §4.4) — because a standalone build that compiles the same sources
+against a different AGP proves nothing about the subproject build. One line makes drift loud, run as
+part of the pin-assertion step (§6.3):
+
+```bash
+diff <(grep -E '^(agp|kotlin) =' gradle/libs.versions.toml) \
+     <(grep -E '^(agp|kotlin) =' libs/nfc-tag-core/gradle/libs.versions.toml)
+```
+
 Three independent CI greens — the library standalone, plus each app building it as a subproject —
 prove the alias set agrees. A missing alias fails at configuration time naming the alias, which is a
 good failure.
@@ -798,6 +871,7 @@ dependencies {
       - uses: actions/checkout@v4
         with:
           submodules: recursive          # NEW -- today the checkout has none
+          fetch-depth: 0                 # NEW -- the pin assertion needs tags; depth 1 has none
 
       - name: assert the shared library is initialised at the pinned commit
         run: |
@@ -808,8 +882,14 @@ dependencies {
           actual=$(git -C libs/nfc-tag-core rev-parse HEAD)
           [ "$pinned" = "$actual" ] \
             || { echo "submodule is at $actual but this commit pins $pinned"; exit 1; }
+          # fetch-depth 0 already brought the tags; the explicit fetch keeps this step correct
+          # even if someone later reverts the checkout to a shallow one.
+          git -C libs/nfc-tag-core fetch --tags --force --quiet || true
           git -C libs/nfc-tag-core describe --exact-match --match 'nfc-tag-core-v*' --tags HEAD \
             || { echo "submodule is not at an exact nfc-tag-core-v* tag (mutable HEAD)"; exit 1; }
+          diff <(grep -E '^(agp|kotlin) =' gradle/libs.versions.toml) \
+               <(grep -E '^(agp|kotlin) =' libs/nfc-tag-core/gradle/libs.versions.toml) \
+            || { echo "library catalog pins a different agp/kotlin than this app"; exit 1; }
           [ -z "$(git -C libs/nfc-tag-core status --porcelain)" ] \
             || { echo "submodule working tree is dirty"; exit 1; }
 ```
@@ -817,6 +897,8 @@ dependencies {
 | Change | Where | Why |
 |---|---|---|
 | `submodules: recursive` on the checkout | both apps' `actions/checkout@v4` step — **today it has none** (review correction 14) | without it CI checks out an empty `libs/nfc-tag-core` and fails at configuration time with the `require` message |
+| **`fetch-depth: 0`** on the same step | both apps | `actions/checkout` defaults to a depth-1 fetch with **no tags**, under which `git describe --exact-match --match 'nfc-tag-core-v*'` fails on a correctly-pinned submodule — a false red that would teach everyone to ignore the assertion. The step also runs `git -C libs/nfc-tag-core fetch --tags --force` so it survives a later reversion to a shallow checkout |
+| the `android-library` catalog alias | both apps' and the library's `gradle/libs.versions.toml` | **absent today**; without it `nfc-android` cannot declare its plugin at all (§6.1, §A.4 task 1) |
 | the assertion step above, also available as `tools/check-submodule-pin.sh` for local runs and as a `check` dependency | both apps | §19's "exact version/commit pinned" and "mutable HEAD not silently consumed" |
 | clean-clone builds for **both** apps | §26 acceptance, run outside CI as well | `git clone --recurse-submodules <url> <tmp>` into a never-used directory, then that repo's CI task list; once more from a second workstation |
 | nothing about the daemon JVM, the catalog or the configuration cache | — | that is the point of subprojects: those files exist once, at the app root, and now cover the library too |
@@ -842,7 +924,9 @@ A bump is three commits, never a pointer nudge:
 | pointer is not at an exact release tag | `git describe --exact-match --match 'nfc-tag-core-v*' --tags HEAD` fails: a commit that is not exactly an `nfc-tag-core-v*` tag — an untagged commit, or one carrying some unrelated tag — is a mutable-HEAD consumption (§19) |
 | submodule working tree dirty | `git status --porcelain` in the submodule is non-empty: the app would be building against code nobody else can reproduce |
 | pointer moved without a commit in the app repo | the app's `git status` shows the gitlink modified; CI checks out the *recorded* pointer, so the change appears to do nothing rather than diverging silently |
-| catalog alias missing from a consumer | configuration-time failure naming the alias |
+| catalog alias missing from a consumer | configuration-time failure naming the alias — the expected first encounter is `android-library`, which **no app catalog has today** (§6.1) |
+| a `repositories { … }` block added to a library **module** script | the *app* build fails on `FAIL_ON_PROJECT_REPOS` while the library's standalone build stays green: authored-green, consumed-red. Repositories belong only in the library's root `settings.gradle.kts` (§6.1) |
+| the library catalog pinning a different `agp`/`kotlin` than the app | the `diff` in the pin-assertion step fails, naming both files (§6.3) |
 | the two apps on different library tags | allowed *between* bumps; the coexistence gate requires both on the same tag (§J gate 9 of the runbook) |
 
 O15 excludes Maven, publication, credentials and composite builds, so no alternative mechanism —
@@ -883,33 +967,37 @@ acceptance row and no migration code** (O2, O11). This paragraph is the whole tr
 
 ### 7.2 Who is launched when no filter matches
 
-**The platform rule** **[platform-doc]** (arch §5.3, §8.1 Q1/Q5):
+**The platform rule** **[platform-doc]**, cited by the archaeology's `PD*` labels (arch §5.3, §8.1
+Q1/Q5 — the labels were `C*` until the internal review renamed them, to stop them colliding with the
+gate corrections also called C1–C9):
 
-1. `ACTION_NDEF_DISCOVERED` is tried first. With an AAR present, the platform tries the intent filter
-   and starts the AAR's package *"if the Activity that filters for the intent does not match the AAR,
+1. **PD1/PD2** — `ACTION_NDEF_DISCOVERED` is tried first. With an AAR present, the platform tries the
+   intent filter and starts the AAR's package *"if the Activity that filters for the intent does not match the AAR,
    if multiple Activities can handle the intent, or if no Activity handles the intent."*
-2. If more than one application can handle the intent, the Activity Chooser is presented. **With two
-   disjoint exact-path filters this should never arise** — which is exactly what §25's "no ordinary
+2. **PD1** — if more than one application can handle the intent, the Activity Chooser is presented.
+   **With two disjoint exact-path filters this should never arise** — which is exactly what §25's "no ordinary
    tag produces an unpredictable chooser from overlapping identity" requires proving.
-3. If nothing matches `NDEF_DISCOVERED`, `TECH_DISCOVERED` is tried; neither product declares a tech
-   filter, so that fails too.
-4. If nothing filters for any intent, the platform does nothing — except that from Android 16 a
-   genuine **web-link** tag triggers `ACTION_VIEW`, and from Android 17 an "open link" notification.
+3. **PD5** — if nothing matches `NDEF_DISCOVERED`, `TECH_DISCOVERED` is tried; neither product
+   declares a tech filter, so that fails too.
+4. **PD5/PD10** — if nothing filters for any intent, the platform does nothing, except that from
+   Android 16 a genuine **web-link** tag triggers `ACTION_VIEW`, and from Android 17 an "open link"
+   notification.
    A commercial sticker should therefore produce *a notification*, not silence.
-5. If an AAR names an uninstalled package, the platform goes to Google Play; neither applicationId is
-   published, so the outcome is a Play page for a listing that does not exist. **NoteTag ships with
-   no AAR, so this does not apply to it** (O13).
-6. Reader mode **overrides** both AARs and the intent dispatch system, which is why each app's writer
-   or inspect screen can see the sibling's tag at all — the mechanism behind §25's two
+5. **PD2** — if an AAR names an uninstalled package, the platform goes to Google Play; neither
+   applicationId is published, so the outcome is a Play page for a listing that does not exist.
+   **NoteTag ships with no AAR, so this does not apply to it** (O13).
+6. **PD6** — reader mode **overrides** both AARs and the intent dispatch system, which is why each
+   app's writer or inspect screen can see the sibling's tag at all — the mechanism behind §25's two
    foreign/protected rows.
 
 **Every one of the six is to observe on-device**, together with **stopped-state dispatch**, where the
-documentation and this project's own device row disagree (**[platform-doc]** says a force-stopped app
-gets no dispatch; **[device-observed]** 1C row 16 recorded a dispatch to a force-stopped *and*
+documentation and this project's own device row disagree (**[platform-doc] PD8** says a force-stopped
+app gets no dispatch; **[device-observed]** 1C row 16 recorded a dispatch to a force-stopped *and*
 data-cleared package, with only the never-launched install silent — arch §5.10, §8.1 Q2), and the
-**Android 16+ per-app NFC allowlist**, where two installed apps mean two entries, a distinct icon and
-label per app matter for telling those entries apart (review addition 3), and neither app calls
-`NfcAdapter.isTagIntentAllowed()`, so a denial is invisible in-app (arch §8.1 Q3). Per the gate
+**Android 16+ per-app NFC allowlist** (**[platform-doc] PD9**), where two installed apps mean two
+entries, a distinct icon and label per app matter for telling those entries apart (review addition 3),
+and neither app calls `NfcAdapter.isTagIntentAllowed()`, so a denial is invisible in-app
+(arch §8.1 Q3). Per the gate
 verdict these are **final coexistence gates, not architecture blockers**.
 
 ### 7.3 The two rules that make this table safe
@@ -993,6 +1081,13 @@ private signing material in source** (§26).
 **No instrumented step in any of the three.** The emulator suites — the app device-proof tests and
 the library's adapter tests — stay local (arch §4.2), and §15 keeps instrumented suites off the phone
 entirely, because it holds the owner's real data.
+
+**One caveat on what the device evidence proves.** The coexistence and dispatch observations are
+collected from **debug builds** — that is what §15 installs and what the emulator runs — so they are
+*debug-build evidence*. The signed-release requirement of §12 is discharged separately and only as a
+**build-verified** claim: a release APK is produced, signed and its certificate fingerprint recorded,
+but no device row is collected from a release build. Both facts are stated in the evidence file so
+nobody later reads a debug observation as a release guarantee.
 
 **Clean-checkout proof** is a per-repository acceptance, not a CI trick (§26): for each of the three,
 `git clone --recurse-submodules <url> <tmp> && cd <tmp> && ./gradlew <that repo's CI task list>` from
