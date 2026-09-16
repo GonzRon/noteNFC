@@ -18,8 +18,9 @@ checkpoint `ac523d7` (cited to the archaeology, which cites the code) or is mark
   **[platform-doc]**, **[unobserved]**. Platform behaviour not yet seen on hardware is marked **to
   observe on-device**; per C9 and the gate verdict, device questions Q1–Q5 are **not architecture
   blockers** — they are final coexistence gates against the two finished APKs.
-- **Proposals.** Decisions this design had to make that the brief and O1–O15 do not settle are marked
-  **[P*n* — proposal]** and collected in §11. Nothing marked so is ratified.
+- **Proposals.** Decisions this design had to make beyond the brief and O1–O15 were tracked as
+  **[P*n*]** proposals while drafting; as of `5d8ca77` every one is ratified and §11 is the closed
+  register (none open).
 - **Hygiene.** No home paths beyond `~`, no device serials, no phone model or codename, no phone
   folder names, no key material, no fingerprints reproduced.
 
@@ -549,7 +550,8 @@ The emulator suites stay local: CI has no `androidTest` step, correctly, because
 **The operating rule for every proof in this design: vet everything possible on the emulator; the
 phone is used only where RF hardware or the real install is required.** Concretely, capacity
 selection, malformed and foreign classification, the `LOCAL_REF` missing-map path, the
-crash-consistency failure injection and ServiceTag's link resolution are all JVM or emulator work;
+crash-consistency failure injection are all JVM or emulator work (ServiceTag's standalone-link
+resolution stays a physical row — §E checks 1 and 4 — because §25 says observe, don't infer);
 only the physical taps in the runbook's §D and §E need the phone.
 
 ### 4.6 Provenance (§9: "document provenance")
@@ -691,7 +693,9 @@ The right-hand column is the figure the archaeology quotes (arch §5.7) and is u
 only — sanity-checking against a datasheet's user-memory number. **It is never the write
 comparison**: `needed` is the left-hand column, compared directly against `Ndef.getMaxSize()`
 (invariant 7). The extracted limits test asserts the left-hand column against a single named
-constant, **`NTAG213_MAX_MESSAGE_BYTES`**, seeded from the datasheet figure and **re-pinned to the
+constant, **`NTAG213_MAX_MESSAGE_BYTES`**, seeded provisionally at **137 B** (the `Ndef.maxSize` Android
+is commonly reported to return for a formatted NTAG213 — [platform-doc], not a value this project has
+observed) and **re-pinned to the
 value actually measured from a physical NTAG213** during the runbook's Session 1 and recorded in the
 evidence file — so the budget the tests defend is a number this project has observed, not one it read.
 
@@ -956,8 +960,8 @@ note rather than an asset; the census is `docs/design/g1/00-source-data-inventor
 correction 3, addition 2). **The historical package is not installed. Its old private lookup map is
 not part of any supported migration path and is intentionally abandoned.** (Evidence: an
 attached-phone `pm list packages` listing showed only the lower-case current package; the exact
-`pm path` check is scheduled for the next time the phone is attached, so nothing here claims the
-old data is proven gone.)
+`pm path com.looseCannon.noteNFC` check was run with the phone attached on 2026-09-16 and returned
+nothing; nothing here claims the old private data is proven gone, only that the package is absent.)
 
 Their lifecycle is therefore not a migration at all: an old tag on a machine is currently useless;
 when convenient, the owner opens that machine in ServiceTag and writes the canonical ServiceTag tag;

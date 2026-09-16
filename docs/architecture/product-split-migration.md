@@ -34,7 +34,8 @@ before consequential remote mutations.* This runbook's §A covers D–G, §B cov
   codename, and phone folder names appear nowhere in this document.
 - Naming: **noteNFC is a historical name only** (O1). Nothing named noteNFC exists after the split
   and nothing reuses `com.loosecannon.notenfc`.
-- **[P*n*]** markers continue the target document's numbering; §K lists what is still open.
+- **[P*n*]** markers were used while drafting; every proposal is ratified as of `5d8ca77`, and §K is
+  the closed register (none open).
 
 **Preserved artifacts this runbook depends on** (Phase A, done):
 
@@ -61,7 +62,7 @@ provenance table in target §4.6 stays true.
 cd ~/Documents/Projects/AndroidStudioProjects/noteNFC
 git fetch --all --tags
 git rev-parse pre-split-checkpoint^{commit} refs/heads/pre-split-master origin/master
-git -C ../noteNFC-split rev-parse HEAD        # the product-split worktree
+git -C ../ServiceTag-split rev-parse HEAD        # the product-split worktree
 ```
 
 **Verify.** All three refs resolve to `ac523d7`; the `product-split` worktree holds the docs package;
@@ -77,8 +78,8 @@ search-and-replace.
 | # | Task | Files | Verify |
 |---|---|---|---|
 | **1** | `rootProject.name = "ServiceTag"` (an omission from the archaeology inventory — review correction 11) | `settings.gradle.kts:20` | `./gradlew projects` shows the new root name |
-| **2** | `namespace` and `applicationId` → `com.loosecannon.servicetag`; keystore path → `~/.config/servicetag/keystore.properties`; `versionCode`/`versionName` bumped | `app/build.gradle.kts` | `./gradlew :app:assembleDebug`; `aapt2 dump badging` shows the new package |
-| **3** | Move the Kotlin package roots: `app/src/{main,debug,test,androidTest}/kotlin/com/loosecannon/notenfc/…` → `…/servicetag/…` and `core/src/{main,test}/kotlin/com/loosecannon/notenfc/core/…` → `…/servicetag/core/…`; rewrite every `package`/`import` | 233 `.kt` files + both manifests + `app/build.gradle.kts` | `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug`, **plus a scoped check only**: no `package` or `import` declaration and no source path root still says `com.loosecannon.notenfc` — `git grep -nE '^\s*(package\|import)\s+com\.loosecannon\.notenfc' -- app core` empty, and `git ls-files app core \| grep -c 'com/loosecannon/notenfc/'` = 0. **The repository-wide zero-hit grep does NOT belong here**: tasks 5–7 still legitimately hold `com.loosecannon.notenfc` in the NDEF type constants, the manifest filter path and the deep-link literals until they run, so that assertion is the whole-phase verification below |
+| **2** | `namespace` and `applicationId` → `com.loosecannon.servicetag`; keystore path → `~/.config/servicetag/keystore.properties`; `versionCode` 6 → **7**, `versionName` "2.4" → **"2.5"** (the ratchet above the preserved 2.4 rollback APK) | `app/build.gradle.kts` | `./gradlew :app:assembleDebug`; `aapt2 dump badging` shows the new package |
+| **3** | Move the Kotlin package roots: `app/src/{main,debug,test,androidTest}/kotlin/com/loosecannon/notenfc/…` → `…/servicetag/…` and `core/src/{main,test}/kotlin/com/loosecannon/notenfc/core/…` → `…/servicetag/core/…`; rewrite every `package`/`import` | 233 `.kt` files + both manifests + `app/build.gradle.kts` | `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug`, **plus a scoped check only**: no `package` or `import` declaration and no source path root still says `com.loosecannon.notenfc` — `git grep -nE '^\s*(package\|import)\s+com\.loosecannon\.notenfc' -- app core` empty, and `git ls-files app core \| grep -c 'com/loosecannon/notenfc/'` = 0. **The repository-wide zero-hit grep does NOT belong here**: tasks 4, 6 and 7 still legitimately hold `com.loosecannon.notenfc` in the NDEF type constants, the manifest filter path and the deep-link literals until they run, so that assertion is the whole-phase verification below |
 | **4** | The **five FQN `android:name` literals that do not follow `namespace`** (review correction 4): `com.loosecannon.notenfc.NoteNfcApp` (application), `…MainActivity`, `…ShareActivity`, `…nfc.NfcDispatchActivity` in `app/src/main/AndroidManifest.xml`, and `…debug.DebugBackupActivity` in `app/src/debug/AndroidManifest.xml` | both manifests | the merged manifest contains no `notenfc` substring; the app launches |
 | **5** | The **one Gradle-owned identity value** (C9, target §4.8): `ndefExternalDomain`, `ndefTypeName`, `aarPackage` in `app/build.gradle.kts`, feeding `manifestPlaceholders["ndefTagPath"]` and three `buildConfigField`s; the manifest's `android:path` becomes `${ndefTagPath}` (still an **exact** path, never `pathPrefix`); the app builds its `TagIdentity` from `BuildConfig` | `app/build.gradle.kts`, `AndroidManifest.xml:84-88`, the NFC wiring | **both** binding tests green: the JVM test on `TagIdentity`-from-`BuildConfig`, and the emulator test that `queryIntentActivities` on `vnd.android.nfc://ext/<externalType>` resolves to exactly this app's dispatch activity |
 | **6** | **Drop legacy `md5_short` entirely** (O2/O3): the `LEGACY_TYPE`/`LEGACY_TYPE_NAME` constants, `legacyKeyPattern`, the `decodeLegacy` branch, `TagPayload.LegacyMd5`, `PayloadFormat.LEGACY_MD5`, `Resolution.UnknownLegacy`, the `Legacy` sheet, the `"LEGACY_MD5"` trampoline wire value, the second manifest filter, and the matching tests. Record it as **a deliberate reversal of D6's "kept permanently" promise** | `core/…/core/nfc/NdefCodec.kt:50-53,82-88`, `core/…/core/model/TagBinding.kt`, `core/…/core/usecase/ResolveTag.kt`, `app/…/ui/scan/{ScanViewModels,TagResultSheet}.kt`, `AndroidManifest.xml:89-93`, `core/src/test/…/NdefCodecTest.kt` | green suites; `git grep -i md5` over `app core` empty; the manifest declares exactly **one** `NDEF_DISCOVERED` filter |
@@ -103,7 +104,7 @@ two-tab navigation, Read/inspect tag, ambient NFC as the normal read path).
 **Verify (whole phase).**
 
 ```bash
-cd ~/Documents/Projects/AndroidStudioProjects/noteNFC-split
+cd ~/Documents/Projects/AndroidStudioProjects/ServiceTag-split
 ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain
 
 # The repository-wide assertion, run ONLY after the last identity task (7) has landed:
@@ -346,7 +347,7 @@ why it waits for every local proof — not because it cannot be undone.
 cd ~/Documents/Projects/AndroidStudioProjects/noteNFC
 git remote set-url origin https://github.com/GonzRon/ServiceTag.git
 git fetch --all --tags && git rev-parse origin/master pre-split-checkpoint
-git -C ../noteNFC-split remote -v          # the worktree shares the repository's remote
+git -C ../ServiceTag-split remote -v          # the worktree shares the repository's remote
 curl -sI https://github.com/GonzRon/noteNFC | grep -i '^location'   # the old path redirects
 gh api repos/GonzRon/ServiceTag/hooks --jq '.[].config.url'         # webhooks, if any
 gh run list --repo GonzRon/ServiceTag --limit 3
@@ -699,12 +700,11 @@ because every remaining field is domain data (arch §7.6).
 
 ### C.8a Observe the per-package grant claim on the emulator — before the uninstall
 
-The whole point of §15's ordering rests on a **[platform-doc]** claim (C.3). Before acting on it
+The whole point of §15's ordering rests on a **[platform-doc]** claim (§C.3). Before acting on it
 irreversibly, watch it happen somewhere harmless. Workstation-driven; **no owner action**.
 
 **Do.** On the emulator, install **two** packages that both use a SAF tree — the ServiceTag build and
-any second debuggable build with a different `applicationId` (NoteTag once it exists, or a throwaway
-variant before that). Point **both** at the **same** folder, each through its own
+a throwaway variant of the ServiceTag build with `applicationIdSuffix = ".spike"` (so C.8a runs before C.10 and does not depend on NoteTag existing). Point **both** at the **same** folder, each through its own
 `OpenDocumentTree` flow. Then, from the workstation, read each package's persisted-permission list
 and uninstall one.
 
@@ -802,7 +802,6 @@ arithmetic or a decision table.
 | **Warm / from-recents / screen-off** dispatch states | **optional, workstation-logged observations** | logged from `logcat`/`dumpsys` while the owner is already tapping in §E; never separate owner actions. **P21 is the spike's default outcome** — ServiceTag keeps its AAR, NoteTag ships without one — and only a surprise in these logs would reopen it |
 
 ### D.4 How each observation is recorded
-### D.4 How each observation is recorded
 
 One row per observation in `docs/architecture/product-split-evidence.md` (§29), in the same shape as
 the existing `docs/design/phase-*-evidence.md` files, so it is comparable to the 1B/1C rows this
@@ -879,7 +878,8 @@ tags written, `adb logcat` capturing from the workstation throughout.
 | **2 — coexistence** (§E) | **8** | T3 write, T4 cold ambient, T2 ambient, T3 ambient, T2 in NoteTag's writer, T4 in ServiceTag's inspector, T7 ambient, and the uninstall/tap/reinstall spike tap |
 
 **Total: 12 owner actions, in two sessions.** The two first-use NFC permission confirmations are
-**folded into checks 2 and 3** and are not counted separately; §25 rows 7, 8 and 9 cost nothing
+**folded into checks 2 and 3** and are not counted separately (nor is at most one retap if Android
+consumes a scan while a permission dialog is up — a mechanical accident, not an action); §25 rows 7, 8 and 9 cost nothing
 because they are read from the logs. Everything else is workstation-driven: installs, uninstalls,
 reinstalls, force-stops, `dumpsys`, `logcat`, exports, the emulator observations, and every optional
 dispatch-state observation.
@@ -1023,7 +1023,7 @@ proceeding; minor cleanup is recorded and deferred.*
 | **6** | **NoteTag narrow scope** | E | §23's acceptance list end to end; the v1 format's per-kind tests; the local store never required to resolve `JOPLIN_NOTE`/`URI`; true ancestry (30 commits, zero merges, root `5fb6aed`); CI green **from scratch** (review correction 8); no `docs/`, no tracked APK, no legacy decoder, no tech catch-all |
 | **7** | **data / artifact migration** | H | §C.6 and §C.7 pass: eleven tables with identical id sets and per-field equality (events including `tzId`, `occurredOn`, `createdAt`, `(source, source_ref)`); 8×3 attachment hashes; the empty-tree restore proved independently; every difference accounted for by §C.8 and nothing else. **This gate precedes §C.9's irreversible uninstall** |
 | **8** | *withdrawn* | — | folded into gate 9 (O2; §5's "physical-tag proof — now: coexistence of final products only") |
-| **9** | **final coexistence / device** | I + J | Session 1's four writer taps recorded (§D.2, including format → verify → lock-last on one tag, and the **measured `Ndef.maxSize`** written to the evidence file); Session 2's eight taps and three log-read rows passed (§E), with **dispatch spike S1 folded into checks 2–3 and S2 as check 8**; **owner actions exactly 12** (§E.1); zero chooser dialogs on checks 2–4 and 7; no database write on checks 5–7; sibling refusals offering **Write over it / Cancel** and nothing else; the per-package SAF grant observed on the emulator at C.8a before C.9 acted on it; every reassigned proof (§D.3) green off-device with the capacity fakes pinned to the measured NTAG213 budget; both apps on the same library tag; every observation in the evidence file with a verdict, and the **debug-build caveat** recorded |
+| **9** | **final coexistence / device** | I + J | Session 1's four writer taps recorded (§D.2, including format → verify → lock-last on one tag, and the **measured `Ndef.maxSize`** written to the evidence file); Session 2's eight taps and three log-read rows passed (§E), with **dispatch spike S1 folded into checks 2–3 and S2 as check 8**; **owner actions exactly 12** (§E.1; a retap swallowed by a permission dialog does not count); zero chooser dialogs on checks 2–4 and 7; no database write on checks 5–7; sibling refusals offering **Write over it / Cancel** and nothing else; the per-package SAF grant observed on the emulator at C.8a before C.9 acted on it; every reassigned proof (§D.3) green off-device with the capacity fakes pinned to the measured NTAG213 budget; both apps on the same library tag; every observation in the evidence file with a verdict, and the **debug-build caveat** recorded |
 | **10** | **final three-repository convergence** | K + L + M + N | three repositories, three green CI runs, **ServiceTag's converted `master` pushed and green on the new workflow (§B.3a)**, three clean-clone builds **from URLs** plus one per app from a second workstation (§B.6); issues moved with backlinks and the notes added; the three first tags created; documentation changed only where §H says and additively where it touches history; every **[P*n*]** ratified or superseded; every "to observe on-device" marker resolved or explicitly deferred; and the §36 handoff assembled — checkpoint SHA, the historical split SHA and why, three repo names/URLs/canonical commits, what the original repository became, what moved into nfc-tag-core, what stayed app-specific, the dependency/version mechanism, both applicationIds and namespaces, NFC record and deep-link ownership, AAR behaviour, signing fingerprints only, the migration backup format, the ID-preservation and attachment-hash proofs, the SAF grant procedure, the coexistence proof, CI status ×3, issue movements, releases/tags, rollback, and remaining debt. **Next operation after handoff: ServiceTag Phase 3** |
 
 **No gate is self-certified**; each is reviewed against the artifact it names, by someone who did not
@@ -1039,7 +1039,7 @@ exactly **Write over it / Cancel**, normalised throughout both documents — no 
 cross-product action anywhere), **P19** (the local store as a single atomically-replaced JSON file)
 **together with the G2 crash-consistency invariant and its failure-injection deliverable** (§A.2 task
 7), **P20** (Compose, one activity, two tiny screens) and **P21** (ServiceTag keeps its AAR pending
-the spike now folded into §E checks 1–2).
+the spike now folded into §E checks 2–3).
 
 Everything this runbook once proposed has been accepted or superseded: the composite-build choice by
 **O15**, the Migrate-tag tool and all legacy handling by **O2/O11**, the reconstructions of §22's word
