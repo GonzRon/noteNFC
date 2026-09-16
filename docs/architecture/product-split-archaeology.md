@@ -1193,14 +1193,18 @@ owner read "eight notes in one notebook, each the target of a legacy noteNFC tag
 of the eight is explicitly a standalone-link target, not an asset (item 4: *"this tag must stay a
 standalone link to the note"*). These are physical `md5_short` tags written by the 2024 app; the live
 `nfc_tag` table's zero rows describe the ServiceTag-era database only and say nothing about these —
-the two facts are independent. **Verified fact (2026-09-16, read-only `pm list packages` on the
-phone):** the 2024 mixed-case app `com.looseCannon.noteNFC` is **not** installed; only
-`com.loosecannon.notenfc` is. Because each Android package's `SharedPreferences` is private to it,
-the modern lowercase package never held the 2024 app's `noteNFCURLs` map (confirmed independently by
-§7.5's own prefs listing below: only `notenfc.xml` and `storage_spike.xml` are present, no
-`noteNFCURLs.xml`), and the app that owned that map is not even installed — so the eight tags'
-key→link lookup map is gone, and the eight tags are unresolvable by any app installed on the phone
-today.
+the two facts are independent. **Observed (2026-09-16, read-only `pm list packages` on the
+attached phone, case-insensitive match):** only `com.loosecannon.notenfc` is listed; the 2024
+mixed-case package `com.looseCannon.noteNFC` is not. The owner's wording for every canonical
+document: *the historical package is not installed; its old private lookup map is not part of any
+supported migration path and is intentionally abandoned.* Package absence is not proof that its
+private data is absent, and no forensic recovery is wanted; an exact `pm path
+com.looseCannon.noteNFC` confirmation is scheduled for the next time the phone is attached. Because
+each Android package's `SharedPreferences` is private to it, the modern lowercase package never held
+the 2024 app's `noteNFCURLs` map (§7.5's own prefs listing below: only `notenfc.xml` and
+`storage_spike.xml`, no `noteNFCURLs.xml`). Lifecycle of the eight tags under the greenfield ruling:
+currently useless → when convenient the owner opens that machine in ServiceTag and writes the
+canonical ServiceTag tag → done; no wizard, resolver, compatibility mode or acceptance row.
 
 **Prefs on the phone** (both under the app's private prefs dir):
 
