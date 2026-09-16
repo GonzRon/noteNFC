@@ -242,6 +242,21 @@ class ArtifactsUseCasesTest {
         assertContentEquals(payload, store.open(row.storageLocator)!!.use { it.readBytes() })
     }
 
+    @Test fun anUnreadableLocalFileIsReplacedFromTheArchiveInsteadOfAbortingTheRestore() = runTest {
+        val row = seed()
+        val archive = writeArchive()
+        // the row's bytes are on the device but the document cannot be read past its header
+        val unreadable = UnreadableOnFirstOpen(store, row.storageLocator)
+        val restoreOver = RestoreArtifacts(attachments, FixedStorage(unreadable))
+
+        val report = restoreOver.run(ByteArrayInputStream(archive), expectedSetId = "set-1")
+
+        assertEquals(1, report.restored)
+        assertEquals(0, report.alreadyPresent)
+        assertEquals(0, report.skipped)
+        assertContentEquals(payload, store.open(row.storageLocator)!!.use { it.readBytes() })
+    }
+
     @Test fun aPutThatDiesMidCopyLeavesNoBytesBehindAndStillFailsTheRestore() = runTest {
         val row = seed()
         val archive = writeArchive()
@@ -330,6 +345,26 @@ class ArtifactsUseCasesTest {
             if (locator == refused) throw StoreIoException("rigged delete failure at $locator")
             delegate.delete(locator)
         }
+    }
+
+    /** Hands back a stream that dies on its first read, once; every later open is the real one. */
+    private class UnreadableOnFirstOpen(
+        private val delegate: InMemoryAttachmentStore,
+        private val locator: String,
+    ) : AttachmentStore {
+        private var armed = true
+        override suspend fun put(locator: String, source: ByteSource) = delegate.put(locator, source)
+        override suspend fun open(locator: String): java.io.InputStream? {
+            if (locator == this.locator && armed) {
+                armed = false
+                return object : java.io.InputStream() {
+                    override fun read(): Int = throw java.io.IOException("rigged unreadable document")
+                }
+            }
+            return delegate.open(locator)
+        }
+        override suspend fun exists(locator: String) = delegate.exists(locator)
+        override suspend fun delete(locator: String) = delegate.delete(locator)
     }
 
     private class FixedStorage(private val store: AttachmentStore) : AttachmentStorage {

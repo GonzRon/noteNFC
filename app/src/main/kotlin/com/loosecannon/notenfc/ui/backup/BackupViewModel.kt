@@ -278,9 +278,11 @@ class BackupViewModel(
     private fun exportReason(error: Throwable): String = when (error) {
         // The one case where "Nothing was saved" would be a lie: say what is still there, and
         // say it by the name the owner will see in their file manager.
-        is ExportLeftFilesBehind ->
-            exportReason(error.cause).trimEnd('.') +
-                "; could not remove ${error.leftBehind.joinToString(", ")} — delete them yourself"
+        is ExportLeftFilesBehind -> {
+            val base = exportReason(error.cause).removeSuffix(" Nothing was saved.").trimEnd('.')
+            val pronoun = if (error.leftBehind.size == 1) "it" else "them"
+            "$base. Could not remove ${error.leftBehind.joinToString(", ")} — delete $pronoun yourself."
+        }
         is NoAttachmentFolder -> reason(error)
         is BackupSetIncomplete -> "Backup not saved: " + error.wording()
         is ArtifactsWriteFailed ->

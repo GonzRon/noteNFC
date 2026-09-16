@@ -493,8 +493,8 @@ class BackupViewModelTest {
         vm.exportSetTo(sink)
 
         assertEquals(
-            "Export failed: the files archive could not be written. Nothing was saved" +
-                "; could not remove ${BackupSetNames.data(stamp)} — delete them yourself",
+            "Export failed: the files archive could not be written. " +
+                "Could not remove ${BackupSetNames.data(stamp)} — delete it yourself.",
             said.await(),
         )
         assertEquals(listOf(BackupSetNames.data(stamp)), sink.files.keys.toList())

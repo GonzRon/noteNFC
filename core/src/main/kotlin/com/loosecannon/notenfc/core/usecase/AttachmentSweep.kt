@@ -45,13 +45,21 @@ internal suspend fun AttachmentStorage.sweepBytes(locators: List<String>) {
 internal suspend fun AttachmentStore.sha256Of(locator: String): String? {
     val source = open(locator) ?: return null
     val digest = MessageDigest.getInstance("SHA-256")
-    source.use { input ->
-        val buffer = ByteArray(64 * 1024)
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            digest.update(buffer, 0, read)
+    try {
+        source.use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
         }
+    } catch (e: IOException) {
+        // A document that opens but cannot be read (revoked grant, detached card, a corrupt
+        // synced file) is as good as absent for the one question this answers: the caller
+        // then replaces it from bytes it has already verified, instead of aborting the rest of
+        // a restore over a file nobody can read anyway. Cancellation is not an IOException.
+        return null
     }
     return digest.digest().joinToString("") { b -> "%02x".format(b) }
 }
