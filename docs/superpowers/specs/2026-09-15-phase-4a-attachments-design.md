@@ -151,9 +151,10 @@ against the row before writing.
 ### 5.3 `AttachmentStorage` and the tree preference
 
 - `AppPrefs.attachmentTreeUri: String?` (SharedPreferences, as today's prefs).
-- `AttachmentStorage` takes a `rootResolver: (treeUri: String) -> DocumentFile?` (production:
-  `DocumentFile.fromTreeUri`; the device-proof test substitutes `DocumentFile.fromFile` on an
-  app-external directory) and a `grantCheck: (String) -> Boolean` (production: the resolver's
+- `AttachmentStorage` takes a `rootResolver: (treeUri: String) -> AttachmentRoot?` — a small
+  app-side interface over the tree (production: `DocumentTreeRoot` over `DocumentFile.fromTreeUri`;
+  the device-proof test substitutes a root over `DocumentFile.fromFile` on an app-external
+  directory) and a `grantCheck: (String) -> Boolean` (production: the resolver's
   persisted permissions; tests: always true).
 - `state()`: no pref → `NotConfigured`; pref set but `contentResolver.persistedUriPermissions`
   lacks a read+write entry for it, or `DocumentFile.fromTreeUri(...)?.canWrite() != true` →
@@ -173,11 +174,11 @@ against the row before writing.
 
 | Use case | Signature | Rules |
 |---|---|---|
-| `AddAttachment` | `run(owner, cmd: AddAttachmentCommand, source: ByteSource): Result<Attachment, AttachmentProblem>` | owner exists; store present; name non-blank (default = picked display name); `put` first, then the row inside `uow.write`; if the write fails the bytes are deleted. `cmd` = displayName, mimeType, kind, capturedOn, notes, fromCamera. |
+| `AddAttachment` | `run(owner, cmd: AddAttachmentCommand, source: ByteSource): AttachmentResult<Attachment>` (sealed `Ok`/`Refused(problem)`, like `OpenLink.Outcome`) | owner exists; store present; name non-blank (default = picked display name); `put` first, then the row inside `uow.write`; if the write fails the bytes are deleted. `cmd` = displayName, mimeType, kind, capturedOn, notes, fromCamera, `sizeBytes: Long?` (guarded before `put` when the provider reports it, and again against `StoredBytes` when it does not). |
 | `UpdateAttachment` | `run(id, cmd: UpdateAttachmentCommand)` | name/kind/capturedOn/notes; `Unchanged` when nothing differs; touches `updatedAt`. |
 | `DeleteAttachment` | `run(id)` | row inside `uow.write`, then `store.delete` best effort (a failed byte delete is logged, not surfaced: the row is gone, the orphan is 4B's sweep). |
-| `DeleteAsset` (existing) | + `attachments`, `store` | collects the asset's *and its events'* attachment locators inside the transaction, deletes rows via cascade, then deletes bytes after commit, best effort. |
-| `DeleteEvent` (existing) | + `attachments`, `store` | same for the event's attachments. |
+| `DeleteAsset` (existing) | + `attachments`, `storage: AttachmentStorage` (an absent or lost store never fails a delete) | collects the asset's *and its events'* attachment locators inside the transaction, deletes rows via cascade, then deletes bytes after commit, best effort. |
+| `DeleteEvent` (existing) | + `attachments`, `storage: AttachmentStorage` | same for the event's attachments. |
 | `ExportBackupSet` | `run(): BackupSet` (replaces `ExportBackup.run`) | one `uow.read` snapshot; data archive bytes, plus an `ArtifactsPlan` (list of attachment id → locator → sha256 → size) the app streams into the second archive. |
 | `ImportBackupReplace` (existing) | `run(bytes): ImportReport` | format 5 reads `attachments`; rows are written after their owners; `ImportReport.attachments` count; old managed bytes are deleted after commit best effort; `lastRestoredBackupSetId` returned in the report. |
 | `RestoreArtifacts` | `run(archive: InputStream, expectedSetId: String?): ArtifactsReport` | manifest `backupSetId` must equal the last restored data set (else `SetMismatch`); each entry must match a row by id and sha256 (else counted `skipped`); bytes go to the row's locator; report `restored / skipped / missingRows`. |
