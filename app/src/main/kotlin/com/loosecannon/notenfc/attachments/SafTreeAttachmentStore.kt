@@ -2,6 +2,7 @@ package com.loosecannon.notenfc.attachments
 
 import android.content.ContentResolver
 import androidx.documentfile.provider.DocumentFile
+import com.loosecannon.notenfc.core.model.MimeTypes
 import com.loosecannon.notenfc.core.ports.AttachmentStore
 import com.loosecannon.notenfc.core.ports.ByteSource
 import com.loosecannon.notenfc.core.ports.StoreIoException
@@ -10,6 +11,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.security.DigestInputStream
 import java.security.MessageDigest
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -37,8 +39,11 @@ class SafTreeAttachmentStore(
             val segments = locator.split('/')
             val directory = directoryFor(segments.dropLast(1))
             val fileName = segments.last()
-            // A stale document at the same locator is replaced, not appended to.
-            documentIn(directory, fileName)?.delete()
+            // A stale document at the same locator is replaced, not appended to — and a provider
+            // that refuses the delete must not end up with two documents for one locator.
+            documentIn(directory, fileName)?.let { stale ->
+                if (!stale.delete()) throw StoreIoException("cannot replace $locator")
+            }
             val document = directory.createFile(mimeFor(fileName), fileName)
                 ?: throw StoreIoException("cannot create $locator in ${tree.uri.authority}")
             try {
@@ -111,22 +116,22 @@ class SafTreeAttachmentStore(
         return directory
     }
 
-    /** Cleanup must not replace the failure that caused it, whatever the provider does here. */
+    /**
+     * Cleanup must not replace the failure that caused it, whatever the provider does here — this
+     * is a delete, not a copy loop, so the narrow-catch rule does not apply. Cancellation still
+     * travels: it is not a provider failure.
+     */
     private fun deleteQuietly(document: DocumentFile) {
         try {
             document.delete()
-        } catch (e: IOException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             // nothing left to do: an orphan for 4B's sweep, not a second exception
         }
     }
 
     /** The provider wants a mime type to create a file; the extension is all we have here. */
-    private fun mimeFor(fileName: String): String = when (fileName.substringAfterLast('.', "")) {
-        "jpg", "jpeg" -> "image/jpeg"
-        "png" -> "image/png"
-        "pdf" -> "application/pdf"
-        "zip" -> "application/zip"
-        "txt" -> "text/plain"
-        else -> "application/octet-stream"
-    }
+    private fun mimeFor(fileName: String): String =
+        MimeTypes.mimeForExtension(fileName.substringAfterLast('.', ""))
 }

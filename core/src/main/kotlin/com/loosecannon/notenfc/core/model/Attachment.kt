@@ -101,7 +101,18 @@ object MimeTypes {
     fun normalise(mimeType: String): String =
         mimeType.substringBefore(';').trim().lowercase().ifEmpty { "application/octet-stream" }
 
+    /** Derived from [EXTENSIONS], so the forward and inverse lookups cannot drift apart. */
+    private val MIME_BY_EXTENSION = EXTENSIONS.entries.associate { (mime, ext) -> ext to mime }
+
     fun extensionFor(mimeType: String): String? = EXTENSIONS[normalise(mimeType)]
+
+    /**
+     * The inverse of [extensionFor]: what to tell a document provider when a locator's extension
+     * is all that is on hand. An extension this model does not name is `application/octet-stream`,
+     * which is what an unknown payload is.
+     */
+    fun mimeForExtension(ext: String): String =
+        MIME_BY_EXTENSION[ext.lowercase()] ?: "application/octet-stream"
 
     fun isCompressed(mimeType: String): Boolean = normalise(mimeType) in COMPRESSED
 }

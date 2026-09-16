@@ -77,4 +77,21 @@ class AttachmentRulesTest {
         assertFalse(row.copy(mimeType = "application/pdf").isImage)
         assertEquals(268_435_456L, MAX_ATTACHMENT_BYTES)
     }
+
+    @Test fun mimeForExtensionIsTheInverseOfExtensionFor() {
+        assertEquals("image/jpeg", MimeTypes.mimeForExtension("jpg"))
+        assertEquals(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            MimeTypes.mimeForExtension("docx"),
+        )
+        // the case a provider hands back, and the one it never heard of
+        assertEquals("image/png", MimeTypes.mimeForExtension("PNG"))
+        assertEquals("application/octet-stream", MimeTypes.mimeForExtension("wat"))
+        assertEquals("application/octet-stream", MimeTypes.mimeForExtension(""))
+        // derived from the one table, so every extension the model can emit round-trips
+        listOf("image/jpeg", "image/png", "application/pdf", "application/zip", "text/plain")
+            .forEach { mime ->
+                assertEquals(mime, MimeTypes.mimeForExtension(MimeTypes.extensionFor(mime)!!))
+            }
+    }
 }

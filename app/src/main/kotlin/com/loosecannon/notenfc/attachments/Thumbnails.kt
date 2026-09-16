@@ -68,11 +68,14 @@ class Thumbnails(
         return null
     }
 
-    /** The smallest power of two that brings the long edge to [maxEdgePx] or below. */
+    /**
+     * The smallest power of two that brings the long edge to [maxEdgePx] or below — spec §8.2
+     * asks for 256 px, so a 400 px edge samples to 200 rather than staying at 400.
+     */
     internal fun sampleSize(width: Int, height: Int): Int {
         var sample = 1
         var edge = maxOf(width, height)
-        while (edge / 2 >= maxEdgePx) {
+        while (edge > maxEdgePx) {
             edge /= 2
             sample *= 2
         }
