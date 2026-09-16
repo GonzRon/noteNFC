@@ -13,13 +13,34 @@ signing key, the pre-split checkpoint, no deletion of old refs, no deletion of t
 no silent tag rewrites, and **no uninstall of the old modern package until ServiceTag's migration is
 independently proven**.
 
-**Sequence (§5).** A freeze/checkpoint · B archaeology · C target architecture · **D local ServiceTag
-identity conversion** · **E narrow-product reconstruction** · **F nfc-tag-core extraction** · **G
-both apps consume** · **H data + attachment migration proof** · **I physical-tag proof (now:
-coexistence of final products only)** · **J coexistence proof** · **K remote repository changes** ·
-**L independent CI** · **M canonical documentation** · **N final review/handoff**. *Local proof comes
-before consequential remote mutations.* This runbook's §A covers D–G, §B covers K–L, §C covers H,
-§D covers I, §E covers J, §F–§H cover M, §I covers rollback, §J maps the §34 gates.
+**Sequence (§5)** names the phases: A freeze/checkpoint · B archaeology · C target architecture ·
+**D local ServiceTag identity conversion** · **E narrow-product reconstruction** · **F nfc-tag-core
+extraction** · **G both apps consume** · **H data + attachment migration proof** · **I physical-tag
+proof (now: coexistence of final products only)** · **J coexistence proof** · **K remote repository
+changes** · **L independent CI** · **M canonical documentation** · **N final review/handoff**.
+
+**THE CANONICAL MASTER ORDER — one order, stated once, obeyed by every table below:**
+
+> **local D–G → remote K/L → phone H → physical and coexistence I/J → docs and handoff M/N**
+
+with one documented exception inside it: **`nfc-tag-core` is created and pushed early** (§B.1), before
+the rename and before G can be proved locally at all, because a git submodule needs a URL. That is
+§27's own "most conservative reversible adjustment", and it is the only departure from §27's literal
+step numbering.
+
+Three things follow, and they are why the order is not the alphabet:
+
+- **Remote before phone.** K/L produce the first green CI on a machine that is not this one, so the
+  data migration in H runs against a ServiceTag whose build is already independently proven. §26 and
+  gate 10 are otherwise unreachable, because the clean-clone-from-URL proof needs the remotes.
+- **Phone-data before physical-tag.** H ends with the old package uninstalled and NoteTag installed
+  (§15 steps 7–8). I/J **cannot** run before that: they need both final products on the device, and
+  NoteTag does not exist on the phone until H's last step.
+- **Docs and handoff last**, because they record what the earlier phases observed.
+
+**This runbook's sections map onto that order:** §A covers D–G · §B covers K–L · §C covers H · §D
+covers I · §E covers J · §F–§H cover M · §I is rollback · §J maps the §34 gates. The sections appear
+in the document in that order, which is also the order they are executed in.
 
 **Standing constraints.**
 
@@ -167,7 +188,7 @@ provenance, intent, lessons and the share→write→tap evidence — not code to
 | **4** | signing: `~/.config/notenfc/keystore.properties` via the same `Properties`-from-`user.home` mechanism — **the existing noteNFC key, unchanged, never rotated** (§12); `versionCode`/`versionName` past the historical 2 / `1.1` | `./gradlew :app:assembleRelease` produces a **signed** release build (§12 requires the proof); the certificate SHA-256 matches the existing key's, recorded not reproduced |
 | **5** | the NoteTag application: share receiver, writer screen, ambient dispatch activity, minimal local store. **Delete the three 2024 activities** rather than modernise them (O6). Declare exactly **one** `NDEF_DISCOVERED` filter on the exact path `/com.loosecannon.notetag:tag`; **do not re-inherit the 2024 `TECH_DISCOVERED` catch-all or `res/xml/nfc_tech_filter.xml`** | `git grep -c nfc_tech_filter` = 0; exactly one NFC filter in the merged manifest |
 | **6** | the **NoteTag v1 tag format** (O13/O14, target §4.9): one external record, `version|kind|flags|body`; kinds `0x01 JOPLIN_NOTE`, `0x02 URI`, `0x03 LOCAL_REF`; `0x04`+ reserved; **no AAR**; the automatic writer decision compact → URI-if-it-fits → LOCAL_REF, with "fits" decided by the exact encoded message against the **measured** `Ndef.maxSize`. **`JOPLIN_NOTE` is 32 lower-case hex on both sides, and the write side validates rather than assumes**: accept a candidate id only if it matches `^[0-9a-fA-F]{32}$`, normalise it to lower case before packing the 16 bytes, and on any other shape **fall through to `URI`** rather than truncating, mangling or refusing (target §4.9) | JVM tests per kind: encode/decode round-trip, malformed bodies, an unknown kind, an unknown version; a **mixed-case round-trip test** — encode from an upper- or mixed-case 32-hex id, decode, assert the reconstructed id is **lower case** and equal to the normalised input — and a non-conforming-id test asserting the **`URI` fallback** was chosen; **capacity selection driven by injected `maxSize` values** (§D.3) with the exact encoded message at `maxSize`, `maxSize - 1` and `maxSize + 1`, asserting compact → URI-if-it-fits → `LOCAL_REF` and that the fallback fires **only** when the message genuinely does not fit — `needed` is `toNdefMessage().toByteArray().size` with **no TLV allowance** (target §4.3 invariant 7); **no test asserts a character count** |
-| **7** | the **minimal local store** (O14, ratified P19): a single atomically-replaced JSON file behind a small interface; `LOCAL_REF` targets plus convenience metadata; **never required to resolve a `JOPLIN_NOTE` or `URI` tag**; the writer tells the user when a tag will only work on this phone. **Plus the `LOCAL_REF` crash-consistency invariant (G2)**: the mapping is durably stored **before** the physical tag is written, and a `LOCAL_REF` whose mapping has not committed is never successfully written. Sequence: allocate the UUID → **atomically persist** the mapping (temporary file, `fsync`, atomic rename) → write and verify the tag → success retains the mapping; failure, cancellation or a lost tag → best-effort removal of the orphan mapping. Persist-then-write can only leave a few invisible bytes of orphan JSON; write-then-persist can leave **a live tag that resolves to nothing on the phone that wrote it**, which is the one outcome a device-bound kind must never produce | a test that `JOPLIN_NOTE` and `URI` tags resolve with the store deleted; a test that a `LOCAL_REF` miss produces a message, not a crash; and the **named failure-injection deliverable**, two cases: *persist succeeds, tag write fails → the mapping is removed*, and *persist fails → no tag write is attempted at all* |
+| **7** | the **minimal local store** (O14, ratified P19): a single atomically-replaced JSON file behind a small interface; `LOCAL_REF` targets plus convenience metadata; **never required to resolve a `JOPLIN_NOTE` or `URI` tag**; the writer tells the user when a tag will only work on this phone. **Plus the `LOCAL_REF` crash-consistency invariant (G2, as corrected by H1)**, two rules in priority order: **(a)** the mapping is durably stored **before** the physical tag is written, and a `LOCAL_REF` whose mapping has not committed is never written at all; **(b)** once a write has been **attempted**, the mapping is **RETAINED** unless it is provable that **no bytes reached the tag**. Sequence: allocate the UUID → **atomically persist** the mapping (temporary file, `fsync`, atomic rename) → write and verify → **retain on success, and also retain on any ambiguous failure** (tag lost mid-write, lost before the read-back completes, or any I/O error after the message was handed to the chip); remove **only** where no write can have happened — user cancellation, or a *pre-write* rejection (capacity refusal, foreign refusal, read-only, unsupported). The direction matters because `writeNdefMessage` can physically succeed and the tag then leave the field before the read-back confirms it: deleting the mapping there leaves **a live `LOCAL_REF` tag that resolves to nothing on the only phone that could resolve it**, while retaining it costs at worst an **orphan JSON entry** nobody sees and the next write of that UUID overwrites | a test that `JOPLIN_NOTE` and `URI` tags resolve with the store deleted; a test that a `LOCAL_REF` miss produces a message, not a crash; and the **named failure-injection deliverable, three cases**: *persist ok + **ambiguous** write failure → mapping **RETAINED***; *persist fails → **no** write attempted*; *cancellation or pre-write rejection → mapping **may be** removed* |
 | **8** | a **copied, not shared** safe `ACTION_VIEW` launch policy: scheme allowlist, whitespace and control-character rejection, `ActivityNotFoundException` **and** `SecurityException` caught. The 2024 app passed stored text straight to `startActivity` with no `try/catch` and crashed on a missing Joplin (arch §2.5, §5.13) | a test per rejected scheme; a test that a missing handler is a message, never a crash |
 | **9** | malformed/foreign wording: a ServiceTag tag is **not** interpreted as a note (§23); sibling isolation in NoteTag's direction | a test that `com.loosecannon.servicetag:tag` decodes as `Foreign`; the writer offers only **Write over it** / **Cancel** and names the other app (ratified P11) |
 | **10** | adopt `nfc-tag-core` for reader mode, read-before-write, capacity, verified read-back. **Requires §A.3 and §A.4**, so this lands last | the §23 acceptance list, end to end |
@@ -289,8 +310,9 @@ own preamble requires to come first — cannot complete until the library reposi
 provides for this: *"If hosting capabilities differ, make the most conservative reversible adjustment
 and document it."* Creating a new repository mutates nothing that exists and is reversible by rename,
 while the rename of the live repository is the first step that changes something people already
-depend on. Order actually run: **(1 done in Phase A) → 5–6 → 2 → 3 → 3a → 4 → 7 → 8 → 9 → 10 → 11 →
-12.** Nothing in §B is strictly irreversible — the rename reverses, the transfers reverse, and the
+depend on. §27 steps actually run, in this order: **(1 done in Phase A) → 5–6 → 2 → 3 → 3a → 4 → 7 →
+8 → 9 → 10 → 11 → 12** — all of it at the **remote K/L** position of the canonical master order
+(front matter): after §A's local proofs, before §C's phone work.** Nothing in §B is strictly irreversible — the rename reverses, the transfers reverse, and the
 new repositories can be renamed aside — so "point of no return" language is avoided deliberately;
 **the one genuinely irreversible step in this whole runbook is C.9**, the uninstall.
 
@@ -315,7 +337,15 @@ git push origin nfc-tag-core-v0.1.0
 
 **Verify.** `gh repo view GonzRon/nfc-tag-core --json name,visibility,defaultBranchRef`;
 `gh api repos/GonzRon/nfc-tag-core/tags` lists the tag; the Actions run is green (§B.6 enables it if
-it is not on by default). **Rollback.** The token cannot delete: make it private and rename it aside
+it is not on by default).
+
+**The tag is created here, and accepted later.** `nfc-tag-core-v0.1.0` is cut **once the standalone
+library is green** — it has to exist before either app can add a submodule pointing at it — but it is
+**final only once both consuming apps are green against that exact tag** (§A.4, §B.6, target §10.3).
+Until then it is provisional: if integration forces a library change, the tag is **deleted and
+re-cut** rather than consumed as-is, because a tag two apps have already built against must never
+move. Practically, that means the window between this step and §B.6 is the only window in which
+deleting that tag is legitimate. **Rollback.** The token cannot delete: make it private and rename it aside
 (`gh repo rename nfc-tag-core-abandoned`), which frees the name; record the abandoned name in the
 ledger.
 
@@ -462,11 +492,19 @@ step 12, §35). **Rollback.** Disable Actions on the affected repository; no cod
 
 ## C. Phone transition and the data migration proof (sequence H, §13–§15, O10)
 
-§15's order, unchanged: **1** keep modern 2.4 installed · **2** export and verify the backup set ·
-**3** install ServiceTag (new package) alongside · **4** restore into ServiceTag · **5** prove
-ServiceTag's data and attachments · **6** (tag proof — now final-products only, §D/§E) · **7** only
-after ServiceTag is independently proven, uninstall the modern old-package app · **8** install NoteTag
-(new package; nothing reuses `com.loosecannon.notenfc`) · **9** coexistence tests.
+**§15's on-phone order, with its withdrawn step marked as withdrawn:** **1** keep modern 2.4
+installed · **2** export and verify the backup set · **3** install ServiceTag (new package)
+alongside · **4** restore into ServiceTag · **5** prove ServiceTag's data and attachments ·
+**6** *(§15's tag-proof step — **withdrawn** by O2, and gate 8 folded into gate 9; nothing happens
+here)* · **7** only after ServiceTag is independently proven, uninstall the modern old-package app ·
+**8** install NoteTag (new package; nothing reuses `com.loosecannon.notenfc`) · **9** coexistence
+tests, **which are §D and §E of this runbook and run after this whole section completes**.
+
+Step 6 is called out rather than quietly renumbered, because its old content was a *legacy* tag
+migration and reading it as "the physical-tag proof happens here" would invert the canonical order:
+the physical and coexistence work (**I/J** — §D and §E) requires **both final products installed**,
+and NoteTag does not reach the phone until step 8. So §C runs to completion, including the uninstall
+at C.9 and the NoteTag install at C.10, and only then does §D begin.
 
 The order is not stylistic. Until step 5 passes, the old package is the **only** holder of the data
 and the **only** holder of the SAF grant — a persisted grant is scoped to the calling application and
@@ -474,6 +512,15 @@ cannot cross a package boundary, even for the same signing key (arch §7.4).
 
 **Two prohibitions that hold throughout** (§13, §35): **never delete, relocate or rewrite the live
 attachment folder**, and no instrumented suite runs on the phone.
+
+**The owner's four on-phone UI actions in this section**, which are **outside** the 12-action
+tag/coexistence budget of §E.1 and are counted here instead: **(1)** *Settings → Backup → Export set*
+(C.1); **(2)** *Settings → Attachment storage* → pick the SAF folder (C.3); **(3)** *Settings →
+Backup → Import (replace)* (C.4); **(4)** *Settings → Backup → Restore files* (C.5). Four taps
+through ServiceTag's own UI, each of which only the owner can perform because each needs the real
+install and, for (2), the system document picker. Everything else in §C — pulls, hash verification,
+the JSON comparison, the emulator observations, the installs and the uninstall — is
+workstation-driven.
 
 ### C.1 (§15 steps 1–2) Snapshot before
 
@@ -757,7 +804,7 @@ been moved off the phone** — see §D.3.
 
 | # | Tag | Prepared how | Used for |
 |---|---|---|---|
-| **T1** | blank, **unformatted** NTAG213 (`NdefFormatable`, not yet `Ndef`) | out of the packet; becomes a NoteTag tag in Session 1 and ends read-only | the format path **and** lock-last in one tag: tap 1 formats and writes unlocked, tap 2 verifies the read-back and then locks. It is the **only** tag ever locked. It is also where the **real `Ndef.maxSize` of a physical NTAG213 is captured** and written to the evidence file, because every JVM capacity fake is then pinned to that measured number rather than to a datasheet figure |
+| **T1** | blank, **unformatted** NTAG213 (`NdefFormatable`, not yet `Ndef`) | out of the packet; becomes a NoteTag tag in Session 1 and ends read-only | the format path **and** lock-last in one tag, in the H3 shape: **tap 1 is `format(null)` — format only, empty and unlocked, no payload**; **tap 2** takes the tag as `Ndef` and does everything that needs a capacity figure — read `maxSize`, capacity-check, write, verify the read-back, then lock. It is the **only** tag ever locked. Tap 2 is also where the **real `Ndef.maxSize` of a physical NTAG213 is captured** and written to the evidence file, replacing the **[unobserved]** provisional 137 B seed of `NTAG213_MAX_MESSAGE_BYTES` (target §4.9) — so every JVM capacity fake is pinned to a measured number, never to a vendor datasheet figure |
 | **T4** | **NoteTag `JOPLIN_NOTE`** canonical tag | written in Session 1 | the canonical NoteTag write; then Session 2's cold ambient tap, ServiceTag's sibling-refusal read, and the dispatch-spike tap |
 | **T2** | **ServiceTag asset** canonical tag | written in Session 1 | the canonical ServiceTag write; then Session 2's ambient tap and NoteTag's sibling-refusal read |
 | **T3** | **ServiceTag standalone-link** tag | written in **Session 2** | §25 row 3, kept as a physical row because §25 says **observe, don't infer**: the no-UI launch path and the `last_opened_at` stamp are what the row is about, and a synthetic intent would only re-prove the wire shape the asset tag already proves |
@@ -765,9 +812,10 @@ been moved off the phone** — see §D.3.
 | *(opt)* | a tag with an unrelated **external type** | a generic third-party NFC writer | optional observation: the `Foreign` branch with a type string that is neither product's. Not a gate — the sibling reads already exercise that code path |
 
 All NTAG213 or larger: NTAG213 is the minimum supported tag (O14). Message sizes, in the unit the
-write check actually uses (target §4.3 invariant 7, §4.9): NoteTag `JOPLIN_NOTE` **49 B**,
-ServiceTag's record with its AAR **89 B** — both far inside what an NTAG213 reports through
-`Ndef.getMaxSize()`.
+write check actually uses (target §4.3 invariant 7, §4.9): NoteTag `JOPLIN_NOTE` **49 B**;
+ServiceTag's record with its AAR **95 B** under the **new** identity — `(3 + 30 + 18) + (3 + 15 + 26)`,
+not the 89 B the archaeology computed against the shorter old identity — both comfortably inside what
+an NTAG213 reports through `Ndef.getMaxSize()`, which Session 1 tap 2 measures.
 
 ### D.2 Session 1 — four owner taps
 
@@ -776,8 +824,8 @@ via explicit writer UI"). Installs, force-stops, `logcat` and `dumpsys` are work
 
 | # | Owner action | Pass condition |
 |---|---|---|
-| **1** | **T1**, first tap, in **NoteTag's writer** | the `NdefFormatable` path: the tag is formatted and written **unlocked**, and the screen says to lift it off and hold it again. `maxSize` was `-1` before the format, so no capacity verdict was possible yet (target §4.3 invariant 7). **Record the `Ndef.maxSize` the platform now reports** — this is the measured NTAG213 budget every JVM capacity fake is pinned to |
-| **2** | **T1**, second tap, with the lock armed | the read-back is compared structurally — record count, order, TNF, full type, full payload — and **only then** is the lock applied. The tag is thereafter permanently read-only, and a later tap of it in any writer reports `ReadOnly`, not `TooSmall` and not a generic failure. **This one tag exercises the whole format → verify → lock-last sequence**, which is why no separate lock tag exists |
+| **1** | **T1**, first tap, in **NoteTag's writer** | **`format(null)` only: the tag is formatted, left EMPTY and UNLOCKED, and no payload is offered to it.** The screen says to lift it off and hold it again. This is not a stylistic choice — `NdefFormatable.format(firstMessage)` formats *and* writes in one operation and there is no `Ndef`, hence no `maxSize`, until afterwards, so handing it the intended message would let a too-large message fail *inside* the format call with no capacity verdict possible (target §4.3 invariant 7, H3) |
+| **2** | **T1**, second tap, with the lock armed | the tag now arrives as `Ndef`. In one tap: **read `maxSize`** — *this* is the Session-1 measurement, the first real capacity figure that exists, **recorded in the evidence file** and the number every JVM capacity fake is pinned to (§D.3) — then capacity-check the intended message against it, write it, compare the read-back structurally (record count, order, TNF, full type, full payload), and **only then** apply the lock, whose success is asserted from the **`makeReadOnly()` return value** on this same tap. **This one tag exercises format → measure → capacity-check → write → verify → lock-last**, which is why no separate lock tag exists and why no thirteenth interaction is needed to confirm the lock |
 | **3** | **T4**, one tap, NoteTag's writer | a canonical `JOPLIN_NOTE` tag: **one external record, no AAR** (O13); read-back verified; `needed` was the exact encoded message size (49 B) |
 | **4** | **T2**, one tap, ServiceTag's writer | a canonical ServiceTag asset tag: read-back verified; the `nfc_tag` row's `writtenAt` and `physicalUid` stamped |
 
@@ -795,7 +843,7 @@ arithmetic or a decision table.
 |---|---|---|
 | URI-vs-`LOCAL_REF` **capacity selection** | **JVM tests with fake capacities** | drive the writer's decision with injected `maxSize` values around the boundary: an exact encoded message at `maxSize`, `maxSize - 1` and `maxSize + 1`. **Condition (controller ruling): the fake's baseline is the REAL `Ndef.maxSize` captured from the physical NTAG213 in Session 1 tap 1 and recorded in the evidence file** — a fake pinned to a datasheet number would not be evidence about the tags the owner actually uses. Asserts compact → URI-if-it-fits → `LOCAL_REF`, and that the fallback fires **only** when the message genuinely does not fit, which is the failure mode G1's arithmetic correction exists to prevent |
 | `LOCAL_REF` **missing-map** behaviour | **JVM / app test** (condition: stays a JVM/app test, not a device row) | resolve a `LOCAL_REF` body with the local store empty or the entry removed: a clear message, no crash, no silent nothing |
-| `LOCAL_REF` **crash consistency** | **JVM failure-injection test** (§A.2 task 7, G2) | persist-succeeds-write-fails → the orphan mapping is removed; persist-fails → **no tag write is attempted** |
+| `LOCAL_REF` **crash consistency** | **JVM failure-injection test** (§A.2 task 7, G2 as corrected by H1) | three cases: persist ok + an **ambiguous** write failure → the mapping is **RETAINED**, because the write may physically have landed and an orphaned live tag is far worse than an orphan JSON entry; persist fails → **no write is attempted**; cancellation or a **pre-write** rejection (capacity, foreign, read-only, unsupported) → the mapping **may be** removed |
 | Per-package **SAF grant** behaviour | **emulator observation, C.8a** | two packages, one folder, one grant each; the claim behind §15's ordering stops being **[platform-doc]** before C.9 acts on it |
 | Separate **lock** test | **folded into T1**, taps 1–2 | one tag now carries format, verify and lock |
 | Separate **foreign-record write** test | **folded into the sibling reads**, §E checks 5–6 | a sibling's tag is a foreign record as far as the overwrite decision is concerned, so the same confirmation path is exercised by a tap that also proves a §25 row |
@@ -877,12 +925,15 @@ tags written, `adb logcat` capturing from the workstation throughout.
 | **1 — writer mechanics** (§D.2) | **4** | T1 tap 1 (format), T1 tap 2 (verify + lock), T4 write, T2 write |
 | **2 — coexistence** (§E) | **8** | T3 write, T4 cold ambient, T2 ambient, T3 ambient, T2 in NoteTag's writer, T4 in ServiceTag's inspector, T7 ambient, and the uninstall/tap/reinstall spike tap |
 
-**Total: 12 owner actions, in two sessions.** The two first-use NFC permission confirmations are
-**folded into checks 2 and 3** and are not counted separately (nor is at most one retap if Android
-consumes a scan while a permission dialog is up — a mechanical accident, not an action); §25 rows 7, 8 and 9 cost nothing
-because they are read from the logs. Everything else is workstation-driven: installs, uninstalls,
-reinstalls, force-stops, `dumpsys`, `logcat`, exports, the emulator observations, and every optional
-dispatch-state observation.
+**Total: 12 owner actions, in two sessions — and 12 is the *tag and coexistence* budget, not the
+whole of the owner's involvement.** §C's data migration needs **four** further on-phone UI actions
+(Export set; pick the SAF folder; Import data; Restore files), named and counted in §C's intro, which
+sit outside this budget because they belong to a different phase and a different gate. The two
+first-use NFC permission confirmations are **folded into checks 2 and 3** and are not counted
+separately (nor is at most one retap if Android consumes a scan while a permission dialog is up — a
+mechanical accident, not an action); §25 rows 7, 8 and 9 cost nothing because they are read from the
+logs. Everything else here is workstation-driven: installs, uninstalls, reinstalls, force-stops,
+`dumpsys`, `logcat`, the emulator observations, and every optional dispatch-state observation.
 
 **Verify (the gate).** Eight checks recorded in §E plus the three log-read rows; from the logs, with
 no owner action: zero unexpected activity starts, zero chooser dialogs on checks 2–4 and 7, and no
@@ -1019,7 +1070,7 @@ proceeding; minor cleanup is recorded and deferred.*
 | **2** | archaeology | B *(done — PASS with corrections)* | the archaeology document, its §9 discrepancy log, and the 19 corrections + 8 additions from the independent review |
 | **3** | **split architecture before mutation** | C *(this package)* | target + migration documents revised under O1–O15 and C1–C9; every named module/package/file exists or is marked NEW; every unobserved platform claim marked; proposals separated from rulings. **Mutation stays on HOLD until this passes** |
 | **4** | **nfc-tag-core boundary** | F, G | the forbidden-dependency scan green with a reasoned allow file; every library invariant tested; the provenance table complete with resolving `git log --follow` starting points; **what is deferred and why stated explicitly** (target §4.7) — a boundary claiming more than two consumers have proven is what this gate exists to catch |
-| **5** | **ServiceTag identity / regression** | D | §A.1's fourteen tasks complete; §A.1.1's §21 regression pass green; the identity table true of the **built APK**; `5.json`'s `identityHash` unchanged; clean-checkout build green |
+| **5** | **ServiceTag identity / regression** | D | §A.1's **fifteen** tasks complete; §A.1.1's §21 regression pass green; the identity table true of the **built APK**; `5.json`'s `identityHash` unchanged; clean-checkout build green |
 | **6** | **NoteTag narrow scope** | E | §23's acceptance list end to end; the v1 format's per-kind tests; the local store never required to resolve `JOPLIN_NOTE`/`URI`; true ancestry (30 commits, zero merges, root `5fb6aed`); CI green **from scratch** (review correction 8); no `docs/`, no tracked APK, no legacy decoder, no tech catch-all |
 | **7** | **data / artifact migration** | H | §C.6 and §C.7 pass: eleven tables with identical id sets and per-field equality (events including `tzId`, `occurredOn`, `createdAt`, `(source, source_ref)`); 8×3 attachment hashes; the empty-tree restore proved independently; every difference accounted for by §C.8 and nothing else. **This gate precedes §C.9's irreversible uninstall** |
 | **8** | *withdrawn* | — | folded into gate 9 (O2; §5's "physical-tag proof — now: coexistence of final products only") |

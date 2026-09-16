@@ -376,8 +376,28 @@ sealed interface WriteResult {
 object TagWriter {
     /** @throws java.io.IOException (incl. `TagLostException`). Null when neither Ndef nor NdefFormatable. */
     fun inspect(tag: Tag): TagInspection?
+
+    /**
+     * The `Ndef` path only: capacity-check [records] against `Ndef.maxSize`, write, read back and
+     * compare structurally, then lock if asked. A tag that still needs formatting is NOT written
+     * here — see [format].
+     */
     fun write(tag: Tag, records: List<NdefRecordData>, lock: Boolean): WriteResult
-    /** Permanent. Call only after a verified read-back. */
+
+    /**
+     * Formats an `NdefFormatable` tag and NOTHING else: calls `format(null)`, leaving the tag
+     * **empty and unlocked**.
+     *
+     * The platform's `NdefFormatable.format(firstMessage)` formats *and* writes that message in one
+     * operation, and there is no `Ndef` — and therefore no `maxSize` — until after it has run. So
+     * passing the intended message here would let a too-large message fail inside the format call,
+     * before any capacity check could exist. Instead the caller formats with no payload, and the
+     * next tap delivers the tag as `Ndef`, where [write] can measure `maxSize` first (§4.3
+     * invariant 7).
+     */
+    fun format(tag: Tag): WriteResult
+
+    /** Permanent. Call only after a verified read-back; the returned value is the proof it took. */
     fun lock(tag: Tag): Boolean
 }
 
@@ -439,19 +459,35 @@ promoted (§4.7).
    `sumOf { 3 + type.size + payload.size } + 3` (arch §5.7); that trailing `+ 3` is a TLV allowance,
    appropriate for a pessimistic compile-time assertion and **wrong for the runtime check**. The
    check runs after `connect()` and after the
-   `isWritable` check, so a read-only tag reports `ReadOnly` rather than `TooSmall` (arch §5.7). On
-   the `NdefFormatable` path capacity is unknown before formatting (`inspect` reports
-   `maxSize = -1`), which today makes a too-small unformatted tag surface as a generic `Failed`
-   (arch §5.7, §8.2 Q13). **The message-size rule closes it** (ratified P8, as corrected above): the comparison
-   is deferred to the first moment `Ndef.maxSize` is readable — the second tap — and reported there
-   as `TooSmall`; and `serialisedSize()` lets a consumer state the requirement before the first tap.
+   `isWritable` check, so a read-only tag reports `ReadOnly` rather than `TooSmall` (arch §5.7).
+
+   **The `NdefFormatable` path needs a different shape, because `format` is not just a format.**
+   `NdefFormatable.format(firstMessage)` **formats the tag and writes that message in one
+   operation**, and `firstMessage` may be null. There is no `Ndef` instance and therefore no
+   `maxSize` until after the format has happened — so handing the intended message to `format` means
+   a too-large message fails *inside* the format call, before any capacity check could exist, and
+   surfaces as a generic `Failed` (arch §5.7, §8.2 Q13). **The ratified P8 rule, corrected here, is
+   therefore a two-step sequence and not a deferred comparison:**
+
+   1. **`format(null)`** — format only, **unlocked**, **no payload**. Nothing of the intended message
+      is offered to the tag, so nothing about it can fail yet.
+   2. On the next tap the tag comes back as `Ndef`: **read `maxSize`** — this is the first moment a
+      real capacity figure exists, and it is the number the runbook records in the evidence file —
+      then capacity-check the intended message against it, write it, read back and compare
+      structurally, and only then optionally lock.
+
+   `serialisedSize()` is what lets a consumer state the requirement *before* either tap ("this needs
+   N bytes"), but it is never a substitute for the measured `maxSize`: the check that governs is
+   always step 2's comparison.
 8. **Failure reporting is asymmetric on purpose.** `inspect` propagates tag I/O failure so the caller
    can say "hold it still and try again"; `write` folds every tag I/O failure into `Failed(reason)`
    so a half-written tag never looks like an exception. Every connection closes in
    `finally { runCatching { … } }` (arch §5.6, `bdcc475`).
-9. **Lock last, never blind.** `makeReadOnly()` runs only after a verified read-back. On the format
-   path the tag is formatted **unlocked** and both verification and lock are deferred to the second
-   tap (arch §5.6, `e2cf1d0`).
+9. **Lock last, never blind.** `makeReadOnly()` runs only after a verified read-back, and its
+   **return value is the proof** that the lock took — nothing later is required to confirm it. On the
+   format path the tag is formatted **unlocked and empty** by `format(null)`, and the capacity check,
+   the write, the verification and the lock all happen on the second tap (invariant 7, arch §5.6,
+   `e2cf1d0`).
 10. *(protocol)* **One confirmation, remembered against content.** A confirmed overwrite is consent
     for *that content*, honoured on the next tap of a tag carrying it and cleared by a different
     payload — because the captured `Tag` handle goes stale while a sheet is up and the NFC service
@@ -525,14 +561,14 @@ classes (provenance in §4.6).
 
 | Group | Cases |
 |---|---|
-| Envelope round-trip | `encode(identity, body)` → `decode(identity, …)` returns `Recognised(body)` byte-for-byte; exact record layout (tnf `0x04`, type as US-ASCII, body verbatim) — from `NdefCodecV1Test.exactByteLayout`, `roundTrips` |
+| Envelope round-trip | `encode(identity, body)` → `decode(identity, …)` returns `Recognised(body)` byte-for-byte; exact record layout (tnf `0x04`, type as US-ASCII, body verbatim) — from `NdefCodecV1Test.exactByteLayout`, `roundTrips`. Any *total* a test asserts is the new-identity figure: **51 B** for ServiceTag's external record, **95 B** for its record + AAR, **49 B** for a NoteTag `JOPLIN_NOTE` message (§4.9) |
 | Record count and order | `aarPackage = null` → **exactly one record** (the default, O13); `aarPackage` set → exactly two, ours first, the AAR second with type `android.com:pkg` and the package as ASCII payload — from `messageIsTagRecordThenApplicationRecord` |
 | AAR byte-identity | `applicationRecord(pkg)` matches a pinned byte vector in `nfc-core`, re-asserted against the real `NdefRecord.createApplicationRecord` in `nfc-android` |
 | **Sibling isolation** | a record whose type is a *different* domain with the same `typeName` decodes as `Foreign`, and `Foreign.description` carries the full offending type string — the generalisation of `NdefCodecTest.evernoteEraTypeIsForeign`, and the template each app copies (invariant 1) |
 | TNF gate | our exact type under a non-external TNF is `Foreign`, not `Recognised` — from `tagRecordUnderWrongTnfIsForeign` |
 | First-record-only | extra records after the first are ignored (`onlyFirstRecordMatters`); an AAR-only message is `Foreign` (`applicationRecordAloneIsForeign`); an empty list is `Empty` (`emptyMessageIsEmpty`) |
 | Malformed input | a truncated body, an empty body and a body under the wrong type all come back without an exception; the envelope never throws on hostile bytes |
-| Generic payload limits | `serialisedSize()` for representative messages, asserted to be exactly `toNdefMessage().toByteArray().size` with **no TLV allowance added**, and compared against **`NTAG213_MAX_MESSAGE_BYTES`** — one named constant, re-pinned to the `Ndef.maxSize` measured from a physical NTAG213 in Session 1 and recorded in the evidence file (§4.9). Parameterised so each consumer asserts its own budget (O14). A second case pins the boundary: a message of exactly `maxSize` bytes is accepted and one of `maxSize + 1` is `TooSmall` (invariant 7) |
+| Generic payload limits | `serialisedSize()` for representative messages, asserted to be exactly `toNdefMessage().toByteArray().size` with **no TLV allowance added**, and compared against **`NTAG213_MAX_MESSAGE_BYTES`** — one named constant, **[unobserved]** at a provisional 137 B and re-pinned to the `Ndef.maxSize` measured from a physical NTAG213 on **Session 1 tap 2** and recorded in the evidence file (§4.9). Parameterised so each consumer asserts its own budget (O14). A second case pins the boundary: a message of exactly `maxSize` bytes is accepted and one of `maxSize + 1` is `TooSmall` (invariant 7) |
 | `UuidBytes` | `toBytes`/`fromBytes` round-trip over random UUIDs and the all-zero / all-ones edges; big-endian layout pinned as bytes; `requireCanonical` refuses a non-UUID and an upper-case UUID, accepts the canonical form |
 | `TagIdentity` | refuses a mixed-case external type; `externalType` is `"$domain:$name"`; `aarPackage` defaults to null |
 | `OverwritePolicy` | the full `ExistingContent` × `isSameIdentity` matrix → the six `OverwriteReason` tokens; `Proceed` only for `Empty` and for `Ours` with `isSameIdentity` — generalised from `OverwritePolicyTest` |
@@ -683,25 +719,34 @@ input. A non-conforming id gets its own test asserting the `URI` fallback was ch
 **NTAG213 is the minimum supported tag**, and every figure below is labelled by unit, because the two
 units differ by exactly the framing G1 removed from the write comparison:
 
-| Message | **NDEF message size — the unit the write check uses** | message + Type-2 TLV — *physical-tag scale only* |
+| Message | **NDEF message size — the unit the write check uses** | message + Type-2 framing — *physical-tag scale only* |
 |---|---|---|
-| NoteTag `JOPLIN_NOTE`, one external record, no AAR | **49 B** | 52 B |
-| NoteTag `JOPLIN_NOTE` *if* an AAR were appended | **90 B** | 93 B |
-| ServiceTag's existing record + AAR | **89 B** | 92 B |
+| NoteTag `JOPLIN_NOTE`, one external record, no AAR — `3 + 27 + 19` | **49 B** | 52 B |
+| NoteTag `JOPLIN_NOTE` *if* an AAR were appended — `+ (3 + 15 + 23)` | **90 B** | 93 B |
+| ServiceTag's record + AAR **under the new identity** — `(3 + 30 + 18) + (3 + 15 + 26)` = `51 + 44` | **95 B** | 98 B |
+
+The ServiceTag figures are **not** the ones the archaeology quotes: those were computed against the
+old identity, whose type string and AAR package were four characters shorter each. With
+`com.loosecannon.servicetag:tag` (30 characters) and AAR package `com.loosecannon.servicetag` (26),
+the external record is `3 + 30 + 18 = 51 B` and the AAR `3 + 15 + 26 = 44 B`, so the message is
+**95 B**, not 89. Every exact-byte test description that names a total must use these numbers, and
+the identity conversion is the commit that changes them.
 
 The right-hand column is the figure the archaeology quotes (arch §5.7) and is useful for one purpose
 only — sanity-checking against a datasheet's user-memory number. **It is never the write
 comparison**: `needed` is the left-hand column, compared directly against `Ndef.getMaxSize()`
 (invariant 7). The extracted limits test asserts the left-hand column against a single named
-constant, **`NTAG213_MAX_MESSAGE_BYTES`**, seeded provisionally at **137 B** (the `Ndef.maxSize` Android
-is commonly reported to return for a formatted NTAG213 — [platform-doc], not a value this project has
-observed) and **re-pinned to the
-value actually measured from a physical NTAG213** during the runbook's Session 1 and recorded in the
-evidence file — so the budget the tests defend is a number this project has observed, not one it read.
+constant, **`NTAG213_MAX_MESSAGE_BYTES`**, seeded provisionally at **137 B — [unobserved], a
+provisional seed and nothing more.** It is *not* a **[platform-doc]** figure: Android documents what
+`getMaxSize()` *means*, never what an NTAG213 returns for it, and NXP's datasheet documents user
+memory, not the platform's reported message capacity. The constant is **re-pinned to the value
+actually measured from a physical NTAG213** on the runbook's Session 1 **tap 2** — the first moment an
+`Ndef` instance exists at all (invariant 7) — and recorded in the evidence file, after which the
+budget the tests defend is a number this project has observed rather than one it guessed.
 
 For reference and clearly labelled as such: NTAG213's **144 B** of user memory, of which roughly
-**139 B** remain for NDEF after NXP's lock-control TLV, are **[platform-doc]** datasheet figures, not
-observations, and nothing in the design computes from them. NTAG215 and NTAG216 hold more by the same
+**139 B** remain for NDEF after NXP's lock-control TLV, are **datasheet** figures — vendor
+documentation, not Android's and not observations — and nothing in the design computes from them. NTAG215 and NTAG216 hold more by the same
 logic and are never required. **There are no character-count promises anywhere in this design**:
 capacity is always the measured tag against the exact encoded message, and a tag that cannot hold the
 message is refused cleanly (O13, O14).
@@ -716,24 +761,46 @@ file** behind a small interface, using kotlinx-serialization (already in the ver
 format (ratified P19).
 
 **The `LOCAL_REF` crash-consistency invariant** (a NoteTag invariant, not a library one — the library
-never sees the mapping). *The mapping is durably stored **before** the physical tag is written, and a
-`LOCAL_REF` whose mapping has not committed is never successfully written.* The sequence is:
+never sees the mapping). Two rules, in this order of priority:
+
+> **(a)** The mapping is durably stored **before** the physical tag is written; a `LOCAL_REF` whose
+> mapping has not committed is never written at all.
+> **(b)** Once a physical write has been **attempted**, the mapping is **retained** unless it is
+> provable that **no bytes reached the tag**.
+
+The sequence:
 
 1. allocate the UUID;
-2. **atomically persist** the `LOCAL_REF → target` mapping (write a temporary file, `fsync`, atomic
-   rename over the store) and only continue once that has returned successfully;
+2. **atomically persist** the `LOCAL_REF → target` mapping (temporary file, `fsync`, atomic rename
+   over the store) and continue only once that has returned successfully;
 3. write the tag and verify it by structural read-back;
-4. on success the mapping is retained; on failure, cancellation, or a lost tag, make a **best-effort
-   removal of the orphan mapping**.
+4. **on success, retain the mapping. On an *ambiguous* failure — the tag lost mid-write, or lost
+   between the write and the read-back, or any I/O error once the message has been handed to the
+   chip — also retain it.** Remove it only where no write can have happened: the user cancelled
+   before the write, or the attempt was rejected *pre-write* (a capacity refusal, a foreign-record
+   refusal, a read-only tag, an unsupported tag).
 
-The asymmetry is deliberate and is the only ordering that fails safe. Persist-then-write can leave an
-orphan mapping — a few bytes of garbage in a JSON file, invisible to the user, removable by the
-best-effort sweep or by the next write of the same tag. Write-then-persist can leave a **live
-physical tag that resolves to nothing on the phone that wrote it**, which is the one outcome a
-device-bound kind must never produce. A named deliverable follows from it: a **failure-injection
-test** with two cases — *persist succeeds, tag write fails → the mapping is removed*; and *persist
-fails → no tag write is attempted at all*. It is a NoteTag test, not a library test — the library
-never sees the mapping — and it is named as a deliverable of phase E in the runbook (§A.2 task 7).
+**Why retention, not cleanup, is the safe default after an attempt.** A failed `write` does not mean
+an unwritten tag: `writeNdefMessage` can physically succeed and the tag can then leave the field
+before the read-back confirms it, which the platform reports as a failure. Delete the mapping on that
+path and the result is a **live `LOCAL_REF` tag in the world that resolves to nothing on the only
+phone that could ever resolve it** — silent, permanent, and indistinguishable to the user from a
+broken app. Keep it and the worst case is an **orphan JSON entry**: a few bytes nobody sees, which
+the next write of that UUID overwrites and which no user-visible behaviour depends on. The two
+outcomes are not comparable in cost, so the rule follows the cheaper failure. Rule (a) still holds
+the other end: persisting first is what makes "the tag might be live" a recoverable state rather than
+a lost one.
+
+The **failure-injection test** is the named deliverable, with three cases:
+
+| Case | Expected |
+|---|---|
+| persist succeeds, then an **ambiguous** write failure (tag lost mid-write, or lost before the read-back completes) | **the mapping is RETAINED** |
+| persist **fails** | **no tag write is attempted at all** |
+| the user **cancels**, or the write is rejected **pre-write** (capacity, foreign refusal, read-only, unsupported) | the mapping **may be removed** |
+
+It is a NoteTag test, not a library test — the library never sees the mapping — and it is named as a
+deliverable of phase E in the runbook (§A.2 task 7).
 
 **UI toolkit** (ratified P20): **Compose, one activity, two tiny screens** — share/write, and a
 short list of tags this phone has written. R6's "no Compose" is superseded by O1–O15, O6 asks for a
@@ -1093,6 +1160,14 @@ collected from **debug builds** — that is what §15 installs and what the emul
 but no device row is collected from a release build. Both facts are stated in the evidence file so
 nobody later reads a debug observation as a release guarantee.
 
+**Where CI sits in the order.** The canonical master order is **local D–G → remote K/L → phone H →
+physical and coexistence I/J → docs and handoff M/N** (the runbook's front matter states it once and
+every phase table obeys it). CI therefore becomes green *before* the phone is touched: the remote
+work in K/L is what produces the first green run on a machine that is not this one, and the data
+migration in H then proceeds against a ServiceTag build whose CI already passes. The one documented
+departure from §27's literal step order is that `nfc-tag-core` is created and pushed early, because a
+submodule needs a URL before phase G can be proved locally at all.
+
 **Clean-checkout proof** is a per-repository acceptance, not a CI trick (§26): for each of the three,
 `git clone --recurse-submodules <url> <tmp> && cd <tmp> && ./gradlew <that repo's CI task list>` from
 a directory that has never held the project, and — for the two apps — once from a **second
@@ -1110,8 +1185,10 @@ identity), 1C (Compose shell), 2A (maintenance journal), 2B-1 (editors), 2B-2 (p
 context, clock seam) → 3R → 4B → 5 → 6 → 7**. Never "ready for 2B" (§31). Schedules and reminders are
 **future** work, not present capability (C1). Phase 7 carries the one NFC obligation the split does
 not discharge: `targetSdk 37` + `DISPATCH_NFC_MESSAGE` (arch §5.1). Store-location migration is 4B
-(§13). Phase 3 begins **after** the split completes; the split itself is scoped strictly to
-separation, shared extraction, identity migration and data migration (§33).
+(§13). Phase 3 begins **after** the split completes — meaning after the last letter of the canonical
+order, **local D–G → remote K/L → phone H → physical and coexistence I/J → docs and handoff M/N** —
+and the split itself is scoped strictly to separation, shared extraction, identity migration and data
+migration (§33).
 
 ### 10.2 NoteTag
 
@@ -1129,7 +1206,12 @@ Also NoteTag's, and explicitly **not** split scope: an export/import of the loca
 ### 10.3 nfc-tag-core versioning
 
 - **Semantic versioning on git tags**, `nfc-tag-core-v<major>.<minor>.<patch>`, from
-  **`nfc-tag-core-v0.1.0`** — the extraction commit, tagged when both apps are green against it.
+  **`nfc-tag-core-v0.1.0`** on the extraction commit. Two distinct moments, deliberately separated:
+  the tag is **created** once the **standalone library is green** — it has to exist before either app
+  can add a submodule pointing at it (runbook §B.1) — and it is **accepted as final** only once
+  **both consuming apps are green against that exact tag** (runbook §A.4, §B.6). Between those two
+  moments the tag is provisional: if integration forces a change, it is deleted and re-cut rather
+  than consumed as-is, because a tag two apps have built against must never move.
   `0.x` while the API is still moving; `1.0.0` when a third consumer or an external user appears.
 - **The tag is the unit of consumption.** Each app's submodule pointer is always a commit that
   `git describe --exact-match --match 'nfc-tag-core-v*' --tags` resolves (§6.3, §6.4). No
