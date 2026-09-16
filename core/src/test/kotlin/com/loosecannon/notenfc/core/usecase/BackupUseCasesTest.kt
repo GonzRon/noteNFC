@@ -213,10 +213,10 @@ class BackupUseCasesTest {
     }
 
     private fun exportOf(f: Fakes, now: Long = 1_726_000_000_000L): ByteArray = runBlocking {
-        ExportBackup(
+        ExportBackupSet(
             f.assets, f.tags, f.links, f.definitions, f.profiles, f.events, f.attachments,
-            f.uow, Clock { now }, IdGenerator { "set-1" }, appVersion = "2.0", schemaVersion = 1,
-        ).run()
+            f.uow, IdGenerator { "set-1" }, Clock { now }, appVersion = "2.0", schemaVersion = 1,
+        ).run().data
     }
 
     private fun importInto(f: Fakes, bytes: ByteArray): ImportReport = runBlocking {

@@ -53,7 +53,7 @@ data class BackupManifest(
     val dataSha256: String,
     /** Ties this data archive to its artifacts archive. Empty only on a format ≤4 file. */
     val backupSetId: String = "",
-    val artifactFormatVersion: Int = 1,
+    val artifactFormatVersion: Int = ArtifactsCodec.ARTIFACT_FORMAT_VERSION,
     val artifactCount: Int = 0,
     val artifactBytes: Long = 0L,
 )

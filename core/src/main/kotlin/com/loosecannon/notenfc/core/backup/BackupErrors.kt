@@ -9,3 +9,11 @@ class BackupNewerFormat(val found: Int, val supported: Int) :
 
 /** Missing entries, a hash mismatch, unparsable JSON, or a value this format cannot name. */
 class BackupCorrupt(reason: String) : BackupException(reason)
+
+/** The artifacts archive was written by a newer build than this one understands. */
+class ArtifactsNewerFormat(val found: Int, val supported: Int) :
+    BackupException("artifact format $found is newer than supported $supported")
+
+/** These bytes belong to a different backup set than the data that was restored (spec §11.3). */
+class ArtifactsSetMismatch(val expected: String, val found: String) :
+    BackupException("artifacts belong to backup set $found, not $expected")

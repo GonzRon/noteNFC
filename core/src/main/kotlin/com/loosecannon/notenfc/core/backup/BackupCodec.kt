@@ -120,7 +120,7 @@ object BackupCodec {
             ),
             dataSha256 = sha256Hex(dataBytes),
             backupSetId = backupSetId,
-            artifactFormatVersion = 1,
+            artifactFormatVersion = ArtifactsCodec.ARTIFACT_FORMAT_VERSION,
             artifactCount = managed.size,
             artifactBytes = managed.sumOf { it.sizeBytes },
         )
