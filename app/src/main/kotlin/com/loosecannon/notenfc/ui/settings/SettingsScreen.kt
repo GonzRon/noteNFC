@@ -48,7 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import com.loosecannon.notenfc.BuildConfig
+import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.notenfc.core.ports.StoreState
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.links.LinkLauncher

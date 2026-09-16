@@ -3,7 +3,7 @@ package com.loosecannon.notenfc.ui.components
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
-import com.loosecannon.notenfc.R
+import com.loosecannon.servicetag.R
 
 /**
  * The glyphs D12 §5/§8 asks for that `material-icons-core` does not ship. Screens name the icon,

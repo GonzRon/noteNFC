@@ -9,7 +9,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.documentfile.provider.DocumentFile
 import com.loosecannon.notenfc.NoteNfcApp
-import com.loosecannon.notenfc.R
+import com.loosecannon.servicetag.R
 import com.loosecannon.notenfc.backup.SafBackupIO
 import com.loosecannon.notenfc.backup.SafBackupSetWriter
 import com.loosecannon.notenfc.core.model.Asset

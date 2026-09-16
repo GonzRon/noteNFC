@@ -8,7 +8,7 @@ import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.room3.Room
 import androidx.sqlite.driver.AndroidSQLiteDriver
-import com.loosecannon.notenfc.BuildConfig
+import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.notenfc.attachments.AttachmentRoot
 import com.loosecannon.notenfc.attachments.DocumentTreeRoot
 import com.loosecannon.notenfc.attachments.SafAttachmentStorage

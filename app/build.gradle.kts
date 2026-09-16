@@ -9,20 +9,20 @@ plugins {
 }
 
 val keystoreProps = Properties().apply {
-    val f = file(System.getProperty("user.home") + "/.config/notenfc/keystore.properties")
+    val f = file(System.getProperty("user.home") + "/.config/servicetag/keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
-    namespace = "com.loosecannon.notenfc"
+    namespace = "com.loosecannon.servicetag"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.loosecannon.notenfc"
+        applicationId = "com.loosecannon.servicetag"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "2.4"
+        versionCode = 7
+        versionName = "2.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
