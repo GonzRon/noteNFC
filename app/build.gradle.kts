@@ -70,6 +70,7 @@ room3 {
 dependencies {
     implementation(project(":core"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.documentfile)
     implementation(libs.room3.runtime)
     ksp(libs.room3.compiler)
     // No sqlite-bundled on the production classpath: AndroidSQLiteDriver comes from

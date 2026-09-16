@@ -1,9 +1,7 @@
 package com.loosecannon.notenfc.testing
 
-import com.loosecannon.notenfc.attachments.NoAttachmentStorage
 import com.loosecannon.notenfc.core.ports.AssetRepository
 import com.loosecannon.notenfc.core.ports.AttachmentRepository
-import com.loosecannon.notenfc.core.ports.AttachmentStorage
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
@@ -12,12 +10,14 @@ import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
+import com.loosecannon.notenfc.core.usecase.AddAttachment
 import com.loosecannon.notenfc.core.usecase.ApplyTemplate
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.ArchiveDefinition
 import com.loosecannon.notenfc.core.usecase.ArchiveProfile
 import com.loosecannon.notenfc.core.usecase.CreateAsset
 import com.loosecannon.notenfc.core.usecase.DeleteAsset
+import com.loosecannon.notenfc.core.usecase.DeleteAttachment
 import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
@@ -28,10 +28,12 @@ import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.ReorderDefinitions
 import com.loosecannon.notenfc.core.usecase.ReorderProfiles
+import com.loosecannon.notenfc.core.usecase.RestoreArtifacts
 import com.loosecannon.notenfc.core.usecase.RetireAsset
 import com.loosecannon.notenfc.core.usecase.SaveDefinition
 import com.loosecannon.notenfc.core.usecase.SaveProfile
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
+import com.loosecannon.notenfc.core.usecase.UpdateAttachment
 import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
@@ -72,8 +74,12 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val events: EventRepository = RoomEventRepository(db.eventDao())
     val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
 
-    /** No store until Task 7's resolver: the answer a fresh install gives. */
-    val attachmentStorage: AttachmentStorage = NoAttachmentStorage
+    /**
+     * The store a test drives by hand: `state` is a `var` and the bytes are a map, so a refusal
+     * and a successful write are both one line away. `SafAttachmentStorage` itself is proved by
+     * `SafAttachmentStorageTest` and on the emulator.
+     */
+    val attachmentStorage: FakeAttachmentStorage = FakeAttachmentStorage()
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
@@ -95,6 +101,13 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val archiveProfile: ArchiveProfile = ArchiveProfile(profiles, uow, clock)
     val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
+
+    // Phase 4A — attachments.
+    val addAttachment: AddAttachment =
+        AddAttachment(attachments, assets, events, attachmentStorage, uow, ids, clock)
+    val updateAttachment: UpdateAttachment = UpdateAttachment(attachments, uow, clock)
+    val deleteAttachment: DeleteAttachment = DeleteAttachment(attachments, attachmentStorage, uow)
+    val restoreArtifacts: RestoreArtifacts = RestoreArtifacts(attachments, attachmentStorage)
 
     /** Device-local preferences, in a map: a test can read back exactly what the UI wrote. */
     val prefs: AppPrefs = AppPrefs(InMemoryKeyValueStore())

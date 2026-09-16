@@ -1,6 +1,5 @@
 package com.loosecannon.notenfc.backup
 
-import com.loosecannon.notenfc.attachments.NoAttachmentStorage
 import com.loosecannon.notenfc.core.backup.BackupCorrupt
 import com.loosecannon.notenfc.core.journal.derivedSpecValid
 import com.loosecannon.notenfc.core.model.Asset
@@ -22,6 +21,7 @@ import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.IdGenerator
+import com.loosecannon.notenfc.core.ports.StoreState
 import com.loosecannon.notenfc.core.usecase.ConsumableInput
 import com.loosecannon.notenfc.core.usecase.EventCommand
 import com.loosecannon.notenfc.core.usecase.ExportBackupSet
@@ -37,6 +37,7 @@ import com.loosecannon.notenfc.data.room.RoomProfileRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
 import com.loosecannon.notenfc.data.room.inMemoryDb
+import com.loosecannon.notenfc.testing.FakeAttachmentStorage
 import com.loosecannon.notenfc.testing.FakeGraph
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -71,7 +72,7 @@ class RestoreProofTest {
         )
         val import = ImportBackupReplace(
             assets, tags, links, definitions, profiles, events, attachments,
-            NoAttachmentStorage, uow,
+            FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
         )
     }
 
