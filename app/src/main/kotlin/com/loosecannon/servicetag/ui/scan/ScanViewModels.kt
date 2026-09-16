@@ -7,7 +7,6 @@ import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
-import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.AssetRepository
@@ -37,9 +36,6 @@ import kotlinx.coroutines.withContext
 /** How long the repository flows stay hot after the last collector leaves (a rotation, typically). */
 private const val SUBSCRIPTION_GRACE_MS = 5_000L
 
-/** Not a payload format: "this tag is not ours, and here is why" (the trampoline's own word). */
-const val FORMAT_NONE: String = "NONE"
-
 /**
  * The one mapping from a resolved scan to the route that shows it, shared by the foreground
  * scanner and the background dispatch trampoline so the two never drift apart in wording.
@@ -52,8 +48,8 @@ internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
     is Resolution.Revoked -> Route.TagResult(tag.payloadFormat.name, tag.payloadKey)
     is Resolution.UnknownV1 -> Route.TagResult(PayloadFormat.V1.name, tagId.value)
     is Resolution.NeedsNewerApp ->
-        Route.TagResult(FORMAT_NONE, "written by a newer ServiceTag (payload format $version)")
-    is Resolution.NotOurs -> Route.TagResult(FORMAT_NONE, describe(payload))
+        Route.TagResult(TagResultWire.FORMAT_NONE, "written by a newer ServiceTag (payload format $version)")
+    is Resolution.NotOurs -> Route.TagResult(TagResultWire.FORMAT_NONE, describe(payload))
     is Resolution.LaunchLink -> error("a link tag launches its note; it has no sheet (R-7)")
 }
 
@@ -124,9 +120,9 @@ class ScanViewModel(
         when (val outcome = openLink.run(id)) {
             is OpenLink.Outcome.Launch -> _events.tryEmit(ScanEvent.Launch(outcome.uri))
             is OpenLink.Outcome.Refused ->
-                _events.tryEmit(ScanEvent.Show(Route.TagResult(FORMAT_NONE, "link refused: ${outcome.reason}")))
+                _events.tryEmit(ScanEvent.Show(Route.TagResult(TagResultWire.FORMAT_NONE, "link refused: ${outcome.reason}")))
             is OpenLink.Outcome.Missing ->
-                _events.tryEmit(ScanEvent.Show(Route.TagResult(FORMAT_NONE, "the link this tag pointed at no longer exists")))
+                _events.tryEmit(ScanEvent.Show(Route.TagResult(TagResultWire.FORMAT_NONE, "the link this tag pointed at no longer exists")))
         }
     }
 }
@@ -195,12 +191,9 @@ class TagResultViewModel(
     }
 
     private suspend fun resolve() {
-        val payload = when (format) {
-            PayloadFormat.V1.name -> TagPayload.V1(TagId(key))
-            // Format NONE: the key is the prose reason the tag could not be used, not an id.
-            else -> null
-        }
+        val payload = TagResultWire.payloadOf(format, key)
         if (payload == null) {
+            // The key is the prose reason the tag could not be used, not an id.
             _state.value = TagResult.NotOurs(key)
             return
         }

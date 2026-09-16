@@ -15,7 +15,7 @@ import com.loosecannon.servicetag.core.usecase.OpenLink
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
-import com.loosecannon.servicetag.ui.scan.FORMAT_NONE
+import com.loosecannon.servicetag.ui.scan.TagResultWire
 import com.loosecannon.servicetag.ui.scan.asTagResult
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -66,7 +66,7 @@ class NfcDispatchActivity : Activity() {
             val resolution = try {
                 graph.resolveTag.run(payload)
             } catch (e: Exception) {
-                handOff(FORMAT_NONE, "could not resolve this tag: ${e.javaClass.simpleName}")
+                handOff(TagResultWire.FORMAT_NONE, "could not resolve this tag: ${e.javaClass.simpleName}")
                 return@launch
             }
             route(resolution)
@@ -96,11 +96,11 @@ class NfcDispatchActivity : Activity() {
             try {
                 when (val out = graph.openLink.run(link.id)) {
                     is OpenLink.Outcome.Launch -> { LinkLauncher.open(this@NfcDispatchActivity, out.uri); finish() }
-                    is OpenLink.Outcome.Refused -> handOff(FORMAT_NONE, "link refused: ${out.reason}")
-                    is OpenLink.Outcome.Missing -> handOff(FORMAT_NONE, "the link this tag pointed at no longer exists")
+                    is OpenLink.Outcome.Refused -> handOff(TagResultWire.FORMAT_NONE, "link refused: ${out.reason}")
+                    is OpenLink.Outcome.Missing -> handOff(TagResultWire.FORMAT_NONE, "the link this tag pointed at no longer exists")
                 }
             } catch (e: Exception) {
-                handOff(FORMAT_NONE, "could not open the link: ${e.javaClass.simpleName}")
+                handOff(TagResultWire.FORMAT_NONE, "could not open the link: ${e.javaClass.simpleName}")
             }
         }
     }

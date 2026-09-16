@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppearanceMode
 import com.loosecannon.servicetag.ui.nav.ServiceTagRoot
 import com.loosecannon.servicetag.ui.nav.Route
+import com.loosecannon.servicetag.ui.scan.TagResultWire
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -81,7 +82,7 @@ class MainActivity : ComponentActivity() {
             is DeepLink.Asset -> Route.AssetDetail(link.id.value)
             is DeepLink.Link -> Route.LinkDetail(link.id.value)
             is DeepLink.Tag -> when (val payload = link.payload) {
-                is TagPayload.V1 -> Route.TagResult("V1", payload.tagId.value)
+                is TagPayload.V1 -> Route.TagResult(TagResultWire.formatOf(payload), payload.tagId.value)
                 else -> malformed()
             }
             is DeepLink.Malformed -> malformed()
