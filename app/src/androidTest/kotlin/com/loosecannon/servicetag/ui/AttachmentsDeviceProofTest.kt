@@ -64,7 +64,7 @@ import org.junit.Test
 /**
  * Phase 4A's device proof (spec §12), driven through the real screens on the **emulator**. Same
  * shape as `AssetModelDeviceProofTest`: an empty Compose rule, a destructive `@Before`, one test
- * per scenario, each cold-starting the screen it needs through the `notenfc://asset/<id>` deep
+ * per scenario, each cold-starting the screen it needs through the `servicetag://asset/<id>` deep
  * link a tag tap takes.
  *
  * What the suite deliberately does *not* claim:
@@ -643,7 +643,7 @@ private fun firstMessage(model: BackupViewModel, trigger: () -> Unit): String = 
 
 /** The cold-start path a tag tap takes, which is also the one `ActivityScenario` can track (1C). */
 private fun openAsset(id: String): ActivityScenario<MainActivity> {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/$id"))
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("servicetag://asset/$id"))
         .setClass(context, MainActivity::class.java)
     return ActivityScenario.launch(intent)
 }

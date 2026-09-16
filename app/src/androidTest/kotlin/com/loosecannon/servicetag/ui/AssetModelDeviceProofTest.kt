@@ -38,7 +38,7 @@ import java.time.LocalDate
  * Phase 2B-2's device proof: spec §12's instrumented rows, driven through the real screens on real
  * hardware. Same shape as `JournalDeviceProofTest` and `EditorsDeviceProofTest` — an empty Compose
  * rule, a destructive `@Before`, one test per scenario, each cold-starting the screen it needs
- * (the `notenfc://asset/<id>` deep link a tag tap takes, or a plain launch onto the dashboard).
+ * (the `servicetag://asset/<id>` deep link a tag tap takes, or a plain launch onto the dashboard).
  *
  * What the suite deliberately does *not* claim:
  *
@@ -377,7 +377,7 @@ private fun newAsset(
 /** The cold-start path a tag tap takes, which is also the one `ActivityScenario` can track (1C). */
 private fun openAsset(id: String): ActivityScenario<MainActivity> {
     val context = ApplicationProvider.getApplicationContext<Context>()
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/$id"))
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("servicetag://asset/$id"))
         .setClass(context, MainActivity::class.java)
     return ActivityScenario.launch(intent)
 }

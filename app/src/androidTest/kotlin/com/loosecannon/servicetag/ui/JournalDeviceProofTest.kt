@@ -39,7 +39,7 @@ import java.time.format.DateTimeFormatter
  * 3–11, driven through the real UI on real hardware instead of by hand.
  *
  * One test per checklist row group, each cold-starting the asset it needs through its
- * `notenfc://asset/<id>` deep link — the same path a tag tap takes — and asserting that row's
+ * `servicetag://asset/<id>` deep link — the same path a tag tap takes — and asserting that row's
  * "Expected" column on screen. `JournalSmokeTest` stays as the one-test smoke of the vertical
  * slice; this is the walk-through.
  *
@@ -348,7 +348,7 @@ private fun newAsset(name: String, templateKey: String?): String =
 /** The cold-start path a tag tap takes, which is also the one `ActivityScenario` can track (1C). */
 private fun openAsset(id: String): ActivityScenario<MainActivity> {
     val context = ApplicationProvider.getApplicationContext<Context>()
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/$id"))
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("servicetag://asset/$id"))
         .setClass(context, MainActivity::class.java)
     return ActivityScenario.launch(intent)
 }

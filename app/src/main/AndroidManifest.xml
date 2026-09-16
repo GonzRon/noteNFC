@@ -48,14 +48,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- notenfc://asset|link|tag: navigation only, validated by shape then by existence. -->
+            <!-- servicetag://asset|link|tag: navigation only, validated by shape then by existence. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="notenfc" android:host="asset" />
-                <data android:scheme="notenfc" android:host="link" />
-                <data android:scheme="notenfc" android:host="tag" />
+                <data android:scheme="servicetag" android:host="asset" />
+                <data android:scheme="servicetag" android:host="link" />
+                <data android:scheme="servicetag" android:host="tag" />
             </intent-filter>
         </activity>
 

@@ -257,7 +257,7 @@ class ShareActivitySmokeTest {
 /**
  * A deep link opened while the app is closed: the cold-start path through `MainActivity.onCreate`.
  *
- * `notenfc://asset/nope` is not a canonical UUID, so `DeepLinkRoute` calls it malformed,
+ * `servicetag://asset/nope` is not a canonical UUID, so `DeepLinkRoute` calls it malformed,
  * `routeFrom` pushes nothing and says so in a snackbar, and the dashboard is what comes up.
  *
  * It is its own class, launched from an empty Compose rule, because `MainActivity` is
@@ -275,7 +275,7 @@ class DeepLinkSmokeTest {
 
     @Test fun malformedDeepLinkLandsOnDashboard() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/nope"))
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("servicetag://asset/nope"))
             .setClass(context, MainActivity::class.java)
 
         ActivityScenario.launch<MainActivity>(intent).use {

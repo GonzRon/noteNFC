@@ -52,7 +52,7 @@ import java.time.format.DateTimeFormatter
 /**
  * Phase 2B-1's device proof: spec §12's instrumented rows, driven through the real editors on real
  * hardware. Same shape as `JournalDeviceProofTest` — one test per scenario, each cold-starting the
- * asset it needs through its `notenfc://asset/<id>` deep link, each asserting what the screen says.
+ * asset it needs through its `servicetag://asset/<id>` deep link, each asserting what the screen says.
  *
  * What the suite deliberately does *not* claim:
  *
@@ -417,7 +417,7 @@ private fun newAsset(name: String, templateKey: String?): String =
 /** The cold-start path a tag tap takes, which is also the one `ActivityScenario` can track (1C). */
 private fun openAsset(id: String): ActivityScenario<MainActivity> {
     val context = ApplicationProvider.getApplicationContext<Context>()
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/$id"))
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("servicetag://asset/$id"))
         .setClass(context, MainActivity::class.java)
     return ActivityScenario.launch(intent)
 }

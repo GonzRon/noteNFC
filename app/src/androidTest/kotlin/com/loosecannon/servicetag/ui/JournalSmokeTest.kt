@@ -50,7 +50,7 @@ class JournalSmokeTest {
         val id = runBlocking { app.graph.createAsset.run("Spa", templateKey = "hot_tub").id.value }
         val context = ApplicationProvider.getApplicationContext<Context>()
         // Open the asset through the deep link so the test does not depend on any list copy.
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("notenfc://asset/$id"))
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("servicetag://asset/$id"))
             .setClass(context, MainActivity::class.java)
 
         ActivityScenario.launch<MainActivity>(intent).use {
