@@ -23,6 +23,10 @@ before consequential remote mutations.* This runbook's §A covers D–G, §B cov
 
 **Standing constraints.**
 
+- **The operating rule: vet everything possible on the emulator; the phone is used only where RF
+  hardware or the real install is required.** Every proof that can be a JVM test is a JVM test;
+  every proof that needs Android but not a radio runs on the emulator; the phone is reserved for the
+  physical taps in §D and §E and for the real-install migration in §C.
 - The attached phone holds the owner's **real data**. **No instrumented suite runs on it** (§15) —
   an instrumented run wipes app data. Automated suites go to the emulator; the phone gets only §C,
   §D and §E, and only once a fresh export exists.
@@ -74,7 +78,7 @@ search-and-replace.
 |---|---|---|---|
 | **1** | `rootProject.name = "ServiceTag"` (an omission from the archaeology inventory — review correction 11) | `settings.gradle.kts:20` | `./gradlew projects` shows the new root name |
 | **2** | `namespace` and `applicationId` → `com.loosecannon.servicetag`; keystore path → `~/.config/servicetag/keystore.properties`; `versionCode`/`versionName` bumped | `app/build.gradle.kts` | `./gradlew :app:assembleDebug`; `aapt2 dump badging` shows the new package |
-| **3** | Move the Kotlin package roots: `app/src/{main,debug,test,androidTest}/kotlin/com/loosecannon/notenfc/…` → `…/servicetag/…` and `core/src/{main,test}/kotlin/com/loosecannon/notenfc/core/…` → `…/servicetag/core/…`; rewrite every `package`/`import` | 233 `.kt` files + both manifests + `app/build.gradle.kts` | `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug`; `git grep -l 'com\.loosecannon\.notenfc' -- app core gradle` empty |
+| **3** | Move the Kotlin package roots: `app/src/{main,debug,test,androidTest}/kotlin/com/loosecannon/notenfc/…` → `…/servicetag/…` and `core/src/{main,test}/kotlin/com/loosecannon/notenfc/core/…` → `…/servicetag/core/…`; rewrite every `package`/`import` | 233 `.kt` files + both manifests + `app/build.gradle.kts` | `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug`, **plus a scoped check only**: no `package` or `import` declaration and no source path root still says `com.loosecannon.notenfc` — `git grep -nE '^\s*(package\|import)\s+com\.loosecannon\.notenfc' -- app core` empty, and `git ls-files app core \| grep -c 'com/loosecannon/notenfc/'` = 0. **The repository-wide zero-hit grep does NOT belong here**: tasks 5–7 still legitimately hold `com.loosecannon.notenfc` in the NDEF type constants, the manifest filter path and the deep-link literals until they run, so that assertion is the whole-phase verification below |
 | **4** | The **five FQN `android:name` literals that do not follow `namespace`** (review correction 4): `com.loosecannon.notenfc.NoteNfcApp` (application), `…MainActivity`, `…ShareActivity`, `…nfc.NfcDispatchActivity` in `app/src/main/AndroidManifest.xml`, and `…debug.DebugBackupActivity` in `app/src/debug/AndroidManifest.xml` | both manifests | the merged manifest contains no `notenfc` substring; the app launches |
 | **5** | The **one Gradle-owned identity value** (C9, target §4.8): `ndefExternalDomain`, `ndefTypeName`, `aarPackage` in `app/build.gradle.kts`, feeding `manifestPlaceholders["ndefTagPath"]` and three `buildConfigField`s; the manifest's `android:path` becomes `${ndefTagPath}` (still an **exact** path, never `pathPrefix`); the app builds its `TagIdentity` from `BuildConfig` | `app/build.gradle.kts`, `AndroidManifest.xml:84-88`, the NFC wiring | **both** binding tests green: the JVM test on `TagIdentity`-from-`BuildConfig`, and the emulator test that `queryIntentActivities` on `vnd.android.nfc://ext/<externalType>` resolves to exactly this app's dispatch activity |
 | **6** | **Drop legacy `md5_short` entirely** (O2/O3): the `LEGACY_TYPE`/`LEGACY_TYPE_NAME` constants, `legacyKeyPattern`, the `decodeLegacy` branch, `TagPayload.LegacyMd5`, `PayloadFormat.LEGACY_MD5`, `Resolution.UnknownLegacy`, the `Legacy` sheet, the `"LEGACY_MD5"` trampoline wire value, the second manifest filter, and the matching tests. Record it as **a deliberate reversal of D6's "kept permanently" promise** | `core/…/core/nfc/NdefCodec.kt:50-53,82-88`, `core/…/core/model/TagBinding.kt`, `core/…/core/usecase/ResolveTag.kt`, `app/…/ui/scan/{ScanViewModels,TagResultSheet}.kt`, `AndroidManifest.xml:89-93`, `core/src/test/…/NdefCodecTest.kt` | green suites; `git grep -i md5` over `app core` empty; the manifest declares exactly **one** `NDEF_DISCOVERED` filter |
@@ -100,9 +104,17 @@ two-tab navigation, Read/inspect tag, ambient NFC as the normal read path).
 ```bash
 cd ~/Documents/Projects/AndroidStudioProjects/noteNFC-split
 ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain
-git grep -lE 'com\.loosecannon\.notenfc|notenfc://|md5_short|noteNFC|NoteNfc' -- app core gradle settings.gradle.kts README.md
+
+# The repository-wide assertion, run ONLY after the last identity task (7) has landed:
+git grep -lE 'com\.loosecannon\.notenfc|notenfc://|md5_short|noteNFC|NoteNfc' \
+  -- app core gradle settings.gradle.kts README.md
 # expected: no output. Hits under docs/ are HISTORY and are left alone (§30, §H).
 ```
+
+Run in task order this assertion is expected to fail after tasks 3 and 4 and to pass only from task
+7 onward: the NFC type constants (tasks 4 and 6), the manifest filter path (task 6) and the deep-link
+literals (task 7) each legitimately still carry the old string until their own task runs. Treating it
+as a per-task gate would either block task 3 or invite someone to edit constants out of order.
 
 Then a clean-checkout build from a directory that has never held the project (§26).
 
@@ -152,10 +164,10 @@ provenance, intent, lessons and the share→write→tap evidence — not code to
 | **3** | **re-run CI from scratch.** `c84b881` itself never ran on a runner — the green Phase-0 evidence belongs to pre-rewrite twins `ccdb9d3`/`12e2c09` whose SHAs no longer exist (review correction 8). No green claim is inherited | a green run on the new repository's own workflow (after §B.4) |
 | **4** | signing: `~/.config/notenfc/keystore.properties` via the same `Properties`-from-`user.home` mechanism — **the existing noteNFC key, unchanged, never rotated** (§12); `versionCode`/`versionName` past the historical 2 / `1.1` | `./gradlew :app:assembleRelease` produces a **signed** release build (§12 requires the proof); the certificate SHA-256 matches the existing key's, recorded not reproduced |
 | **5** | the NoteTag application: share receiver, writer screen, ambient dispatch activity, minimal local store. **Delete the three 2024 activities** rather than modernise them (O6). Declare exactly **one** `NDEF_DISCOVERED` filter on the exact path `/com.loosecannon.notetag:tag`; **do not re-inherit the 2024 `TECH_DISCOVERED` catch-all or `res/xml/nfc_tech_filter.xml`** | `git grep -c nfc_tech_filter` = 0; exactly one NFC filter in the merged manifest |
-| **6** | the **NoteTag v1 tag format** (O13/O14, target §4.9): one external record, `version|kind|flags|body`; kinds `0x01 JOPLIN_NOTE`, `0x02 URI`, `0x03 LOCAL_REF`; `0x04`+ reserved; **no AAR**; the automatic writer decision compact → URI-if-it-fits → LOCAL_REF, with "fits" decided by the exact encoded message against the **measured** `Ndef.maxSize` | JVM tests per kind: encode/decode round-trip, malformed bodies, an unknown kind, an unknown version; a capacity test that a URI too long for the measured size falls through to `LOCAL_REF` rather than failing; **no test asserts a character count** |
-| **7** | the **minimal local store** (O14, **[P19]**): `LOCAL_REF` targets plus convenience metadata; **never required to resolve a `JOPLIN_NOTE` or `URI` tag**; the writer tells the user when a tag will only work on this phone | a test that `JOPLIN_NOTE` and `URI` tags resolve with the store deleted; a test that a `LOCAL_REF` miss produces a message, not a crash |
+| **6** | the **NoteTag v1 tag format** (O13/O14, target §4.9): one external record, `version|kind|flags|body`; kinds `0x01 JOPLIN_NOTE`, `0x02 URI`, `0x03 LOCAL_REF`; `0x04`+ reserved; **no AAR**; the automatic writer decision compact → URI-if-it-fits → LOCAL_REF, with "fits" decided by the exact encoded message against the **measured** `Ndef.maxSize` | JVM tests per kind: encode/decode round-trip, malformed bodies, an unknown kind, an unknown version; **capacity selection driven by injected `maxSize` values** (§D.3) with the exact encoded message at `maxSize`, `maxSize - 1` and `maxSize + 1`, asserting compact → URI-if-it-fits → `LOCAL_REF` and that the fallback fires **only** when the message genuinely does not fit — `needed` is `toNdefMessage().toByteArray().size` with **no TLV allowance** (target §4.3 invariant 7); **no test asserts a character count** |
+| **7** | the **minimal local store** (O14, ratified P19): a single atomically-replaced JSON file behind a small interface; `LOCAL_REF` targets plus convenience metadata; **never required to resolve a `JOPLIN_NOTE` or `URI` tag**; the writer tells the user when a tag will only work on this phone. **Plus the `LOCAL_REF` crash-consistency invariant (G2)**: the mapping is durably stored **before** the physical tag is written, and a `LOCAL_REF` whose mapping has not committed is never successfully written. Sequence: allocate the UUID → **atomically persist** the mapping (temporary file, `fsync`, atomic rename) → write and verify the tag → success retains the mapping; failure, cancellation or a lost tag → best-effort removal of the orphan mapping. Persist-then-write can only leave a few invisible bytes of orphan JSON; write-then-persist can leave **a live tag that resolves to nothing on the phone that wrote it**, which is the one outcome a device-bound kind must never produce | a test that `JOPLIN_NOTE` and `URI` tags resolve with the store deleted; a test that a `LOCAL_REF` miss produces a message, not a crash; and the **named failure-injection deliverable**, two cases: *persist succeeds, tag write fails → the mapping is removed*, and *persist fails → no tag write is attempted at all* |
 | **8** | a **copied, not shared** safe `ACTION_VIEW` launch policy: scheme allowlist, whitespace and control-character rejection, `ActivityNotFoundException` **and** `SecurityException` caught. The 2024 app passed stored text straight to `startActivity` with no `try/catch` and crashed on a missing Joplin (arch §2.5, §5.13) | a test per rejected scheme; a test that a missing handler is a message, never a crash |
-| **9** | malformed/foreign wording: a ServiceTag tag is **not** interpreted as a note (§23); sibling isolation in NoteTag's direction | a test that `com.loosecannon.servicetag:tag` decodes as `Foreign`; the writer offers only *Write over it* / *Cancel* (**[P11]**) |
+| **9** | malformed/foreign wording: a ServiceTag tag is **not** interpreted as a note (§23); sibling isolation in NoteTag's direction | a test that `com.loosecannon.servicetag:tag` decodes as `Foreign`; the writer offers only **Write over it** / **Cancel** and names the other app (ratified P11) |
 | **10** | adopt `nfc-tag-core` for reader mode, read-before-write, capacity, verified read-back. **Requires §A.3 and §A.4**, so this lands last | the §23 acceptance list, end to end |
 
 **NoteTag acceptance (§23) — the entry condition for gate 6.** Share a supported Joplin note or link
@@ -171,7 +183,9 @@ build green. **Rollback.** Delete the directory and re-clone; `c84b881` is immut
 ### A.3 nfc-tag-core extraction (sequence F)
 
 **Do.** Create `~/Documents/Projects/AndroidStudioProjects/nfc-tag-core`, `git init`, and build the
-layout at target §4.1: `nfc-core/` (pure Kotlin/JVM, **zero runtime dependencies**), `nfc-android/`
+layout at target §4.1: `nfc-core/` (pure Kotlin/JVM, with **zero third-party, application or
+framework runtime dependencies — the Kotlin stdlib only**, added by the `kotlin.jvm` plugin),
+`nfc-android/`
 (the Android NFC adapter), its **own root build** so it builds and tests standalone (O15), its own
 wrapper and its own catalog whose alias *names* match the two apps'. Then, file by file, follow the
 **provenance table** at target §4.6: it names every library file's source file, line range,
@@ -181,8 +195,8 @@ table — for a repository with no inherited history, the table *is* the provena
 | # | Commit | Verify |
 |---|---|---|
 | **1** | skeleton: root `settings.gradle.kts` (`include(":nfc-core", ":nfc-android")`), root `build.gradle.kts`, catalog, wrapper, `.gitignore` | `./gradlew projects` lists both modules |
-| **2** | `nfc-core`: `NdefRecordData`, `TagIdentity`, `TagContent`, `NdefEnvelope` (optional AAR builder), `UuidBytes`, `ExistingContent`, `OverwriteReason`, `OverwritePolicy` + the JVM suite at target §4.5 | `./gradlew :nfc-core:test`; the module declares **no** runtime dependency |
-| **3** | `nfc-android`: `NdefBridge` (+ the new `serialisedSize`), `NfcReaderModeSession` (doc comment carried across verbatim, including why the platform NDEF check stays on), `TagWriter`/`TagInspection`/`WriteResult` with the formatted-size capacity rule, `TagHandle`/`TagIo`/`RealTagIo` | `./gradlew :nfc-android:testDebugUnitTest :nfc-android:assembleDebug`; **no dependency back into either app** (O15) |
+| **2** | `nfc-core`: `NdefRecordData`, `TagIdentity`, `TagContent`, `NdefEnvelope` (optional AAR builder), `UuidBytes`, `ExistingContent`, `OverwriteReason`, `OverwritePolicy` + the JVM suite at target §4.5 | `./gradlew :nfc-core:test`; `./gradlew :nfc-core:dependencies` shows **only the Kotlin stdlib** on the runtime classpath — no third-party, application or framework dependency |
+| **3** | `nfc-android`: `NdefBridge` (+ the new `serialisedSize`), `NfcReaderModeSession` (doc comment carried across verbatim, including why the platform NDEF check stays on), `TagWriter`/`TagInspection`/`WriteResult` with the message-size capacity rule on both paths — `serialisedSize()` is exactly `toNdefMessage().toByteArray().size`, with **no TLV allowance** (target §4.3 invariant 7) — `TagHandle`/`TagIo`/`RealTagIo` | `./gradlew :nfc-android:testDebugUnitTest :nfc-android:assembleDebug`; **no dependency back into either app** (O15) |
 | **4** | `tools/forbidden-scan.sh` + `forbidden-scan.allow`, wired as a `check` dependency and as the first CI step | the scan passes; every allow entry carries a reason, inspected not accepted (§22) |
 | **5** | `README.md`: the provenance table, the invariant list, the public API, and the two *patterns* the library does not own — the reader-mode `LifecycleResumeEffect { start(); onPauseOrDispose { stop() } }` idiom, and the mint→write→verify→complete-else-abandon provisioning protocol (arch §6.1, §6.2). Plus an explicit note that `TagWriteSession` is **deferred** and on what criterion it would be promoted (target §4.7) | a reader who has never seen either app can tell where each file came from and what is deliberately absent |
 | **6** | `.github/workflows/ci.yml` per target §9 | green once the remote exists (§B.1) |
@@ -197,7 +211,7 @@ table — for a repository with no inherited history, the table *is* the provena
 **Do.** In each app repository, once `GonzRon/nfc-tag-core` exists on the remote (§B.1):
 
 ```bash
-git submodule add -b main https://github.com/GonzRon/nfc-tag-core.git libs/nfc-tag-core
+git submodule add https://github.com/GonzRon/nfc-tag-core.git libs/nfc-tag-core
 git -C libs/nfc-tag-core checkout nfc-tag-core-v0.1.0
 git add .gitmodules libs/nfc-tag-core
 ```
@@ -205,8 +219,11 @@ git add .gitmodules libs/nfc-tag-core
 Add the NEW block to `settings.gradle.kts` exactly as target §6.2 gives it (the `require` guard,
 `include(":nfc-core", ":nfc-android")`, the two relocated `projectDir`s), the
 `implementation(project(":nfc-android"))` line in `app/build.gradle.kts`, the CI checkout's
-`submodules: recursive`, and the submodule-pin assertion step (target §6.3), also kept as
-`tools/check-submodule-pin.sh` for local runs. Then delete from each app everything the library now
+`submodules: recursive`, and the submodule-pin assertion step (target §6.3) — whose tag check is
+`git describe --exact-match --match 'nfc-tag-core-v*' --tags HEAD`, an **exact product tag** rather
+than any tag that happens to point at that commit — also kept as `tools/check-submodule-pin.sh` for
+local runs. No branch is tracked: the submodule is deliberately detached at a tag, which makes
+§19's "mutable HEAD not silently consumed" true by construction rather than by policy. Then delete from each app everything the library now
 owns and replace it with the library's types — in ServiceTag that is `NdefBridge`,
 `NfcReaderModeSession`, `TagWriter`, `TagIo`/`TagHandle`, the envelope half of `NdefCodec` and
 `OverwritePolicy`, leaving the body codec, the row minting, the write protocol and every message
@@ -219,7 +236,8 @@ string behind in the app (target §4.7).
 2. The pin assertion passes in both, and **both apps are on the same library tag**.
 3. **The four negative tests, demonstrated failing and then restored**: (a) `rm -rf libs/nfc-tag-core/*`
    → the `require` fires at configuration time with the fix command; (b)
-   `git -C libs/nfc-tag-core checkout HEAD~1` → the pin assertion reports "not at a tagged commit";
+   `git -C libs/nfc-tag-core checkout HEAD~1` → the pin assertion reports "not at an exact
+   `nfc-tag-core-v*` tag";
    (c) `touch libs/nfc-tag-core/nfc-core/src/main/kotlin/x` → "submodule working tree is dirty";
    (d) remove a catalog alias the library uses → a configuration-time failure naming the alias.
 4. Clean-checkout proof per repository: `git clone --recurse-submodules <url> <tmp>` into a never-used
@@ -628,58 +646,59 @@ NoteTag; ServiceTag is unaffected.
 
 ---
 
-## D. Physical tags: preparation, writer proof, and the dispatch spike (sequence I)
+## D. Physical tags — Session 1: writer mechanics (sequence I)
 
 Tag *migration* is withdrawn (O2; §34 gate 8 folded into gate 9; §5's "physical-tag proof — now:
-coexistence of final products only"). What remains is: write the tags the coexistence proof needs,
-prove each writer, and run the AAR dispatch spike O13 requires.
+coexistence of final products only"). What remains on the phone is the irreducible minimum: the
+mechanics that need a real radio and a real chip. **Everything that can be proved without RF has
+been moved off the phone** — see §D.3.
 
-### D.1 The eight physical tags (§25 as revised by O9; the owner has plenty)
+### D.1 Physical tags required — three, plus two optional
 
-| # | Tag | Written by | Used for |
+| # | Tag | Prepared how | Used for |
 |---|---|---|---|
-| **T1** | blank, unformatted NTAG213 (`NdefFormatable`, not yet `Ndef`) | nobody — out of the packet | the format path: `maxSize = -1`, format-unlocked, second-tap verify, and the formatted-size capacity rule (**[P8]**) |
-| **T2** | **ServiceTag asset tag** | ServiceTag's writer | §25 row 2; the sibling-foreign row in NoteTag's reader mode |
-| **T3** | **ServiceTag standalone-link tag** | ServiceTag's writer | §25 row 3 — the link launches with no app screen at all |
-| **T4** | **NoteTag `JOPLIN_NOTE`** | NoteTag's writer | §25 row 1; §23's end-to-end acceptance |
-| **T5** | **NoteTag `URI`** | NoteTag's writer | the URI kind, and the capacity decision that chose it |
-| **T6** | **NoteTag `LOCAL_REF`** | NoteTag's writer | the device-bound kind, and the writer's warning that it is device-bound (O14) |
-| **T7** | unrelated / foreign — a commercial URL sticker or a tag with an unrelated external type | a generic third-party NFC writer | §25 row 6 "unrelated/foreign tag → no unsafe action"; also the Android 16+ `ACTION_VIEW` / Android 17 notification behaviour for a genuine web-link tag |
-| **T8** | spare blank NTAG213 | — | the destructive rows: the **permanent** lock, and any tag a failed write leaves in an unknown state |
+| **T1** | blank, **unformatted** NTAG213 (`NdefFormatable`, not yet `Ndef`) | out of the packet | the format path **and** lock-last, in one tag: tap 1 formats and writes unlocked, tap 2 verifies the read-back and then locks. It ends its life read-only, which is why it is this tag and not a shared one |
+| **T4** | **NoteTag `JOPLIN_NOTE`** canonical tag | written in Session 1 | the canonical write proof, then Session 2's ambient tap and ServiceTag's sibling-refusal read |
+| **T2** | **ServiceTag asset** canonical tag | written in Session 1 | the canonical write proof, then Session 2's ambient tap and NoteTag's sibling-refusal read |
+| *(opt)* | a commercial URL sticker | any retail sticker | **optional observation, not a gate**: the Android 16+ `ACTION_VIEW` / Android 17 "open link" notification behaviour for a genuine web-link tag |
+| *(opt)* | a tag with an unrelated external type | a generic third-party NFC writer | **optional observation, not a gate**: the `Foreign` branch with a type string that is neither product's |
 
 All NTAG213 or larger: NTAG213 is the minimum supported tag (O14), and both products' messages fit it
-comfortably — ServiceTag's ~92 B with its AAR, NoteTag's `JOPLIN_NOTE` ~52 B without one.
+with room to spare — ServiceTag's ~92 B *with* its AAR, NoteTag's `JOPLIN_NOTE` ~52 B without one,
+both as **NDEF message sizes** compared directly against what `Ndef.getMaxSize()` reports (target
+§4.3 invariant 7).
 
-### D.2 Writer proofs — 9 owner taps
+### D.2 Session 1 — four owner taps
 
-Each row is one write from the app's explicit writer UI (§25: "intentional writes only via explicit
-writer UI"). Everything else — install, force-stop, logcat, `dumpsys`, verification — is driven from
-the workstation.
+Each row is one deliberate tap in an explicitly-opened writer screen (§25: "intentional writes only
+via explicit writer UI"). Installs, force-stops, `logcat` and `dumpsys` are workstation-driven.
 
-| # | Action | Pass condition |
+| # | Owner action | Pass condition |
 |---|---|---|
-| **W1–W2** | write `JOPLIN_NOTE` to the blank **T1** (two taps: the format path) | first tap formats unlocked and says "lift it off and hold it again"; second tap verifies by structural read-back and only then locks if armed. A too-small unformatted tag reports `TooSmall`, not a generic failure (**[P8]**) |
-| **W3** | write **T4** `JOPLIN_NOTE` | read-back verified; the message is one external record, **no AAR** (O13) |
-| **W4** | write **T5** `URI` | the writer chose `URI` because the exact encoded message fits the measured `Ndef.maxSize`; no character count appears anywhere in the UI |
-| **W5** | write **T6** `LOCAL_REF` | the writer chose `LOCAL_REF` because the URI did not fit, stored the target locally, **and told the user the tag will only work on this phone** (O14) |
-| **W6** | write **T2** ServiceTag asset tag | read-back verified; the row's `writtenAt` and `physicalUid` stamped |
-| **W7** | write **T3** ServiceTag standalone-link tag | as above, with a link target |
-| **W8** | in either writer, tap **T7** (foreign), confirm nothing | exactly one confirmation is offered, its reason names the foreign content, and **Keep it** leaves the tag byte-identical |
-| **W9** | arm the lock and write **T8**, then lock | locked only after a verified read-back; the tag is thereafter read-only, permanently |
+| **1** | **T1**, first tap, NoteTag's writer with the lock armed | the `NdefFormatable` path: the tag is formatted and written **unlocked**, and the screen says to lift it off and hold it again. `maxSize` was `-1` before the format, so no capacity verdict was possible yet (target §4.3 invariant 7) |
+| **2** | **T1**, second tap | the read-back is compared structurally — record count, order, TNF, full type, full payload — and **only then** is the lock applied. The tag is thereafter permanently read-only, and a third tap of it in any writer reports `ReadOnly`, not `TooSmall` and not a generic failure. **This single tag exercises the whole format → verify → lock-last sequence**, which is why there is no separate lock tag |
+| **3** | **T4**, one tap, NoteTag's writer | a canonical `JOPLIN_NOTE` tag: **one external record, no AAR** (O13); read-back verified; `needed` was the exact encoded message size |
+| **4** | **T2**, one tap, ServiceTag's writer | a canonical ServiceTag asset tag: read-back verified; the `nfc_tag` row's `writtenAt` and `physicalUid` stamped |
 
-### D.3 The AAR dispatch spike (O13)
+**Four owner taps.** Nothing else in this session requires the owner.
 
-O13 makes the AAR contingent on observation, in both products. Two questions, recorded as evidence
-rows:
+### D.3 What moved off the phone, and where it went
 
-| Row | Question | Method | Why it matters |
-|---|---|---|---|
-| **S1** | **External-type-only dispatch reliability when the app IS installed.** Does an ambient tap of an AAR-less NoteTag tag reach NoteTag every time — cold, warm, from recents, and after the screen has been off? | tap **T4** in each state; the workstation captures logcat and confirms which component started | if external-type-only dispatch is reliable, NoteTag needs no AAR and neither, arguably, does ServiceTag (**[P21]**) |
-| **S2** | **Behaviour when the app is NOT installed.** | uninstall NoteTag from the workstation, tap **T4** once, reinstall | expected **[platform-doc]**: nothing at all — `NDEF_DISCOVERED` no match, `TECH_DISCOVERED` no filter, stop. With an AAR it would instead open a Play page for a listing that does not exist. **To observe on-device** |
+Each of these was previously a physical row and is now cheaper, faster and more repeatable elsewhere.
+The operating rule drove every reassignment: *vet everything possible on the emulator; the phone only
+for RF hardware or the real install.*
 
-The spike's outcome decides whether NoteTag adds an AAR and whether ServiceTag keeps its own. Until
-then ServiceTag keeps the AAR it already writes, because 1B row 5 **[device-observed]** the platform
-matching it to start the dispatch activity from a killed process (arch §5.3).
+| Former physical row | Now proved | How |
+|---|---|---|
+| URI-vs-`LOCAL_REF` **capacity selection** | **JVM tests with fake capacities** | drive the writer's decision with injected `maxSize` values around the boundary: a URI whose exact encoded message is `maxSize`, `maxSize - 1` and `maxSize + 1`. Asserts the order compact → URI-if-it-fits → `LOCAL_REF`, and that the fallback happens **only** when the message genuinely does not fit — the failure mode G1's arithmetic correction exists to prevent |
+| `LOCAL_REF` **missing-map** behaviour | **JVM / app test** | resolve a `LOCAL_REF` body with the local store empty or the entry removed: a clear message, no crash, no silent nothing |
+| `LOCAL_REF` **crash consistency** | **JVM failure-injection test** (§A.2 task 7, G2) | persist-succeeds-write-fails → the orphan mapping is removed; persist-fails → **no tag write is attempted** |
+| ServiceTag **standalone-link resolution** | **emulator regression with a synthetic NFC intent** | deliver `ACTION_NDEF_DISCOVERED` to the same dispatch activity with the same external type as the asset tag, carrying a link-target payload; assert the link launches with no app screen and `last_opened_at` is stamped. The wire shape is identical to the asset tag, so a physical link tag would prove nothing the asset tag has not already proved on-device |
+| **Commercial URL sticker** | **optional observation** | logged if the owner happens to have one to hand; not a gate |
+| **App-not-installed tap** | **optional observation** | the AAR-less dispatch question; logged opportunistically, not a gate |
+| Separate **lock** test (the old spare tag) | **folded into T1**, taps 1–2 | one tag now carries format, verify and lock |
+| Separate **foreign-tag** write test | **folded into the sibling reads**, Session 2 checks 3–4 | a sibling's tag is a foreign record as far as the writer's overwrite decision is concerned, so the same confirmation path is exercised with a tag that also proves the coexistence row |
+| The **AAR dispatch spike** (O13) | **folded into Session 2's ambient taps** | the cold ambient tap of each product's tag *is* the spike: it answers whether external-type-only dispatch reaches an installed app. Warm, from-recents and screen-off states are **optional observations logged from the workstation** via `logcat`/`dumpsys` while the owner is already tapping — never separate owner actions |
 
 ### D.4 How each observation is recorded
 
@@ -696,10 +715,10 @@ that contradicts a **[platform-doc]** expectation is recorded as a contradiction
 exactly as arch §5.10 does for stopped-state dispatch. §29 forbids secrets and device ids in the
 evidence file; certificate fingerprints only.
 
-**Rollback (this whole phase).** Any tag can be rewritten **except a locked one**, which is why the
-lock is exercised only on the spare **T8**. No app data changes beyond the tag rows the writers
-create, and a cancelled write leaves no row behind (`abandonIfUnwritten`). The eight legacy tags are
-untouched — see §D.5.
+**Rollback (this session).** Any tag can be rewritten **except T1 once locked**, which is the point of
+locking it and the reason no other tag is locked. No app data changes beyond the rows the writers
+create, and a cancelled write leaves no row behind (`abandonIfUnwritten`). The eight legacy field tags
+are untouched — §D.5.
 
 ### D.5 The eight legacy tags — inventory facts only
 
@@ -714,49 +733,51 @@ data is proven gone.)
 Their lifecycle is not a migration: an old tag on a machine is currently useless; when convenient, the
 owner opens that machine in ServiceTag and writes the canonical ServiceTag tag; done. The normal
 writer's read-before-write step already presents a foreign or unreadable record as a one-confirmation
-overwrite. **No wizard, no resolver, no compatibility mode, no acceptance row, no migration code**
-(O2, O11).
+overwrite, offering **Write over it / Cancel**. **No wizard, no resolver, no compatibility mode, no
+acceptance row, no migration code** (O2, O11).
 
 ---
 
-## E. Coexistence acceptance (sequence J, §25 as revised by O9)
+## E. Session 2 — coexistence acceptance (sequence J, §25 as revised by O9)
 
-Preconditions: both apps installed (C.2 and C.10), both on the **same** library tag, §D's tags
-written, `adb logcat` capturing from the workstation throughout.
-
-**The owner's manual actions are the taps and nothing else.** §D costs **9 taps**; §E costs **9 taps
-plus 2 one-time system NFC-allowlist confirmations** — **20 owner actions in total across both
-phases, with a floor of 18** if the two allowlist dialogs appear on the first tap of each app and fold
-into checks 1 and 4. Every install, uninstall, force-stop, `dumpsys` and log capture is
-workstation-driven. §25 alone would need only 7 taps; checks 2 and 3 are §23's per-kind acceptance
-folded into the same session so the tags are handled once rather than twice.
+Preconditions: both apps installed (C.2 and C.10), both on the **same** library tag, Session 1's three
+tags written, `adb logcat` capturing from the workstation throughout.
 
 | # | Check (§25 row) | Owner action | Pass condition |
 |---|---|---|---|
-| **1** | NoteTag canonical tag → NoteTag | tap **T4** (`JOPLIN_NOTE`), apps closed | NoteTag resolves and the correct note opens in Joplin through a safe `ACTION_VIEW`. **No chooser.** No ServiceTag window |
-| **2** | (§23) the `URI` kind | tap **T5** | the correct page or app opens; a scheme outside NoteTag's allowlist would be named and refused, never launched |
-| **3** | (§23) the `LOCAL_REF` kind | tap **T6** | the stored target opens; with the local store cleared it says so rather than failing silently |
-| **4** | ServiceTag asset tag → ServiceTag | tap **T2** | ServiceTag opens that asset. No chooser. No NoteTag window |
-| **5** | ServiceTag standalone-link tag → ServiceTag | tap **T3** | the link launches with **no app screen at all**; `last_opened_at` is stamped; Done returns to the launched app (arch §5.11) |
-| **6** | NoteTag ReaderMode sees a ServiceTag tag → foreign/protected | with NoteTag's writer open, tap **T2** | exactly one confirmation, whose reason names the foreign type; **Keep it** leaves the tag unchanged; no NoteTag record is created (**[P11]**) |
-| **7** | ServiceTag ReaderMode sees a NoteTag tag → foreign/protected | with ServiceTag's Read/inspect tag open, tap **T4** | named as another app's tag; no row created, no lookup performed |
-| **8** | unrelated/foreign tag → no unsafe action | tap **T7**, apps closed | neither app draws a screen and neither writes to its database. A platform notification for a genuine web-link tag is a pass, not a failure (**[platform-doc]**: `ACTION_VIEW` from Android 16, an "open link" notification from Android 17) |
-| **9** | the dispatch spike | uninstall NoteTag (workstation), tap **T4** once, reinstall | §D.3 row S2 |
-| **10** | NFC allowlist, app 1 | confirm the first-scan system dialog | two allowlist entries exist, one per app, **distinguishable by icon and label** (review addition 3) |
-| **11** | NFC allowlist, app 2 | confirm the first-scan system dialog | as above; and a denial for one does not break the other (driven from the workstation) |
-| **12** | ambient read never enters write mode | *no extra tap* — observed on checks 1, 4 and 5 | no writer UI, no reader mode, no `Tag` handle obtained on the ambient path. Structurally guaranteed: the trampoline never calls `nfcTag()` (arch §5.10) |
-| **13** | intentional writes only via explicit writer UI | *no extra tap* — established by §D | every write in §D came from a writer screen the owner opened |
-| **14** | no unpredictable chooser from overlapping identity | *no extra tap* — observed on checks 1–5 | zero chooser dialogs in the logs across all five |
+| **1** | NoteTag canonical tag → NoteTag; **and the AAR dispatch spike** | **cold** ambient tap of **T4** (NoteTag not running, tapped from the lock screen or home screen) | NoteTag resolves and the correct note opens in Joplin through a safe `ACTION_VIEW`. **No chooser.** No ServiceTag window. This tap *is* the spike: it answers whether an AAR-less external-type-only tag reliably reaches an installed app (O13). Warm, from-recents and screen-off repeats are optional workstation-logged observations, not owner actions |
+| **2** | ServiceTag asset tag → ServiceTag | ambient tap of **T2** | ServiceTag opens that asset. No chooser. No NoteTag window. Same spike question for ServiceTag, which still carries its AAR (ratified P21) — so this tap is also what the spike compares against |
+| **3** | NoteTag ReaderMode sees a ServiceTag tag → foreign/protected | with **NoteTag's writer** open, read **T2**, then **Cancel** | the tag is **named** as another app's — the reason carries the full type string from `Foreign.description` — and exactly two actions are offered, **Write over it** and **Cancel**. **Cancel** leaves the tag byte-identical; no NoteTag record is created; no cross-product action of any kind is offered (ratified P11). This also discharges the old separate foreign-record write test |
+| **4** | ServiceTag ReaderMode sees a NoteTag tag → foreign/protected | with **ServiceTag's Read / inspect tag** open, read **T4** | named as another app's tag; **Write over it / Cancel** only; no row created, no lookup performed, no transaction opened (arch §5.12) |
+| **5** | ambient read never enters write mode | *no extra tap* — observed on checks 1 and 2 | no writer UI, no reader mode, no `Tag` handle obtained on the ambient path. Structurally guaranteed: the trampoline never calls `nfcTag()` (arch §5.10) |
+| **6** | intentional writes only via explicit writer UI | *no extra tap* — established by Session 1 | every write in §D.2 came from a writer screen the owner opened |
+| **7** | no unpredictable chooser from overlapping identity | *no extra tap* — observed on checks 1–4 | zero chooser dialogs in the logs across all four |
+| **8** | unrelated/foreign tag → no unsafe action | *no owner action required* — the sibling reads in checks 3–4 already exercise the foreign classification path, and the commercial-sticker and unrelated-external-type taps are **optional observations** (§D.1, §D.3) | in checks 3–4: no database write in either app, no lookup, no transaction. If an optional sticker tap is run, a platform notification for a genuine web-link tag is a pass, not a failure (**[platform-doc]**: `ACTION_VIEW` from Android 16, an "open link" notification from Android 17) |
 
-**Verify (the gate).** Fourteen checks recorded, of which nine cost a tap; from the logs and with no
-owner action: zero unexpected activity starts, zero chooser dialogs on checks 1–5, and no database
-write in either app on checks 6–8. §25's closing instruction governs: **observe actual Android
+**Four owner scans**, plus **at most two first-use NFC permission confirmations** (one per app, on
+whichever tap Android first shows them) and **at most one retap** if Android consumes an initial scan
+while a permission dialog is up.
+
+### E.1 The owner-action count
+
+| Session | Deliberate taps | Incidental |
+|---|---|---|
+| **1 — writer mechanics** (§D.2) | **4** (T1 ×2, T4, T2) | — |
+| **2 — coexistence** (§E) | **4** (T4 ambient, T2 ambient, T2 in NoteTag's writer, T4 in ServiceTag's inspector) | up to 2 first-use NFC permission confirmations; up to 1 retap |
+
+**Total: 8 deliberate tag taps across two sessions, and at most 11 owner interventions worst case —
+8 if the permission dialogs do not appear.** Everything else is workstation-driven: installs,
+uninstalls, force-stops, `dumpsys`, `logcat`, exports, and every optional observation.
+
+**Verify (the gate).** Eight checks recorded across §E, of which four cost a tap; from the logs, with
+no owner action: zero unexpected activity starts, zero chooser dialogs on checks 1–4, and no database
+write in either app on checks 3–4. §25's closing instruction governs: **observe actual Android
 behaviour; do not infer from manifests.**
 
-**Rollback.** Uninstall either app; neither holds the other's data or grant. A failure on checks 1–5
-means a filter is wrong and is fixed in source, not on the phone. A failure on 6–8 or 12 is the
-serious one: the type gate or the ambient/write separation is broken, which stops the split and sends
-the library back to §A.3.
+**Rollback.** Uninstall either app; neither holds the other's data or grant. A failure on checks 1–2
+means a filter is wrong and is fixed in source, not on the phone. A failure on 3–5 is the serious
+one: the type gate or the ambient/write separation is broken, which stops the split and sends the
+library back to §A.3.
 
 ---
 
@@ -773,8 +794,8 @@ issues still say "noteNFC". §10's rule: **use source semantics, not keywords.**
 | **Stays in ServiceTag — genuinely dual-purpose NFC** (4) | **#1** "[EPIC] Evolve noteNFC into an NFC-first maintenance tracker"; **#30** "Bind, rebind, revoke, and unknown-tag flows"; **#31** "tag payload format v1 and legacy md5_short resolver"; **#35** "Untrusted input policy: tag payloads, deep links, stored URIs" | stay, each with **a note**. **"Shared" does not mean "move to nfc-tag-core"** (C7): a mixed policy/mechanism issue is split or stays in ServiceTag as history. #31 additionally records that the `md5_short` half is **withdrawn, not moved** (O2), and that this reverses D6's "kept permanently" promise |
 | **Stays in ServiceTag — build/test infra** (2) | **#23** "Phase 0: clone-buildable repo, AGP 9 toolchain, `:core` module, CI"; **#32** "Testing pyramid and CI gates" | stay. #23 gets a note that NoteTag inherited its *outcome* by branching `c84b881` but **must re-run CI from scratch** (review correction 8); #32 a note that the gates now exist in three repositories |
 | **Closed, with a pointer** (1) | **#29** "[MVP] Investigate the installed APK's signing certificate and upgrade path" | stays closed, in ServiceTag, with a comment pointing at target §8. Not reopened, not transferred: it is why a new identity had to be minted at all |
-| **New, in NoteTag** | — | one issue per open NoteTag question: the `LOCAL_REF` export/import (O14, explicitly not split scope); whether `notetag://` ever gets a `VIEW` filter (**[P4]**); the UI-toolkit decision (**[P20]**) if the controller leaves it to the product |
-| **New, in nfc-tag-core** | — | one issue for `TagWriteSession`'s promotion criterion (target §4.7), so the deferral is tracked rather than forgotten; one for any residue of the `NdefFormatable` capacity gap if **[P8]** does not fully close it |
+| **New, in NoteTag** | — | one issue for the `LOCAL_REF` export/import of the local map (O14, explicitly not split scope). The `notetag://` `VIEW` filter is **not** a separate issue: ratified P4 reserves the scheme and defers any filter to #6/#36, where it belongs. The UI toolkit is **not** an issue either: ratified P20 settles it (Compose, one activity, two tiny screens) |
+| **New, in nfc-tag-core** | — | one issue for `TagWriteSession`'s promotion criterion (target §4.7), so the deferral is tracked rather than forgotten; one for any residue of the `NdefFormatable` capacity gap if ratified P8 — as corrected by G1's message-size arithmetic — does not fully close it |
 
 **Verify.** `gh issue list --repo GonzRon/ServiceTag --state all` = 34;
 `gh issue list --repo GonzRon/NoteTag --state all` = 2 transferred + the new ones; every
@@ -795,7 +816,7 @@ ownership.
 | **The 2023 draft release** | **Stays in ServiceTag as history. Not published, not deleted, not re-anchored.** It is: name `initial working`, `draft: true`, `prerelease: true`, `tag_name: ""` (**empty — never tagged**; GitHub minted only a synthetic placeholder for its `html_url`), `target_commitish: "master"`, `published_at: null`, no assets. The commit the repository stood at two minutes before it was created is `707ca3f` "adding a debug apk" — an **Evernote-era** commit (package `com.looseCannon.evernotenfc`, key `UUID.randomUUID()…substring(0, 8)`, record type `com.loosecannon.evernotenfc:uuid8_link`), predating MD5 keying, the `md5_short` type, the project rename and the Joplin conversion by over a year (arch §2.10). **Because it has no tag and targets the branch ref rather than a SHA, it is unanchored — publishing it today would tag whatever master then is.** This paragraph is the documented ambiguous ownership §28 asks for: it is neither a ServiceTag release nor a NoteTag release, and it is left exactly as it is |
 | **`pre-split-checkpoint`** | stays in ServiceTag at `ac523d7`; a ServiceTag-state marker, not a narrow-product marker (arch §4.8). Not deleted (§27 step 12) |
 | **`pre-split-master`** (branch) | stays in ServiceTag at `ac523d7`. Recorded because the name reads like a tag and is not — `git tag` lists only `pre-split-checkpoint` (arch §4.1) |
-| **ServiceTag's first tag** | **`servicetag-v2.5`** on the commit that passes gate 9, annotated with the split's completion date, the library tag both apps consume, and the certificate SHA-256 of the ServiceTag key. Product-prefixed because the repository's history contains a differently-named product and a bare `v2.5` would be ambiguous across the rename (**[P17]** accepted) |
+| **ServiceTag's first tag** | **`servicetag-v2.5`** on the commit that passes gate 9, annotated with the split's completion date, the library tag both apps consume, and the certificate SHA-256 of the ServiceTag key. Product-prefixed because the repository's history contains a differently-named product and a bare `v2.5` would be ambiguous across the rename (ratified P17) |
 | **NoteTag's first tag** | **`notetag-v1.0`** on the commit that passes gate 9, annotated with the boundary commit `c84b881` it descends from and the library tag it consumes. **This is the first tag this lineage has ever had** — there is no 2023 or 2024 tag, locally or on origin (arch §4.1). No earlier narrow-product tag is "cleanly reconstructable", so none is invented |
 | **nfc-tag-core's first tag** | **`nfc-tag-core-v0.1.0`**, created in §B.1, annotated with the source commit `ac523d7` and a pointer to the provenance table |
 | **Releases on the new repositories** | none at creation. Nothing is published (O15), and the two apps are locally signed, so a GitHub release would carry an APK the owner does not want distributed |
@@ -861,7 +882,7 @@ Read from the row you are in, upward: the earlier the failure, the cheaper it is
 | **§B.5** issue transfer | two issues moved | `gh issue transfer` back; comment history and redirects survive, and the backlinks become the audit trail |
 | **§C.1–C.8** phone restore and proof | **the old package is still installed and still holds the live data** — the whole point of §15's ordering | uninstall the ServiceTag package and keep using the modern app. The SAF tree is untouched in the same-tree case (8 `alreadyPresent`, 0 written), and §13 forbids ever deleting, relocating or rewriting it |
 | **§C.9** old package uninstalled | the old app's data is gone | reinstall the preserved signed **2.4 / versionCode 6** APK from `~/Documents/Projects/AndroidStudioProjects/noteNFC-releases/` — built from `ac523d7`, signer DN `CN=noteNFC, O=GonzRon`, certificate SHA-256 in the checkpoint ledger — re-grant its SAF tree, and import the preserved set. **The only genuinely irreversible step in the runbook**, which is why C.6's proof is its precondition (§35) |
-| **§C.10 / §D / §E** NoteTag installed, tags written, coexistence | tags written; two apps installed | uninstall either app freely. Any tag can be rewritten **except a locked one** — locking is exercised only on the spare **T8**. The eight legacy field tags were never touched |
+| **§C.10 / §D / §E** NoteTag installed, tags written, coexistence | tags written; two apps installed | uninstall either app freely. Any tag can be rewritten **except T1 once locked** — T1 is the only tag ever locked, which is precisely why the format → verify → lock-last sequence is exercised on it and on nothing else (§D.2). **T4** and **T2** stay rewritable. The eight legacy field tags were never touched |
 | **The whole split** | everything above | `git checkout pre-split-checkpoint` in a fresh clone of the renamed repository; rename the repository back to `noteNFC`; transfer the two issues back; rename the two new repositories aside; reinstall the 2.4 APK and import the preserved set. The pre-rewrite history bundle beside the project directories covers the one case none of this does — a corrupted or force-pushed history — because it predates the 2026-09-14 rewrite |
 
 **Two rules that make all of it hold.** No recovery ref is ever deleted (§27 step 12, §35), and no
@@ -886,7 +907,7 @@ proceeding; minor cleanup is recorded and deferred.*
 | **6** | **NoteTag narrow scope** | E | §23's acceptance list end to end; the v1 format's per-kind tests; the local store never required to resolve `JOPLIN_NOTE`/`URI`; true ancestry (30 commits, zero merges, root `5fb6aed`); CI green **from scratch** (review correction 8); no `docs/`, no tracked APK, no legacy decoder, no tech catch-all |
 | **7** | **data / artifact migration** | H | §C.6 and §C.7 pass: eleven tables with identical id sets and per-field equality (events including `tzId`, `occurredOn`, `createdAt`, `(source, source_ref)`); 8×3 attachment hashes; the empty-tree restore proved independently; every difference accounted for by §C.8 and nothing else. **This gate precedes §C.9's irreversible uninstall** |
 | **8** | *withdrawn* | — | folded into gate 9 (O2; §5's "physical-tag proof — now: coexistence of final products only") |
-| **9** | **final coexistence / device** | I + J | §D's nine writer taps and the dispatch spike recorded; §E's fourteen checks passed with the owner's actions held to 20 across both phases (floor 18); zero chooser dialogs on checks 1–5; no database write on 6–8; both apps on the same library tag; every observation written to the evidence file with a verdict |
+| **9** | **final coexistence / device** | I + J | Session 1's four writer taps recorded (§D.2, including format → verify → lock-last on one tag); Session 2's eight checks passed (§E), of which four cost a tap, with the **AAR dispatch spike folded into checks 1–2**; **owner interventions held to 8 deliberate taps and at most 11 in total** (§E.1); zero chooser dialogs on checks 1–4; no database write on checks 3–4; sibling refusals offering **Write over it / Cancel** and nothing else; every reassigned proof (§D.3) green off-device; both apps on the same library tag; every observation written to the evidence file with a verdict |
 | **10** | **final three-repository convergence** | K + L + M + N | three repositories, three green CI runs, three clean-clone builds (one per app from a second workstation); issues moved with backlinks and the notes added; the three first tags created; documentation changed only where §H says and additively where it touches history; every **[P*n*]** ratified or superseded; every "to observe on-device" marker resolved or explicitly deferred; and the §36 handoff assembled — checkpoint SHA, the historical split SHA and why, three repo names/URLs/canonical commits, what the original repository became, what moved into nfc-tag-core, what stayed app-specific, the dependency/version mechanism, both applicationIds and namespaces, NFC record and deep-link ownership, AAR behaviour, signing fingerprints only, the migration backup format, the ID-preservation and attachment-hash proofs, the SAF grant procedure, the coexistence proof, CI status ×3, issue movements, releases/tags, rollback, and remaining debt. **Next operation after handoff: ServiceTag Phase 3** |
 
 **No gate is self-certified**; each is reviewed against the artifact it names, by someone who did not
@@ -894,13 +915,17 @@ produce it — the pattern already used for gates 1–3.
 
 ---
 
-## K. Open proposals
+## K. Proposal ledger — all ratified, none open
 
-The runbook introduces none of its own that survive. The open list is the target document's §11:
-**[P4]** (no `notetag://` VIEW filter at reconstruction), **[P11]** (sibling-refusal wording offers no
-cross-product action), **[P19]** (NoteTag's local store as an atomically-replaced JSON file),
-**[P20]** (NoteTag's UI toolkit — unruled), **[P21]** (ServiceTag keeps its AAR pending the §D.3
-spike). Everything else this runbook once proposed has been accepted or superseded: the composite-build
-choice by **O15**, the Migrate-tag tool and the legacy handling by **O2/O11**, the reconstructions of
-§22's word list, §27's order and §34's gates by the brief now being on disk, and the remote-ordering
-deviation by the controller's acceptance recorded in §B.
+Gate 3 ratified the last five proposals, and each now lives in the design text rather than in a list:
+**P4** (no `notetag://` `VIEW` filter at reconstruction), **P11** (a sibling's tag is named and offers
+exactly **Write over it / Cancel**, normalised throughout both documents — no "keep" wording and no
+cross-product action anywhere), **P19** (the local store as a single atomically-replaced JSON file)
+**together with the G2 crash-consistency invariant and its failure-injection deliverable** (§A.2 task
+7), **P20** (Compose, one activity, two tiny screens) and **P21** (ServiceTag keeps its AAR pending
+the spike now folded into §E checks 1–2).
+
+Everything this runbook once proposed has been accepted or superseded: the composite-build choice by
+**O15**, the Migrate-tag tool and all legacy handling by **O2/O11**, the reconstructions of §22's word
+list, §27's order and §34's gates by the brief now being on disk, and the remote-ordering deviation by
+the controller's acceptance recorded in §B.

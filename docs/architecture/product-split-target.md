@@ -36,7 +36,7 @@ noteNFC exists after the split, and nothing reuses `com.loosecannon.notenfc` (O1
                       ┌───────────────────────────────┐
                       │        nfc-tag-core           │  its own repo, its own root build
                       │   nfc-core    (pure Kotlin/JVM)│  envelope · framing · bytes
-                      │        ZERO runtime deps       │  (review addition 5)
+                      │   Kotlin stdlib only, no deps  │  (review addition 5)
                       │   nfc-android (NFC adapter)    │  android.nfc, minSdk 26
                       └───────────────┬───────────────┘
         pinned Git submodule at libs/nfc-tag-core, modules included as subprojects (O15)
@@ -90,7 +90,7 @@ two real consumers (§4, C5, O5).
 | | **ServiceTag** | **NoteTag** | **nfc-tag-core** |
 |---|---|---|---|
 | Remote | `https://github.com/GonzRon/ServiceTag.git` | `https://github.com/GonzRon/NoteTag.git` | `https://github.com/GonzRon/nfc-tag-core.git` |
-| Default branch | `master` (unchanged) | `master` | `main` **[P1]** accepted — a new repo has no history to inherit a branch name from |
+| Default branch | `master` (unchanged) | `master` | `main` (ratified P1) — a new repo has no history to inherit a branch name from |
 | Visibility | PUBLIC, unchanged | **PUBLIC** (controller ruling): the same history is already public in this repository, so branching it publishes nothing new. What it does publish is stated below | PUBLIC |
 | How it comes into being | **Rename** of the current `GonzRon/noteNFC` (§9, O7): same repository, same history, same issues, same design record. The rename is a settings PATCH the active token can perform; it **cannot delete** a repository (arch §4.3), so no step may require one | **New** repository, then a branch taken from **`c84b881`** in a local clone of the pre-split history — exact ancestry, no rewrite, no graft, **no second history rewrite** (C6, arch §2.7) | **New** repository seeded from files extracted out of `ac523d7`, with the provenance table in §4.6 copied into its `README.md`. "Correctness of the neutral extraction matters more" than carrying history (§9) |
 | History it carries | everything: 175 commits, 8 merges, the whole Evernote→Joplin→Phase-0→Phase-4A line (arch §2.2, §3, §9 D1) | `5fb6aed`…`c84b881` — 30 commits, **zero merge commits**, independently confirmed by the archaeology review | **none**; a fresh root commit. Ancestry is documented, not inherited — §4.6 |
@@ -130,18 +130,18 @@ search-and-replace (§11).
 | `rootProject.name` | `NoteTag` | `ServiceTag` (was `noteNFC`) | review correction 11 — an omission from the archaeology's identity inventory |
 | App label | `NoteTag` | `ServiceTag` | O1 / O3 |
 | **Launcher icon** | its own | **a new ServiceTag icon**, replacing the inherited `ic_launcher` mipmap set | **review addition 3: a distinct launcher icon AND label per product is a coexistence requirement**, not cosmetics — two apps that look identical on the launcher are a usability failure and make every device observation and every NFC-allowlist entry ambiguous |
-| Theme | NoteTag's own window shell | `Theme.ServiceTag` (was `Theme.NoteNfc`) | **[P3]** accepted |
-| `Application` class | NoteTag's own, if it needs one | `ServiceTagApp`; the nav-root composable also named `NoteNfcApp` becomes `ServiceTagRoot`, resolving the two-classes-one-name collision (arch §4.6) | **[P3]** accepted |
+| Theme | NoteTag's own window shell | `Theme.ServiceTag` (was `Theme.NoteNfc`) | ratified P3 |
+| `Application` class | NoteTag's own, if it needs one | `ServiceTagApp`; the nav-root composable also named `NoteNfcApp` becomes `ServiceTagRoot`, resolving the two-classes-one-name collision (arch §4.6) | ratified P3 |
 | Manifest `android:name` **FQN literals** | NoteTag's own | **five literals that do not follow `namespace` and must be edited by hand** (review correction 4): `com.loosecannon.notenfc.NoteNfcApp` (application), `…MainActivity`, `…ShareActivity`, `…nfc.NfcDispatchActivity`, plus `…debug.DebugBackupActivity` in the debug manifest | arch §5.1 **[code]** |
 | FileProvider authority | only if NoteTag ever needs one (it has no attachments) | `com.loosecannon.servicetag.files` — **derived**, no literal to change: the manifest uses `${applicationId}.files` and `AppGraph` uses `BuildConfig.APPLICATION_ID` (arch §4.6, §7.7 item 6) | **[code]** |
-| Deep-link scheme | `notetag` — **reserved; no `VIEW` filter declared at reconstruction** **[P4]**. Held for #6/#36 | `servicetag`, hosts `asset`, `link`, `tag` | O1 / O3 |
+| Deep-link scheme | `notetag` — **reserved; no `VIEW` filter declared at reconstruction** (ratified P4). Held for #6/#36 | `servicetag`, hosts `asset`, `link`, `tag` | O1 / O3 |
 | NDEF external type | `com.loosecannon.notetag:tag` | `com.loosecannon.servicetag:tag` | O1 / O3 |
 | Decode-only types | **none** | **none** | O2 / O3. Neither product understands `md5_short`. A legacy decoder was permitted only if "essentially free and harmless" (O2); it is not — it would need a manifest filter, a payload branch and a UI state, which is architecture for a dead format (O11) |
-| AAR | **none by default.** AAR support is an *optional builder* in nfc-tag-core that a consumer may append; NoteTag adds one only if the coexistence dispatch spike shows a concrete benefit (O13) | `com.loosecannon.servicetag` — **kept by default** pending the same spike, because an AAR is what today's build always writes and 1B row 5 **[device-observed]** the platform matching it to start the dispatch activity from a killed process (arch §5.3). O13 makes it contingent; the conservative default for an already-proven behaviour is to keep it | O13, **[P21]** |
-| Room database name | **none** — NoteTag has a minimal local store, not Room (O14) | `servicetag.db` (was the literal `notenfc.db` in `AppGraph.DB_NAME`, not derived — arch §4.6, §7.7 item 4) | O14 / **[P5]** accepted |
+| AAR | **none by default.** AAR support is an *optional builder* in nfc-tag-core that a consumer may append; NoteTag adds one only if the coexistence dispatch spike shows a concrete benefit (O13) | `com.loosecannon.servicetag` — **kept by default** pending the same spike, because an AAR is what today's build always writes and 1B row 5 **[device-observed]** the platform matching it to start the dispatch activity from a killed process (arch §5.3). O13 makes it contingent; the conservative default for an already-proven behaviour is to keep it | O13; ratified P21 |
+| Room database name | **none** — NoteTag has a minimal local store, not Room (O14) | `servicetag.db` (was the literal `notenfc.db` in `AppGraph.DB_NAME`, not derived — arch §4.6, §7.7 item 4) | O14; ratified P5 |
 | Room schema export dir | n/a | `app/schemas/com.loosecannon.servicetag.data.room.AppDatabase/`, `1.json`…`5.json` re-exported under the new FQN (arch §4.5, §7.7 item 5) | derived from the `AppDatabase` FQN |
-| Export file-name prefixes | n/a | `ServiceTag-data-<stamp>.zip` / `ServiceTag-artifacts-<stamp>.zip`. **The importer never reads a file name** (arch §7.3), so the preserved `noteNFC-*` files import unchanged | **[P5]** accepted |
-| `shared_prefs` file | NoteTag's own | `servicetag` | **[P5]** accepted; package-scoped either way (arch §7.7 item 9) |
+| Export file-name prefixes | n/a | `ServiceTag-data-<stamp>.zip` / `ServiceTag-artifacts-<stamp>.zip`. **The importer never reads a file name** (arch §7.3), so the preserved `noteNFC-*` files import unchanged | ratified P5 |
+| `shared_prefs` file | NoteTag's own | `servicetag` | ratified P5; package-scoped either way (arch §7.7 item 9) |
 | Test package identity | `com.loosecannon.notetag.test` | `com.loosecannon.servicetag.test` (AGP default; no `applicationIdSuffix`) | arch §4.6 |
 | `testInstrumentationRunner` | `androidx.test.runner.AndroidJUnitRunner` | same | **[code]** |
 | `minSdk` / `targetSdk` / `compileSdk` | 26 / 36 / 37 | 26 / 36 / 37 | **[code]**, arch §4.5 |
@@ -154,11 +154,11 @@ search-and-replace (§11).
 | | Value |
 |---|---|
 | Repository | `GonzRon/nfc-tag-core`, its **own root build**, so it builds and tests standalone |
-| Directories in that repo | `nfc-core/` (pure Kotlin/JVM, zero runtime dependencies), `nfc-android/` (Android NFC adapter) |
+| Directories in that repo | `nfc-core/` (pure Kotlin/JVM, **zero third-party, application or framework runtime dependencies — the Kotlin stdlib only**, which the `kotlin.jvm` plugin adds), `nfc-android/` (Android NFC adapter) |
 | Submodule path inside each app | `libs/nfc-tag-core/` |
 | Gradle project paths **as each app sees them** | `:nfc-core`, `:nfc-android` — the same paths in both apps, because the modules are included as ordinary subprojects |
 | Maven coordinates | **none.** Nothing is published: no Maven, no publication, no credentials, no composite build (O15). The project paths are the whole interface |
-| Kotlin package roots | `com.loosecannon.nfc.tagcore`, `com.loosecannon.nfc.tagcore.android` — **[P6]** accepted |
+| Kotlin package roots | `com.loosecannon.nfc.tagcore`, `com.loosecannon.nfc.tagcore.android` — ratified P6 |
 | Android library `namespace` | `com.loosecannon.nfc.tagcore.android` |
 | Version | the git tag the submodule is pinned at; `nfc-tag-core-v0.1.0` at extraction (§10.3) |
 | Direction of dependency | `nfc-android` → `nfc-core`, and nothing else. **No dependency from the library back into either app**, ever (O15) |
@@ -186,8 +186,9 @@ nfc-tag-core/                     (its own repository, its own root build — O1
 │                                 catalogs; three independent CI greens are what prove they do.
 ├── gradlew + gradle/wrapper/      so the library builds from a clean clone on its own
 ├── nfc-core/                      PURE KOTLIN/JVM. plugins: kotlin.jvm. jvmToolchain(17).
-│   │                             *** ZERO runtime dependencies *** — not coroutines, not
-│   │                             serialization. The extractable subset imports only
+│   │                             *** NO third-party, application or framework runtime
+│   │                             dependency: the Kotlin stdlib only (added by the plugin) *** —
+│   │                             not coroutines, not serialization. It imports only
 │   │                             java.nio.ByteBuffer and java.util.UUID (review addition 5).
 │   │                             tests: JUnit 5 + kotlin.test only.
 │   └── src/{main,test}/kotlin/com/loosecannon/nfc/tagcore/
@@ -315,7 +316,12 @@ object NdefBridge {
     /** First message of `EXTRA_NDEF_MESSAGES`, with the SDK-33 typed/untyped split. */
     fun Intent.ndefRecords(): List<NdefRecordData>?
     fun Intent.nfcTag(): Tag?
-    /** Size of the EXACT encoded NDEF message: the `needed` of every capacity check (O13/O14). */
+    /**
+     * Size of the EXACT encoded NDEF message — `toNdefMessage().toByteArray().size` — which is the
+     * `needed` of every capacity check, compared directly against `Ndef.getMaxSize()` (itself a
+     * maximum *message* size). No Type-2 TLV header or terminator is added: that layer is
+     * Android's and the tag's (§4.3 invariant 7).
+     */
     fun List<NdefRecordData>.serialisedSize(): Int
 }
 
@@ -408,14 +414,27 @@ promoted (§4.7).
    path equals the identity's external type. Today both are doc comments and unlinked literals
    (arch §4.6, §6.3). §4.8 gives the one mechanism that binds them and the two tests that prove it
    (C9).
-7. **Capacity is checked on both write paths, against the exact encoded message.** `needed` is
-   `serialisedSize()` — every record's header, type and payload plus TLV framing — never a body
-   length and **never a character count** (O13). On the `Ndef` path:
-   `if (maxSize < needed) TooSmall(maxSize, needed)`, evaluated after `connect()` and after the
+7. **Capacity is checked on both write paths, against the exact encoded NDEF message — and nothing
+   else.** `Ndef.getMaxSize()` is *the maximum NDEF **message** size the tag can hold*, so the
+   comparison is message size against message size:
+
+   ```kotlin
+   val needed = records.toNdefMessage().toByteArray().size
+   if (needed > ndef.maxSize) return WriteResult.TooSmall(ndef.maxSize, needed)
+   ```
+
+   `needed` is the serialised message — every record's header, type and payload — and **never** a
+   body length, **never** a character count (O13), and **never** the Type-2 TLV header or
+   terminator. That framing layer belongs to Android and to the tag, not to this arithmetic: adding
+   it would inflate `needed` by a few bytes and make NoteTag fall back to `LOCAL_REF` for URIs that
+   would in fact have fitted. Note that the existing app's *design-time* budget test computes
+   `sumOf { 3 + type.size + payload.size } + 3` (arch §5.7); that trailing `+ 3` is a TLV allowance,
+   appropriate for a pessimistic compile-time assertion and **wrong for the runtime check**. The
+   check runs after `connect()` and after the
    `isWritable` check, so a read-only tag reports `ReadOnly` rather than `TooSmall` (arch §5.7). On
    the `NdefFormatable` path capacity is unknown before formatting (`inspect` reports
    `maxSize = -1`), which today makes a too-small unformatted tag surface as a generic `Failed`
-   (arch §5.7, §8.2 Q13). **The formatted-size rule closes it** (accepted **[P8]**): the comparison
+   (arch §5.7, §8.2 Q13). **The message-size rule closes it** (ratified P8, as corrected above): the comparison
    is deferred to the first moment `Ndef.maxSize` is readable — the second tap — and reported there
    as `TooSmall`; and `serialisedSize()` lets a consumer state the requirement before the first tap.
 8. **Failure reporting is asymmetric on purpose.** `inspect` propagates tag I/O failure so the caller
@@ -437,8 +456,9 @@ promoted (§4.7).
     trampoline reads `EXTRA_NDEF_MESSAGES`, `EXTRA_TAG` and the data URI, and `nfcTag()` — the only
     route to a writable handle — is never called on that path (arch §5.10). Reader mode is entered
     only from an intentional destination (arch §5.13). §25 requires both.
-13. **The library builds no sentence, has no runtime dependency in `nfc-core`, and never depends on an
-    app.** Return values carry tokens plus raw evidence; every user-facing string is the consumer's.
+13. **The library builds no sentence; `nfc-core` has zero third-party, application or framework
+    runtime dependencies — the Kotlin stdlib only, added by the `kotlin.jvm` plugin — and the library
+    never depends on an app.** Return values carry tokens plus raw evidence; every user-facing string is the consumer's.
     This is what lets each app say "this is a ServiceTag tag — overwriting it will detach it from its
     machine" where the other says "this tag belongs to another app".
 
@@ -471,7 +491,7 @@ Expected entries, and how each was inspected rather than accepted:
 | Expected hit | Verdict |
 |---|---|
 | `com.loosecannon.nfc.tagcore` in every package line | allowed: the library's own name, and `nfc` is not a forbidden word |
-| `assets/` under `src/androidTest/` | **not allowed — renamed.** A Gradle source-set convention is not a reason to let the domain noun into the tree (**[P10]** accepted) |
+| `assets/` under `src/androidTest/` | **not allowed — renamed.** A Gradle source-set convention is not a reason to let the domain noun into the tree (ratified P10) |
 | prose using "room for one more record", "profile of the message" | **not allowed — rewritten.** Prose is free to change |
 | a KDoc explaining why routes or link policy are *not* here | **not allowed — rewritten** as "URI handling", so the phrase never appears |
 | the `TagIdentity` KDoc example | must use `com.example.app`; never either real applicationId |
@@ -494,7 +514,7 @@ classes (provenance in §4.6).
 | TNF gate | our exact type under a non-external TNF is `Foreign`, not `Recognised` — from `tagRecordUnderWrongTnfIsForeign` |
 | First-record-only | extra records after the first are ignored (`onlyFirstRecordMatters`); an AAR-only message is `Foreign` (`applicationRecordAloneIsForeign`); an empty list is `Empty` (`emptyMessageIsEmpty`) |
 | Malformed input | a truncated body, an empty body and a body under the wrong type all come back without an exception; the envelope never throws on hostile bytes |
-| Generic payload limits | `serialisedSize()` for representative messages, asserted against **NTAG213's usable NDEF area**; parameterised so each consumer asserts its own budget (O14) |
+| Generic payload limits | `serialisedSize()` for representative messages, asserted to be exactly `toNdefMessage().toByteArray().size` with **no TLV allowance added**, and compared against the message-size budget an NTAG213 reports; parameterised so each consumer asserts its own budget (O14). A second case pins the boundary: a message of exactly `maxSize` bytes is accepted and one of `maxSize + 1` is `TooSmall` (invariant 7) |
 | `UuidBytes` | `toBytes`/`fromBytes` round-trip over random UUIDs and the all-zero / all-ones edges; big-endian layout pinned as bytes; `requireCanonical` refuses a non-UUID and an upper-case UUID, accepts the canonical form |
 | `TagIdentity` | refuses a mixed-case external type; `externalType` is `"$domain:$name"`; `aarPackage` defaults to null |
 | `OverwritePolicy` | the full `ExistingContent` × `isSameIdentity` matrix → the six `OverwriteReason` tokens; `Proceed` only for `Empty` and for `Ours` with `isSameIdentity` — generalised from `OverwritePolicyTest` |
@@ -508,6 +528,12 @@ classes (provenance in §4.6).
 
 The emulator suites stay local: CI has no `androidTest` step, correctly, because those need a device
 (arch §4.2), and §15 keeps instrumented suites off the phone entirely.
+
+**The operating rule for every proof in this design: vet everything possible on the emulator; the
+phone is used only where RF hardware or the real install is required.** Concretely, capacity
+selection, malformed and foreign classification, the `LOCAL_REF` missing-map path, the
+crash-consistency failure injection and ServiceTag's link resolution are all JVM or emulator work;
+only the physical taps in the runbook's §D and §E need the phone.
 
 ### 4.6 Provenance (§9: "document provenance")
 
@@ -619,21 +645,48 @@ byte 3.. kind body
 write it; else the full `URI` **fits**, decided by encoding the exact NDEF message and comparing with
 the tag's **measured `Ndef.maxSize`** → write `URI`; else `LOCAL_REF`, and store the target locally.
 
-**NTAG213 is the minimum supported tag** — 144 B user memory, ~139 B usable for NDEF after NXP's
-lock-control TLV; for scale, ServiceTag's existing record already costs ~92 B *with* its AAR. A
-`JOPLIN_NOTE` message is ~52 B, or ~93 B if an AAR were appended. NTAG215/216 (504/888 B) work
-through the same logic and are never required. **There are no character-count promises anywhere in
-this design**: capacity is always the measured tag against the exact encoded message, and a tag that
-cannot hold the message is refused cleanly (O13, O14).
+**NTAG213 is the minimum supported tag.** Sizes are stated as **NDEF message sizes**, because that
+is the only unit the runtime comparison uses (invariant 7): a `JOPLIN_NOTE` message is ~52 B, and
+ServiceTag's existing record already costs ~92 B *with* its AAR — both comfortably inside what an
+NTAG213 reports through `Ndef.getMaxSize()`. No usable-area figure is derived here and no TLV
+allowance is subtracted or added; the platform already accounts for its own framing when it reports
+`maxSize`. NTAG215 and NTAG216 hold more by the same logic and are never required. **There are no
+character-count promises anywhere in this design**: capacity is always the measured tag against the
+exact encoded message, and a tag that cannot hold the message is refused cleanly (O13, O14).
 
 **Persistence.** NoteTag gets a **minimal local store** — `LOCAL_REF` targets plus convenience
 metadata (label, kind, written-at, last-opened) — and it is **never required to resolve a
 `JOPLIN_NOTE` or `URI` tag**: those are self-contained and portable. Only `LOCAL_REF` tags are
 **device-bound**, and the writer must tell the user so at write time. A NoteTag export/import of the
-local map is NoteTag roadmap, not split scope (O14). **[P19]** — implement the store as a single
-atomically-replaced JSON file behind a small interface, using kotlinx-serialization (already in the
-version catalog), so "no Room unless it earns it" stays true and the store can be swapped later
-without touching the tag format.
+local map is NoteTag roadmap, not split scope (O14). The store is a single **atomically-replaced JSON
+file** behind a small interface, using kotlinx-serialization (already in the version catalog), so
+"no Room unless it earns it" stays true and the store can be swapped later without touching the tag
+format (ratified P19).
+
+**The `LOCAL_REF` crash-consistency invariant** (a NoteTag invariant, not a library one — the library
+never sees the mapping). *The mapping is durably stored **before** the physical tag is written, and a
+`LOCAL_REF` whose mapping has not committed is never successfully written.* The sequence is:
+
+1. allocate the UUID;
+2. **atomically persist** the `LOCAL_REF → target` mapping (write a temporary file, `fsync`, atomic
+   rename over the store) and only continue once that has returned successfully;
+3. write the tag and verify it by structural read-back;
+4. on success the mapping is retained; on failure, cancellation, or a lost tag, make a **best-effort
+   removal of the orphan mapping**.
+
+The asymmetry is deliberate and is the only ordering that fails safe. Persist-then-write can leave an
+orphan mapping — a few bytes of garbage in a JSON file, invisible to the user, removable by the
+best-effort sweep or by the next write of the same tag. Write-then-persist can leave a **live
+physical tag that resolves to nothing on the phone that wrote it**, which is the one outcome a
+device-bound kind must never produce. A named deliverable follows from it: a **failure-injection
+test** with two cases — *persist succeeds, tag write fails → the mapping is removed*; and *persist
+fails → no tag write is attempted at all*. It is a NoteTag test, not a library test — the library
+never sees the mapping — and it is named as a deliverable of phase E in the runbook (§A.2 task 7).
+
+**UI toolkit** (ratified P20): **Compose, one activity, two tiny screens** — share/write, and a
+short list of tags this phone has written. R6's "no Compose" is superseded by O1–O15, O6 asks for a
+substantial rewrite on modern engineering, and the version catalog the estate already pins supplies
+Compose at a single known version (arch §4.4), so this adds no new toolchain decision.
 
 **The deliberate trade of shipping without an AAR.** With one external record and no AAR, a phone
 *without* NoteTag installed does nothing at all on a tap: the platform tries `NDEF_DISCOVERED` (no
@@ -755,8 +808,8 @@ dependencies {
           actual=$(git -C libs/nfc-tag-core rev-parse HEAD)
           [ "$pinned" = "$actual" ] \
             || { echo "submodule is at $actual but this commit pins $pinned"; exit 1; }
-          git -C libs/nfc-tag-core describe --exact-match --tags HEAD \
-            || { echo "submodule is not at a tagged commit (mutable HEAD)"; exit 1; }
+          git -C libs/nfc-tag-core describe --exact-match --match 'nfc-tag-core-v*' --tags HEAD \
+            || { echo "submodule is not at an exact nfc-tag-core-v* tag (mutable HEAD)"; exit 1; }
           [ -z "$(git -C libs/nfc-tag-core status --porcelain)" ] \
             || { echo "submodule working tree is dirty"; exit 1; }
 ```
@@ -786,7 +839,7 @@ A bump is three commits, never a pointer nudge:
 |---|---|
 | submodule missing (clone without `--recurse-submodules`, or a fresh checkout) | the `require` in `settings.gradle.kts` fails **at configuration time**, before any task runs, printing the exact fix command; CI's assertion step fails even earlier |
 | submodule present but at the wrong commit | the assertion step compares `git ls-tree HEAD libs/nfc-tag-core` against the submodule's `HEAD` and names both |
-| pointer is not a tagged commit | `git describe --exact-match --tags` fails: a detached commit that is not exactly a tag is a mutable-HEAD consumption (§19) |
+| pointer is not at an exact release tag | `git describe --exact-match --match 'nfc-tag-core-v*' --tags HEAD` fails: a commit that is not exactly an `nfc-tag-core-v*` tag — an untagged commit, or one carrying some unrelated tag — is a mutable-HEAD consumption (§19) |
 | submodule working tree dirty | `git status --porcelain` in the submodule is non-empty: the app would be building against code nobody else can reproduce |
 | pointer moved without a commit in the app repo | the app's `git status` shows the gitlink modified; CI checks out the *recorded* pointer, so the change appears to do nothing rather than diverging silently |
 | catalog alias missing from a consumer | configuration-time failure naming the alias |
@@ -867,6 +920,11 @@ verdict these are **final coexistence gates, not architecture blockers**.
   deleted from master at `26ec9d0`, must not be re-inherited by the NoteTag rewrite.
 - **Tag mutation is explicit-intent only** (invariant 12, §25). The ambient path cannot write, by
   construction; reader mode is entered only from an intentional destination.
+- **Sibling-refusal wording is fixed and identical in both products** (ratified P11): where a product
+  meets the other's tag it **names** it — "this tag belongs to another app", with the offending type
+  string available from `Foreign.description` — and offers exactly two actions, **Write over it** and
+  **Cancel**. No cross-product action of any kind is offered: no adopt, no bind, no migrate, no
+  "keep". *Cancel* is the wording in both apps and in every table in this package.
 
 ---
 
@@ -967,7 +1025,7 @@ The roadmap starts with the two transferred issues, retitled under the NoteTag n
   Todoist" — whose body is the ownership statement that started this operation.
 
 Also NoteTag's, and explicitly **not** split scope: an export/import of the local `LOCAL_REF` map
-(O14), and whether `notetag://` ever gets a `VIEW` filter (**[P4]**).
+(O14), and whether `notetag://` ever gets a `VIEW` filter, which ratified P4 defers to that work.
 
 ### 10.3 nfc-tag-core versioning
 
@@ -975,7 +1033,8 @@ Also NoteTag's, and explicitly **not** split scope: an export/import of the loca
   **`nfc-tag-core-v0.1.0`** — the extraction commit, tagged when both apps are green against it.
   `0.x` while the API is still moving; `1.0.0` when a third consumer or an external user appears.
 - **The tag is the unit of consumption.** Each app's submodule pointer is always a commit that
-  `git describe --exact-match --tags` resolves (§6.3, §6.4). No mutable-branch consumption, no
+  `git describe --exact-match --match 'nfc-tag-core-v*' --tags` resolves (§6.3, §6.4). No
+  mutable-branch consumption, no
   snapshot, no published artifact.
 - **What a bump means.** *Patch*: no API change. *Minor*: additive API, or a behaviour change both
   apps want — `TagWriteSession`'s promotion, if it happens, is the expected `v0.2.0` (§4.7). *Major*:
@@ -988,25 +1047,29 @@ Also NoteTag's, and explicitly **not** split scope: an export/import of the loca
 
 ---
 
-## 11. Open proposals
+## 11. Proposal ledger — all ratified, none open
 
-Accepted since the first draft and therefore no longer proposals: P2, P3, P5 (cosmetic identities),
-P1, P7 (library layout and the zero-dependency JVM module), P8 (the formatted-size capacity rule),
-P10 (rename the fixture directory rather than allow-list it), P13 (create the library remote first),
-P17 (product-prefixed first tags). P6 is accepted for the Kotlin package roots only — O15 removes
-Maven coordinates from the design entirely. Withdrawn as superseded: the contingent versioned-UUID
-body helper (out under O13/O14 and the two-consumer rule); every `notenfc`-era reconstruction and
-Migrate-tag proposal (O1, O2, O7); the composite-build choice (decided by O15); and the three
-reconstructions of brief text now on disk — the §22 word list, the §27 order and the §34 gate list
-are quoted, not inferred.
+**There is no open proposal.** Gate 3 ratified the last five, and each now lives in the design text
+rather than in a list:
 
-| # | Proposal | Where |
+| # | Ruling | Where it now lives |
 |---|---|---|
-| **P4** | NoteTag declares **no** `notetag://` `VIEW` filter at reconstruction; the scheme is reserved and unused until #6/#36 need it | §3 |
-| **P11** | Wording rule: where a product refuses a sibling's tag it names it ("this tag belongs to another app") and offers **no** action beyond *Write over it* / *Cancel*. No cross-product actions of any kind | §7 |
-| **P19** | NoteTag's minimal local store is a single atomically-replaced JSON file behind a small interface (kotlinx-serialization, already in the catalog), so "no Room unless it earns it" (O14) stays true and the store can be swapped without touching the tag format | §4.9 |
-| **P20** | **NoteTag's UI toolkit is not ruled on.** R6's "no Compose" is superseded, and O6 asks for a substantial rewrite on modern engineering. Proposal: Compose, single activity, two screens (share/write, and a small list of written tags), reusing the version catalog the estate already pins — the alternative is plain views for a smaller dependency surface | §4.9 |
-| **P21** | ServiceTag **keeps** its AAR by default pending the dispatch spike, because it is what today's build writes and 1B row 5 device-observed the platform matching it from a killed process; NoteTag ships **without** one per O13. The spike may remove ServiceTag's | §3, §4.9 |
+| **P4** | approved — NoteTag declares no `notetag://` `VIEW` filter at reconstruction; the scheme is reserved for #6/#36 | §3 identity table; §10.2 |
+| **P11** | approved, **normalised everywhere**: a sibling's tag is named and offers exactly **Write over it / Cancel**, with no cross-product action and no "keep" wording | §7.3, and every row of §7 and of the runbook's §D/§E |
+| **P19** | approved, **with the G2 crash-consistency invariant**: the local store is a single atomically-replaced JSON file, and the `LOCAL_REF` mapping commits before the tag is written | §4.9 |
+| **P20** | approved — Compose, one activity, two tiny screens | §4.9 |
+| **P21** | approved — ServiceTag keeps its AAR by default pending the §D.3 dispatch spike; NoteTag ships without one per O13 | §3 identity table; §4.9 |
+
+Ratified earlier, and likewise in the text: P1 and P6 (library branch and Kotlin package roots; O15
+removed Maven coordinates entirely), P2, P3 and P5 (cosmetic identities), P7 (the Kotlin-stdlib-only
+`nfc-core`), P8 (the formatted-size capacity rule, now corrected by G1), P10 (rename the fixture
+directory rather than allow-list it), P13 (create the library remote first), P17 (product-prefixed
+first tags).
+
+Withdrawn as superseded: the contingent versioned-UUID body helper (O13/O14 and the two-consumer
+rule); every `notenfc`-era reconstruction and Migrate-tag proposal (O1, O2, O7); the composite-build
+choice (O15); and the three reconstructions of brief text now on disk — the §22 word list, the §27
+order and the §34 gate list are quoted, not inferred.
 
 ---
 
