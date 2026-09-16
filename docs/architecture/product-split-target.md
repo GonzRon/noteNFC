@@ -577,7 +577,7 @@ classes (provenance in §4.6).
 
 | Tier | Where | Cases |
 |---|---|---|
-| Local unit (`test/`) | JVM, every push | `WriteResult` → outcome mapping; the capacity arithmetic (`serialisedSize` vs `maxSize`, including the `-1` formatable case) against a fake `TagIo`; `TagInspection` construction from each inspect branch |
+| Local unit (`test/`) | JVM, every push | `WriteResult` → outcome mapping; the capacity arithmetic (`serialisedSize` vs `maxSize` on the `Ndef` path; the `-1` formatable case routes to `format` and computes no verdict) against a fake `TagIo`; `TagInspection` construction from each inspect branch |
 | Instrumented (`androidTest/`) | **the emulator, locally — never in CI** | `NdefBridge` round-trips (`toNdefMessage` → `toRecordData` identity; an `Intent` carrying `EXTRA_NDEF_MESSAGES` on both the pre-33 and 33+ branches; `toHexOrNull`); `applicationRecord` against the real platform call; `NfcReaderModeSession.available == false` on an emulator with no NFC, with `start()`/`stop()` safe no-ops there. Anything needing a real chip is a physical-tag row in the runbook, never an automated test |
 
 The emulator suites stay local: CI has no `androidTest` step, correctly, because those need a device
@@ -623,7 +623,7 @@ O5, arch §6.1); and `TagWriteSession` (deferred — §4.7).
 | Candidate | Why it waits | When it may be promoted |
 |---|---|---|
 | **The versioned payload layout** (`version|flags|UUID`, once proposed as `VersionedUuidPayload`) | **Out, not deferred.** The two products' bodies genuinely differ: ServiceTag's v1 body is `version|flags|16-byte UUID`; NoteTag's is `version|kind|flags|kind-body` with three kinds (§4.9, O13/O14). No single layout is used identically by two consumers, so the two-consumer rule forbids it. What *is* shared is the byte↔UUID helper, which is application-neutral and named by §4 and §22 — the distinction is between a **helper** and a **scheme** | not while the schemes differ. If a third product ever adopts one of the two layouts, that layout belongs to the app that already owns it |
-| **`TagWriteSession`** — single-flight, read-before-write, consent ownership, remembered consent across a stale handle, format→second-tap-verify→lock-last, abandon-on-close | The protocol exists once, in `TagWriteController` (299 lines, `c808b49`), entangled with `ProvisionTag`, `TagBinding`, `AppGraph` and thirteen message strings (arch §6.2). It is *believed* general, but NoteTag has not been built yet, and "the highest-value extraction and the hardest" is exactly the kind that must not be designed against one consumer. C5 is explicit: extract the unquestionable seam, build NoteTag against it, promote the rest only if both need it | **A later step, not a day-one deliverable.** The criterion is concrete: after NoteTag ships its writer, diff its write flow against ServiceTag's. If both need single-flight, one-confirmation-remembered-against-content, and format→verify→lock-last with identical *decisions* (not merely similar shapes), promote it as `nfc-tag-core-v0.2.0` and delete both copies. If NoteTag's writer turns out simpler — plausibly it has no row to provision and no stale-sheet problem — the protocol stays ServiceTag's and the library keeps only the pattern in its README |
+| **`TagWriteSession`** — single-flight, read-before-write, consent ownership, remembered consent across a stale handle, format → measure → capacity-check → write → verify → lock-last, abandon-on-close | The protocol exists once, in `TagWriteController` (299 lines, `c808b49`), entangled with `ProvisionTag`, `TagBinding`, `AppGraph` and thirteen message strings (arch §6.2). It is *believed* general, but NoteTag has not been built yet, and "the highest-value extraction and the hardest" is exactly the kind that must not be designed against one consumer. C5 is explicit: extract the unquestionable seam, build NoteTag against it, promote the rest only if both need it | **A later step, not a day-one deliverable.** The criterion is concrete: after NoteTag ships its writer, diff its write flow against ServiceTag's. If both need single-flight, one-confirmation-remembered-against-content, and format → measure → write → verify → lock-last with identical *decisions* (not merely similar shapes), promote it as `nfc-tag-core-v0.2.0` and delete both copies. If NoteTag's writer turns out simpler — plausibly it has no row to provision and no stale-sheet problem — the protocol stays ServiceTag's and the library keeps only the pattern in its README |
 | **Version/kind negotiation** (`NewerVersion`) | a body concern; each app decides what an unknown version or kind means to its user | with the layout, i.e. not at all |
 | **Foreign/malformed *wording*** | §4: no wording in the library. The classification is shared (`Foreign`, `Unreadable`); the sentence is not | never |
 
@@ -746,7 +746,8 @@ budget the tests defend is a number this project has observed rather than one it
 
 For reference and clearly labelled as such: NTAG213's **144 B** of user memory, of which roughly
 **139 B** remain for NDEF after NXP's lock-control TLV, are **datasheet** figures — vendor
-documentation, not Android's and not observations — and nothing in the design computes from them. NTAG215 and NTAG216 hold more by the same
+documentation, tagged **[platform-doc]** in the vendor sense: not Android's, not observations — and
+nothing in the design computes from them. NTAG215 and NTAG216 hold more by the same
 logic and are never required. **There are no character-count promises anywhere in this design**:
 capacity is always the measured tag against the exact encoded message, and a tag that cannot hold the
 message is refused cleanly (O13, O14).
@@ -1237,7 +1238,7 @@ rather than in a list:
 |---|---|---|
 | **P4** | approved — NoteTag declares no `notetag://` `VIEW` filter at reconstruction; the scheme is reserved for #6/#36 | §3 identity table; §10.2 |
 | **P11** | approved, **normalised everywhere**: a sibling's tag is named and offers exactly **Write over it / Cancel**, with no cross-product action and no "keep" wording | §7.3, and every row of §7 and of the runbook's §D/§E |
-| **P19** | approved, **with the G2 crash-consistency invariant**: the local store is a single atomically-replaced JSON file, and the `LOCAL_REF` mapping commits before the tag is written | §4.9 |
+| **P19** | approved, **with the G2 crash-consistency invariant**: the local store is a single atomically-replaced JSON file, and the `LOCAL_REF` mapping commits before the tag is written; once a write has been attempted the mapping is retained unless it is provable that no bytes reached the tag (H1) | §4.9 |
 | **P20** | approved — Compose, one activity, two tiny screens | §4.9 |
 | **P21** | approved — ServiceTag keeps its AAR by default pending the §D.3 dispatch spike; NoteTag ships without one per O13 | §3 identity table; §4.9 |
 

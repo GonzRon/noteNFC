@@ -311,9 +311,11 @@ provides for this: *"If hosting capabilities differ, make the most conservative 
 and document it."* Creating a new repository mutates nothing that exists and is reversible by rename,
 while the rename of the live repository is the first step that changes something people already
 depend on. §27 steps actually run, in this order: **(1 done in Phase A) → 5–6 → 2 → 3 → 3a → 4 → 7 →
-8 → 9 → 10 → 11 → 12** — all of it at the **remote K/L** position of the canonical master order
-(front matter): after §A's local proofs, before §C's phone work.** Nothing in §B is strictly irreversible — the rename reverses, the transfers reverse, and the
-new repositories can be renamed aside — so "point of no return" language is avoided deliberately;
+8 → 9 → 10 → 11 → 12** — at the **remote K/L** position of the canonical master order (front
+matter), after §A's local proofs and before §C's phone work, save for steps 5–6 (§B.1), which run
+early so that §A.4 can pin a real library URL, as noted above. Nothing in §B is strictly
+irreversible — the rename reverses, the transfers reverse, and the new repositories can be renamed
+aside — so "point of no return" language is avoided deliberately;
 **the one genuinely irreversible step in this whole runbook is C.9**, the uninstall.
 
 Capability note: the active `GonzRon` token holds `gist, read:org, repo, workflow` — enough to rename,
@@ -345,7 +347,8 @@ library is green** — it has to exist before either app can add a submodule poi
 Until then it is provisional: if integration forces a library change, the tag is **deleted and
 re-cut** rather than consumed as-is, because a tag two apps have already built against must never
 move. Practically, that means the window between this step and §B.6 is the only window in which
-deleting that tag is legitimate. **Rollback.** The token cannot delete: make it private and rename it aside
+deleting that tag is legitimate. **Rollback.** The token cannot delete: make it private and rename it
+aside
 (`gh repo rename nfc-tag-core-abandoned`), which frees the name; record the abandoned name in the
 ledger.
 
@@ -517,7 +520,8 @@ attachment folder**, and no instrumented suite runs on the phone.
 tag/coexistence budget of §E.1 and are counted here instead: **(1)** *Settings → Backup → Export set*
 (C.1); **(2)** *Settings → Attachment storage* → pick the SAF folder (C.3); **(3)** *Settings →
 Backup → Import (replace)* (C.4); **(4)** *Settings → Backup → Restore files* (C.5). Four taps
-through ServiceTag's own UI, each of which only the owner can perform because each needs the real
+through the phone's own UI — the first in the modern old-package app, the other three in ServiceTag —
+each of which only the owner can perform because each needs the real
 install and, for (2), the system document picker. Everything else in §C — pulls, hash verification,
 the JSON comparison, the emulator observations, the installs and the uninstall — is
 workstation-driven.
@@ -922,7 +926,7 @@ tags written, `adb logcat` capturing from the workstation throughout.
 
 | Session | Owner actions | What they are |
 |---|---|---|
-| **1 — writer mechanics** (§D.2) | **4** | T1 tap 1 (format), T1 tap 2 (verify + lock), T4 write, T2 write |
+| **1 — writer mechanics** (§D.2) | **4** | T1 tap 1 (format only), T1 tap 2 (measure → capacity-check → write → verify → lock), T4 write, T2 write |
 | **2 — coexistence** (§E) | **8** | T3 write, T4 cold ambient, T2 ambient, T3 ambient, T2 in NoteTag's writer, T4 in ServiceTag's inspector, T7 ambient, and the uninstall/tap/reinstall spike tap |
 
 **Total: 12 owner actions, in two sessions — and 12 is the *tag and coexistence* budget, not the
@@ -1074,7 +1078,7 @@ proceeding; minor cleanup is recorded and deferred.*
 | **6** | **NoteTag narrow scope** | E | §23's acceptance list end to end; the v1 format's per-kind tests; the local store never required to resolve `JOPLIN_NOTE`/`URI`; true ancestry (30 commits, zero merges, root `5fb6aed`); CI green **from scratch** (review correction 8); no `docs/`, no tracked APK, no legacy decoder, no tech catch-all |
 | **7** | **data / artifact migration** | H | §C.6 and §C.7 pass: eleven tables with identical id sets and per-field equality (events including `tzId`, `occurredOn`, `createdAt`, `(source, source_ref)`); 8×3 attachment hashes; the empty-tree restore proved independently; every difference accounted for by §C.8 and nothing else. **This gate precedes §C.9's irreversible uninstall** |
 | **8** | *withdrawn* | — | folded into gate 9 (O2; §5's "physical-tag proof — now: coexistence of final products only") |
-| **9** | **final coexistence / device** | I + J | Session 1's four writer taps recorded (§D.2, including format → verify → lock-last on one tag, and the **measured `Ndef.maxSize`** written to the evidence file); Session 2's eight taps and three log-read rows passed (§E), with **dispatch spike S1 folded into checks 2–3 and S2 as check 8**; **owner actions exactly 12** (§E.1; a retap swallowed by a permission dialog does not count); zero chooser dialogs on checks 2–4 and 7; no database write on checks 5–7; sibling refusals offering **Write over it / Cancel** and nothing else; the per-package SAF grant observed on the emulator at C.8a before C.9 acted on it; every reassigned proof (§D.3) green off-device with the capacity fakes pinned to the measured NTAG213 budget; both apps on the same library tag; every observation in the evidence file with a verdict, and the **debug-build caveat** recorded |
+| **9** | **final coexistence / device** | I + J | Session 1's four writer taps recorded (§D.2, including format → measure → capacity-check → write → verify → lock-last on one tag, and the **measured `Ndef.maxSize`** written to the evidence file); Session 2's eight taps and three log-read rows passed (§E), with **dispatch spike S1 folded into checks 2–3 and S2 as check 8**; **owner actions exactly 12** (§E.1; a retap swallowed by a permission dialog does not count); zero chooser dialogs on checks 2–4 and 7; no database write on checks 5–7; sibling refusals offering **Write over it / Cancel** and nothing else; the per-package SAF grant observed on the emulator at C.8a before C.9 acted on it; every reassigned proof (§D.3) green off-device with the capacity fakes pinned to the measured NTAG213 budget; both apps on the same library tag; every observation in the evidence file with a verdict, and the **debug-build caveat** recorded |
 | **10** | **final three-repository convergence** | K + L + M + N | three repositories, three green CI runs, **ServiceTag's converted `master` pushed and green on the new workflow (§B.3a)**, three clean-clone builds **from URLs** plus one per app from a second workstation (§B.6); issues moved with backlinks and the notes added; the three first tags created; documentation changed only where §H says and additively where it touches history; every **[P*n*]** ratified or superseded; every "to observe on-device" marker resolved or explicitly deferred; and the §36 handoff assembled — checkpoint SHA, the historical split SHA and why, three repo names/URLs/canonical commits, what the original repository became, what moved into nfc-tag-core, what stayed app-specific, the dependency/version mechanism, both applicationIds and namespaces, NFC record and deep-link ownership, AAR behaviour, signing fingerprints only, the migration backup format, the ID-preservation and attachment-hash proofs, the SAF grant procedure, the coexistence proof, CI status ×3, issue movements, releases/tags, rollback, and remaining debt. **Next operation after handoff: ServiceTag Phase 3** |
 
 **No gate is self-certified**; each is reviewed against the artifact it names, by someone who did not
