@@ -316,8 +316,7 @@ class EditorsDeviceProofTest {
         }
 
         val before = counts()
-        // Task 9 replaces this with the two-file set export.
-        val bytes = runBlocking { app.graph.exportBackupSet.run().data }
+        val bytes = exportedDataArchive()
         clearInstall()
         assertEquals("the wipe emptied the store", 0, counts().values.sum())
         runBlocking { app.graph.importBackupReplace.run(bytes) }

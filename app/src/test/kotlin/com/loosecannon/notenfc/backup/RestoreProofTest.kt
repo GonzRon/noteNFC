@@ -6,6 +6,7 @@ import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.Attachment
 import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.DerivedFormula
 import com.loosecannon.notenfc.core.model.EventKind
@@ -65,7 +66,8 @@ class RestoreProofTest {
         val events = RoomEventRepository(db.eventDao())
         val attachments = RoomAttachmentRepository(db.attachmentDao())
         val uow = RoomUnitOfWork(db)
-        // Task 9 writes the set's second file; here only `run().data` is read.
+        // This proof is about the data archive. The set's artifacts half carries bytes, and
+        // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
         val export = ExportBackupSet(
             assets, tags, links, definitions, profiles, events, attachments, uow,
             IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
@@ -83,6 +85,7 @@ class RestoreProofTest {
         val definitions: List<MeasurementDefinition>,
         val profiles: List<EventProfile>,
         val events: List<AssetEvent>,
+        val attachments: List<Attachment>,
     )
 
     private suspend fun snapshot(g: Graph): Snapshot = Snapshot(
@@ -92,6 +95,7 @@ class RestoreProofTest {
         definitions = g.definitions.all().sortedBy { it.id.value },
         profiles = g.profiles.all().sortedBy { it.id.value },
         events = g.events.all().sortedBy { it.id.value },
+        attachments = g.attachments.all().sortedBy { it.id.value },
     )
 
     private fun graphOver(db: AppDatabase) = Graph(db)
@@ -350,7 +354,8 @@ class RestoreProofTest {
      * it — a template applied by [com.loosecannon.notenfc.core.usecase.CreateAsset], an event
      * logged through [com.loosecannon.notenfc.core.usecase.LogEvent] — so the rows under test are
      * rows the production path actually produces, children and their ids included. Then the whole
-     * seven-table graph goes out to a backup and comes back into an empty database unchanged.
+     * seven-table graph — attachment rows included — goes out to a backup and comes back
+     * into an empty database unchanged.
      */
     @Test
     fun theJournalSurvivesTheSameRoundTrip() = runTest {
@@ -375,7 +380,7 @@ class RestoreProofTest {
                     consumables = listOf(ConsumableInput("Chlorine", "2", "tab")),
                 ),
             )
-            // Task 9 writes the set's second file; here only `run().data` is read.
+            // Only the data archive: see the note on `Graph.export` above.
             val set = g1.exportBackupSet.run()
             bytes = set.data
             setId = set.plan.backupSetId
@@ -409,7 +414,8 @@ class RestoreProofTest {
                 ),
                 report,
             )
-            // All seven tables, compared whole: ids, child ids, foreign keys, snapshot units.
+            // All seven tables the backup carries, attachments included, compared whole:
+            // ids, child ids, foreign keys, snapshot units.
             assertEquals(before, snapshot(g2))
 
             // And the journal reads back through its own relationship queries, not only `all()`.
@@ -452,7 +458,7 @@ class RestoreProofTest {
                     consumables = emptyList(),
                 ),
             )
-            // Task 9 writes the set's second file; here only `run().data` is read.
+            // Only the data archive: see the note on `Graph.export` above.
             bytes = g1.exportBackupSet.run().data
             before = snapshot(graphOver(g1.db))
         } finally {

@@ -122,7 +122,7 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     /** Device-local preferences, in a map: a test can read back exactly what the UI wrote. */
     val prefs: AppPrefs = AppPrefs(InMemoryKeyValueStore())
 
-    /** Task 9 writes the set's two files; a test that only wants bytes takes `run().data`. */
+    /** Both halves of a set: `run().data` for the data archive, `run().plan` for the other one. */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, tags, links, definitions, profiles, events, attachments, uow, ids, clock,
         APP_VERSION, SCHEMA_VERSION,

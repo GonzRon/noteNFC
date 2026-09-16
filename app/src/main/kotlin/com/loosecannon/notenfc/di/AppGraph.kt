@@ -144,7 +144,7 @@ class AppGraph(private val context: Context) {
 
     /**
      * Produces a backup *set*: the data archive's bytes plus the plan for the artifacts archive
-     * beside them. Task 9 owns writing the two files; today only `data` is used.
+     * beside them. `BackupViewModel.exportSet` writes both files into the folder the owner picks.
      */
     val exportBackupSet: ExportBackupSet = ExportBackupSet(
         assets, tags, links, definitions, profiles, events, attachments, uow, ids, clock,

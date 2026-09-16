@@ -24,6 +24,10 @@ import androidx.test.core.app.ApplicationProvider
 import com.loosecannon.notenfc.MainActivity
 import com.loosecannon.notenfc.NoteNfcApp
 import com.loosecannon.notenfc.ShareActivity
+import com.loosecannon.notenfc.ui.backup.BackupSetSink
+import com.loosecannon.notenfc.ui.backup.BackupViewModel
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -62,6 +66,33 @@ internal fun clearInstall() {
             graph.assets.deleteAll()
         }
     }
+}
+
+/**
+ * Exports a backup set into memory — the way the Backup screen exports one into a folder the owner
+ * picks — and returns the data archive's bytes.
+ *
+ * Both files are written through the production path, because the export refuses to call a set
+ * where only one landed a backup at all; a round trip then reads the data half back, which is the
+ * half that carries rows. The artifacts half carries bytes, and bytes are proved by the
+ * attachments device proof and by `BackupViewModelTest`.
+ */
+internal fun exportedDataArchive(): ByteArray {
+    val files = LinkedHashMap<String, ByteArray>()
+    val sink = object : BackupSetSink {
+        override suspend fun write(name: String, body: suspend (OutputStream) -> Unit): String {
+            val out = ByteArrayOutputStream()
+            body(out)
+            files[name] = out.toByteArray()
+            return name
+        }
+
+        override suspend fun delete(handle: String) {
+            files.remove(handle)
+        }
+    }
+    runBlocking { BackupViewModel(app.graph).exportSet(sink).getOrThrow() }
+    return files.entries.single { it.key.startsWith("noteNFC-data-") }.value
 }
 
 /** Waits until at least [count] nodes carrying [text] exist, then returns. */
@@ -174,9 +205,10 @@ class AppSmokeTest {
         rule.awaitText("Export now")
         rule.onNodeWithText("Export now").performClick()
 
-        rule.awaitText("Export backup")
-        rule.onNodeWithText("Export backup").assertIsDisplayed()
-        rule.onNodeWithText("Import (replace everything)").assertIsDisplayed()
+        rule.awaitText("Export backup set")
+        rule.onNodeWithText("Export backup set").assertIsDisplayed()
+        rule.onNodeWithText("Restore data").assertIsDisplayed()
+        rule.onNodeWithText("Restore files").assertIsDisplayed()
         // "Last backup: Never" — the screen agrees with the nudge that sent us here.
         rule.onNodeWithText("Never").assertIsDisplayed()
     }
