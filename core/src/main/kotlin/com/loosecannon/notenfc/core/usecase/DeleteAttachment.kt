@@ -6,9 +6,9 @@ import com.loosecannon.notenfc.core.ports.AttachmentStorage
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 
 /**
- * The row goes inside the transaction; the bytes go after it, best effort. A byte delete that
- * fails is not surfaced: the row is gone, the file is an orphan, and sweeping orphans is 4B's job
- * (spec §6). Deleting an attachment that is not there is not an error.
+ * The row goes inside the transaction; the bytes go after it, through [sweepBytes]: the row is
+ * gone, a file the store will not delete is an orphan, and sweeping orphans is 4B's job (spec §6).
+ * Deleting an attachment that is not there is not an error.
  */
 class DeleteAttachment(
     private val attachments: AttachmentRepository,
@@ -18,6 +18,6 @@ class DeleteAttachment(
     suspend fun run(id: AttachmentId) {
         val row = attachments.get(id) ?: return
         uow.write { attachments.delete(id) }
-        runCatching { storage.store()?.delete(row.storageLocator) }
+        storage.sweepBytes(listOf(row.storageLocator))
     }
 }

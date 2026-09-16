@@ -28,6 +28,7 @@ import com.loosecannon.notenfc.core.testing.InMemoryEventRepository
 import com.loosecannon.notenfc.core.testing.RiggedFailure
 import kotlinx.coroutines.test.runTest
 import java.io.InputStream
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -179,7 +180,7 @@ class AttachmentUseCasesTest {
      */
     @Test fun addRefusesAnOversizeFileTheProviderNeverDeclared() = runTest {
         val owner = AttachmentOwner.OfAsset(asset())
-        val oversized = OverReportingStore()
+        val oversized = RiggedStore(reportedSize = MAX_ATTACHMENT_BYTES + 1)
         val adder = AddAttachment(
             attachments, assets, events, OneStore(oversized), uow, ids, Clock { now },
         )
@@ -190,7 +191,28 @@ class AttachmentUseCasesTest {
         )
         assertTrue(attachments.rows.isEmpty())
         assertFalse(oversized.inner.exists("assets/a1/att-1.pdf"))   // its bytes were removed
-        assertEquals(1, oversized.inner.deletes)
+        assertEquals(1, oversized.deleteAttempts)
+        assertEquals(0, uow.commits)
+    }
+
+    /** Cleaning up after the refusal is itself best effort: it cannot turn into a thrown error. */
+    @Test fun anOversizeRefusalSurvivesACleanupDeleteThatThrows() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val brittle = RiggedStore(
+            reportedSize = MAX_ATTACHMENT_BYTES + 1,
+            failDeleteWith = { StoreIoException("rigged delete failure") },
+        )
+        val adder = AddAttachment(
+            attachments, assets, events, OneStore(brittle), uow, ids, Clock { now },
+        )
+
+        assertEquals(
+            AttachmentResult.Refused(AttachmentProblem.TooLarge(MAX_ATTACHMENT_BYTES)),
+            adder.run(owner, cmd(), source()),
+        )
+        assertEquals(1, brittle.deleteAttempts)
+        assertTrue(attachments.rows.isEmpty())
+        assertTrue(brittle.inner.exists("assets/a1/att-1.pdf"))   // an orphan, but still refused
         assertEquals(0, uow.commits)
     }
 
@@ -201,6 +223,23 @@ class AttachmentUseCasesTest {
         assertTrue(attachments.rows.isEmpty())
         assertFalse(store.exists("assets/a1/att-1.pdf"))
         assertEquals(1, store.deletes)
+        assertEquals(1, uow.rollbacks)
+    }
+
+    /** The row-write failure is what the caller needs; a failing cleanup must not take its place. */
+    @Test fun aCleanupDeleteThatThrowsDoesNotHideTheRowWriteFailure() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val brittle = RiggedStore(failDeleteWith = { StoreIoException("rigged delete failure") })
+        val adder = AddAttachment(
+            attachments, assets, events, OneStore(brittle), uow, ids, Clock { now },
+        )
+        attachments.failOnUpsert = 1
+
+        val boom = assertFailsWith<RiggedFailure> { adder.run(owner, cmd(), source()) }
+
+        assertTrue(boom.suppressedExceptions.any { it is StoreIoException })   // not lost, either
+        assertEquals(1, brittle.deleteAttempts)
+        assertTrue(attachments.rows.isEmpty())
         assertEquals(1, uow.rollbacks)
     }
 
@@ -276,7 +315,7 @@ class AttachmentUseCasesTest {
     /** The point of the best-effort sweep: a store that throws still loses its row. */
     @Test fun aStoreThatThrowsOnDeleteDoesNotHoldOntoTheRow() = runTest {
         val owner = AttachmentOwner.OfAsset(asset())
-        val brittle = ThrowingDeleteStore()
+        val brittle = RiggedStore(failDeleteWith = { StoreIoException("rigged delete failure") })
         val adder = AddAttachment(
             attachments, assets, events, OneStore(brittle), uow, ids, Clock { now },
         )
@@ -285,38 +324,59 @@ class AttachmentUseCasesTest {
         DeleteAttachment(attachments, OneStore(brittle), uow).run(row.id)
 
         assertTrue(attachments.rows.isEmpty())
-        assertEquals(1, brittle.attempts)                     // it was asked, and it refused
+        assertEquals(1, brittle.deleteAttempts)               // it was asked, and it refused
         assertTrue(brittle.inner.exists(row.storageLocator))  // an orphan, not a failure
+    }
+
+    /**
+     * The sweep's allowance is a broken destination, not cancellation: swallowing that would let a
+     * cancelled caller watch `run` return normally.
+     */
+    @Test fun aCancelledSweepIsNotSwallowed() = runTest {
+        val owner = AttachmentOwner.OfAsset(asset())
+        val cancelling = RiggedStore(failDeleteWith = { CancellationException("cancelled") })
+        val adder = AddAttachment(
+            attachments, assets, events, OneStore(cancelling), uow, ids, Clock { now },
+        )
+        val row = (adder.run(owner, cmd(), source()) as AttachmentResult.Ok).value
+
+        assertFailsWith<CancellationException> {
+            DeleteAttachment(attachments, OneStore(cancelling), uow).run(row.id)
+        }
+        assertTrue(attachments.rows.isEmpty())   // the row went first, inside the transaction
+        assertEquals(1, cancelling.deleteAttempts)
     }
 }
 
-/** Writes the bytes honestly but claims they are over the limit, whatever they weigh. */
-private class OverReportingStore : AttachmentStore {
+/**
+ * The in-memory store with the two lies a use-case test needs: what `put` claims the bytes weigh,
+ * and what `delete` raises instead of deleting.
+ */
+private class RiggedStore(
+    private val reportedSize: Long? = null,
+    private val failDeleteWith: (() -> Throwable)? = null,
+) : AttachmentStore {
     val inner = InMemoryAttachmentStore()
-    override suspend fun put(locator: String, source: ByteSource): StoredBytes =
-        inner.put(locator, source).copy(sizeBytes = MAX_ATTACHMENT_BYTES + 1)
+    var deleteAttempts = 0
+        private set
+
+    override suspend fun put(locator: String, source: ByteSource): StoredBytes {
+        val stored = inner.put(locator, source)
+        return if (reportedSize == null) stored else stored.copy(sizeBytes = reportedSize)
+    }
+
     override suspend fun open(locator: String): InputStream? = inner.open(locator)
     override suspend fun exists(locator: String): Boolean = inner.exists(locator)
-    override suspend fun delete(locator: String) = inner.delete(locator)
+
+    override suspend fun delete(locator: String) {
+        deleteAttempts += 1
+        failDeleteWith?.let { throw it() }
+        inner.delete(locator)
+    }
 }
 
 /** An always-ready [AttachmentStorage] over one given store. */
 private class OneStore(private val store: AttachmentStore) : AttachmentStorage {
     override fun state(): StoreState = StoreState.Ready("Attachments", "com.example.provider")
     override fun store(): AttachmentStore = store
-}
-
-/** Writes and reads honestly, but will not delete. */
-private class ThrowingDeleteStore : AttachmentStore {
-    val inner = InMemoryAttachmentStore()
-    var attempts = 0
-        private set
-    override suspend fun put(locator: String, source: ByteSource): StoredBytes =
-        inner.put(locator, source)
-    override suspend fun open(locator: String): InputStream? = inner.open(locator)
-    override suspend fun exists(locator: String): Boolean = inner.exists(locator)
-    override suspend fun delete(locator: String) {
-        attempts += 1
-        throw StoreIoException("rigged delete failure at $locator")
-    }
 }

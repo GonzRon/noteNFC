@@ -24,7 +24,6 @@ class DeleteEvent(
             events.delete(id)
             locators
         }
-        val store = storage.store() ?: return
-        doomed.forEach { locator -> runCatching { store.delete(locator) } }
+        storage.sweepBytes(doomed)
     }
 }

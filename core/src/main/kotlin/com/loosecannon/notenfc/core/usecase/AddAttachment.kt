@@ -61,7 +61,7 @@ class AddAttachment(
         val stored = store.put(locator, source)
         // A provider that under-reported its size (or reported none) is caught here instead.
         if (stored.sizeBytes > MAX_ATTACHMENT_BYTES) {
-            store.delete(locator)
+            store.deleteBestEffort(locator)   // a store that will not delete is not a second error
             return AttachmentResult.Refused(AttachmentProblem.TooLarge(MAX_ATTACHMENT_BYTES))
         }
 
@@ -83,7 +83,14 @@ class AddAttachment(
         try {
             uow.write { attachments.upsert(row) }
         } catch (t: Throwable) {
-            store.delete(locator)   // the bytes were ours and now nothing names them
+            // The bytes were ours and now nothing names them. A cleanup that fails is recorded
+            // against the failure in flight, never raised over it: the row write is what the
+            // caller needs to hear about.
+            try {
+                store.delete(locator)
+            } catch (cleanup: Throwable) {
+                if (cleanup !== t) t.addSuppressed(cleanup)
+            }
             throw t
         }
         return AttachmentResult.Ok(row)

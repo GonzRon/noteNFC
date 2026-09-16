@@ -42,7 +42,6 @@ class DeleteAsset(
 
         // Bytes after the commit, best effort: a file the store will not delete is an orphan,
         // not a reason to keep an asset the person deleted.
-        val store = storage.store() ?: return
-        doomed.forEach { locator -> runCatching { store.delete(locator) } }
+        storage.sweepBytes(doomed)
     }
 }
