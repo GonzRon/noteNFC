@@ -132,9 +132,11 @@ against the row before writing.
 
 - Constructed from a `DocumentFile` tree root and a `ContentResolver`. `assets/` and `events/`
   and the per-owner directories are created on demand by walking segments with `findFile` then
-  `createDirectory`. Files are created with `createFile(mimeType, "<id>.<ext>")`; a provider
-  that appends its own extension is tolerated by re-reading the created document's name into
-  nothing — the locator stays what we asked for, and lookups use `findFile` per segment.
+  `createDirectory`. Files are created with `createFile(mimeType, "<id>.<ext>")`. Some providers append
+  their own extension when the mime type disagrees with the name; the store therefore records
+  nothing about the created document's name, keeps the locator it asked for, and resolves a
+  locator by `findFile` per segment, falling back to the first child whose name starts with
+  `<id>.` — the id is unique, so the match is unambiguous.
 - `put` streams through a `DigestInputStream`, 64 KiB buffer; on any failure it deletes the
   partial document and rethrows as `StoreIoException`.
 - `viewUri(locator): Uri?` — the document's `content://` URI, for `ACTION_VIEW` with
