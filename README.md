@@ -51,10 +51,17 @@ deliberate look, lives under Settings.
   inspect tag, under Settings, is the same reader kept as a utility for a deliberate look.
 - **Links** — saved note links with their kind and host, openable and deletable (unless a tag
   still points at one).
+- **Attach photos, manuals and receipts** — pick a folder once in Settings (any folder a
+  document provider exposes, so a sync tool can replicate it) and a DOCUMENTS section on any asset
+  or ledger entry takes files from the picker or the camera, keeps the bytes in that folder as
+  ordinary documents, shows thumbnails for images, opens anything with the system viewer, and lets
+  you rename, re-kind, date or delete each one. Nothing is hidden inside the app.
 - **Back up and restore** — a Backup screen (from the dashboard's nudge, or the backup action on
-  any asset) exports one ZIP holding every asset, tag binding and link with its original id, so a
-  restored phone resolves the same tags. Import replaces everything on the phone and makes you
-  type `REPLACE` first.
+  any asset) exports a backup *set* into a folder you pick: one ZIP holding every asset, tag
+  binding, link and attachment record with its original id, and a second holding the attachment
+  bytes. A restored phone resolves the same tags; restoring the data alone works and marks the
+  files "not on this device" until you restore the second ZIP. Import replaces everything on the
+  phone and makes you type `REPLACE` first.
 - **Settings** — appearance (system / light / dark), the palette's name, the build's version and
   a link to the project.
 

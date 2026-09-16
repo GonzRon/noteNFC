@@ -162,14 +162,49 @@ Phase 3, as **4A** (below) with the rest as **4B** after 3R. Two decisions taken
 |---|---|---|
 | Scope | attachment model + `AttachmentStore` port; SAF-tree managed store (chosen once in Settings → Attachment storage, persistable grant); attach from the document picker and camera to assets and events; open with the system viewer; image thumbnails; DOCUMENTS sections; backup set split (data + artifacts); import of the owner's eight SPA files onto the hot tub | REFERENCED documents (single-document grants, "not available on this device" after restore, grant health finding); store-location change with the copy-loop migration; app-private LOCAL as an explicit alternative provider |
 
+### 4A — done (2026-09-16, version 2.4 / versionCode 6)
+
+Evidence: [phase-4a-evidence.md](phase-4a-evidence.md). What shipped:
+
+- `Attachment` with provider-relative locators, the `AttachmentStore` / `AttachmentStorage` ports,
+  and one implementation — `SafTreeAttachmentStore` over a `DocumentFile` tree chosen once in
+  Settings → Attachment storage with a persistable read+write grant. **No `LOCAL` store**: the
+  provider enum has no such member, and nothing falls back to app-private storage.
+- `AddAttachment` / `UpdateAttachment` / `DeleteAttachment`, bytes before the row and a byte sweep
+  when the row write fails; `DeleteAsset` and `DeleteEvent` now remove the bytes of the rows the
+  FK cascade takes. 256 MiB guard, refused before a byte is copied.
+- DOCUMENTS sections on asset detail and event detail: multi-select picker, camera capture, the
+  system viewer, image thumbnails without a new dependency, an edit sheet for name / kind /
+  captured-on / notes, and a plain (not typed) delete confirmation.
+- Room v5, migration 4→5, and the backup set split: `noteNFC-data-<stamp>.zip` (format 5, rows
+  only) plus `noteNFC-artifacts-<stamp>.zip` (artifact format 1, bytes), both under one
+  `backupSetId`. **The split as built:** an export writes both files or neither — a set whose
+  artifacts archive is missing any managed row is not a backup (spec §11.14) — and a cancelled or
+  failed export removes what it had already written. Restore is two steps, and a data-only restore
+  is a first-class outcome: the rows come back reading "Not on this device" until the matching
+  artifacts archive is restored, and an archive from another set is refused by set id.
+- Two wording / gating deviations from the spec, both deliberate: the Backup screen says
+  **"Restore files"** where the spec said "Restore artifacts", and Settings' **Choose folder** is
+  disabled only when attachment rows exist **and** the store is `Ready` — so a data-only restore
+  onto a fresh install can still pick a folder.
+- **Phone step pending.** The device proof ran on the emulator (58/58). The §10 SPA import, the
+  v4→v5 upgrade over the owner's real install, the two-file export into the synced folder and the
+  sync tool picking them up are the owner's own run; evidence §4/§5 carry them as pending until
+  that section says otherwise.
 
 | | |
+|---|---|
 |---|---|
 | **Goal** | Photos, labels, receipts, manuals on assets and events; SAF-first storage choice; backup bundles managed bytes. |
 | **Prerequisites** | Phase 2 (and 3 for event attachments from completion forms); Phase 3R (database backups are automatic before attachment storage exists); spike S5 (which installed cloud providers expose a tree). |
 | **Source areas** | Room v4 (`attachment`); `attachments/*` (LOCAL + SAF tree stores, references, thumbnails, health); camera/document pickers; Documents tab; backup ZIP with `attachments/`; storage settings ("current location / change"). |
 | **Tests** | store contract tests run against both stores (put/open/delete/exists round-trip, locator relativity), backup with attachments round-trip, permission-lost health finding, migration v3→v4. |
 | **Exit criteria** | (1) same `attachment` rows after switching the store from LOCAL to a SAF tree and migrating (locators unchanged); (2) a referenced cloud PDF opens after reboot; (3) restore on a second phone restores managed photos and lists references as "not available on this device". |
+
+The table above is the original whole-of-Phase-4 block and now describes **4B only**: 4A shipped at
+schema v5 (not v4), with one SAF-tree store and no `LOCAL` one, so its first exit criterion belongs
+to 4B's store-location change. 4A's own scope, tests and exit criteria are the "4A — done" block
+above and spec §12.
 
 ## Phase 5 — Todoist provider and sync
 
