@@ -359,8 +359,10 @@ class TagInspection(
 )
 
 sealed interface WriteResult {
-    /** [verified] is false only on the format path, where the same `Tag` cannot be re-read. */
-    data class Written(val readBack: List<NdefRecordData>, val bytes: Int, val verified: Boolean, val locked: Boolean) : WriteResult
+    /** The tag was made NDEF-capable by `format(null)`; no application message exists on it yet (H3/H9). */
+    data object Formatted : WriteResult
+    /** An application message exists on the tag AND its read-back verified structurally; there is no "written but unverified" success. */
+    data class Written(val readBack: List<NdefRecordData>, val bytes: Int, val locked: Boolean) : WriteResult
     data class TooSmall(val maxSize: Int, val needed: Int) : WriteResult
     data object ReadOnly : WriteResult
     data object Unsupported : WriteResult
@@ -406,10 +408,12 @@ interface TagHandle { val uid: String? }
 class NfcTagHandle(val tag: Tag) : TagHandle
 interface TagIo {
     fun inspect(tag: TagHandle): TagInspection?
+    /** `NdefFormatable.format(null)` → [WriteResult.Formatted]; never writes a payload (H3). */
+    fun format(tag: TagHandle): WriteResult
     fun write(tag: TagHandle, records: List<NdefRecordData>, lock: Boolean): WriteResult
     fun lock(tag: TagHandle): Boolean
 }
-object RealTagIo : TagIo   // the only place a Tag comes back out of a handle
+object RealTagIo : TagIo   // the only place a Tag comes back out of a handle; format delegates to TagWriter.format
 ```
 
 ### 4.3 Invariants
