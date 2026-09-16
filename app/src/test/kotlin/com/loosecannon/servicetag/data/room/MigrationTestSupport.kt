@@ -93,7 +93,7 @@ private fun JsonObject.sql(key: String, table: String): String =
  * directory, but an IDE run configuration may use the repository root, so both are tried.
  */
 private fun schemaFile(version: Int): File {
-    val relative = "schemas/com.loosecannon.notenfc.data.room.AppDatabase/$version.json"
+    val relative = "schemas/com.loosecannon.servicetag.data.room.AppDatabase/$version.json"
     return listOf(File(relative), File("app/$relative")).firstOrNull { it.isFile }
         ?: error("cannot find the exported schema $relative from ${File(".").absolutePath}")
 }
