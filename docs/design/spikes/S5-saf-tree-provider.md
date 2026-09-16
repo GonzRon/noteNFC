@@ -13,12 +13,14 @@ fresh process ran the whole create / write / read-back / list / delete cycle aga
 URI without showing the picker again.
 
 **Google Drive is not installed on this phone**, so the "Drive first" preference in D7 could not
-be exercised and no Drive-specific behaviour was observed. The owner intends to install Proton
-Drive; whether its DocumentsProvider offers a writable tree is unobserved as of this report and
-will be recorded here when tried. Nothing in the Phase 4A architecture depends on the answer:
-the store is *a* SAF tree, and the folder the owner actually picked — a Syncthing-replicated
-folder on primary storage — already gives off-device copies through Syncthing, exactly the
-replication model D7 §3R describes.
+be exercised and no Drive-specific behaviour was observed. The owner then installed **Proton
+Drive**, which on Android syncs an ordinary folder under `Documents/` rather than exposing a
+DocumentsProvider tree; the owner picked that synced folder in the chooser and the whole probe
+passed again, including the cold-process re-check (two persisted grants were then listed, the
+Syncthing one and the Proton one — the product must release the previous grant when the folder
+changes). Nothing in the Phase 4A architecture depends on which sync tool sits behind the
+folder: the store is *a* SAF tree on the primary-storage provider, and Syncthing or Proton
+Drive gives the off-device copy, exactly the replication model D7 §3R describes.
 
 ## What was observed
 
@@ -33,7 +35,7 @@ replication model D7 §3R describes.
 | `length()`, `listFiles()` | correct |
 | `delete` file / directory, `findFile` after | deleted, not found |
 | whole cycle | ≈350–400 ms |
-| `am force-stop`, cold launch, re-check with the stored URI (no picker) | grant still listed; full cycle passed again from a new pid |
+| `am force-stop`, cold launch, re-check with the stored URI (no picker) | grant still listed; full cycle passed again from a new pid — on both the Syncthing folder and, later, the Proton Drive folder |
 | Reboot survival | not exercised (the phone was in use); Android persists these grants across reboot by design, and Phase 3R's exit criteria retest it |
 
 Providers present on the phone that declare a documents authority: the external-storage,

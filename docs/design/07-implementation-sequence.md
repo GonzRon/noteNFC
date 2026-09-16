@@ -147,7 +147,8 @@ Phase 3, as **4A** (below) with the rest as **4B** after 3R. Two decisions taken
   `spikes/S5-saf-tree-provider.md`) found Drive is not installed on the owner's phone at all, and
   proved the primary-storage provider end to end (persistable grant, create/write/read/delete,
   survival of a process kill). The owner picked a Syncthing-replicated folder, so off-device
-  copies come from Syncthing; Proton Drive may be tried later without any change here.
+  copies come from the sync tool — the owner then moved to a Proton Drive-synced folder, which
+  passed the same probe; both are plain folders on the primary-storage provider.
   App-private storage is never silently made primary. The domain sees only `AttachmentStore`
   and provider-relative locators.
 - **Backup becomes a set of two archives under one `backupSetId`**: `noteNFC-data-<stamp>.zip`

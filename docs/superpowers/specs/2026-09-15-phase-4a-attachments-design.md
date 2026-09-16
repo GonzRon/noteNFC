@@ -165,7 +165,9 @@ against the row before writing.
   attachment row exists the button is disabled with `QuietLine("Moving attachments to another
   folder arrives in a later release")` (4B), except in `AccessLost`, where re-choosing the
   *same* folder is the repair: allowed, and refused with a snackbar if the picked tree's
-  authority + tree document id differ from the stored ones.
+  authority + tree document id differ from the stored ones. Whenever a new tree is taken, the
+  previously stored tree's grant is released with `releasePersistableUriPermission` (S5 showed
+  grants accumulate otherwise).
 
 ## 6. Use cases (`:core.usecase`)
 
@@ -306,8 +308,9 @@ code runs on the phone.
 
 ## 11. Rulings and deviations recorded
 
-1. **Google Drive** was never on the phone (S5); the owner's folder is a Syncthing-replicated
-   folder on primary storage. Proton Drive is a later, optional pick with no design impact.
+1. **Google Drive** was never on the phone (S5); the owner's folder is a Proton Drive-synced
+   folder on primary storage (a Syncthing folder passed the same probe). The sync tool owns
+   replication; the app sees one SAF tree on the primary-storage provider.
 2. **Backup export picks a folder per export** (`OpenDocumentTree`, no persisted grant). 3R
    turns this into a remembered destination; 4A does not pre-build it.
 3. **Restore is two steps** (data, then artifacts) because `OpenDocument` cannot see a sibling
