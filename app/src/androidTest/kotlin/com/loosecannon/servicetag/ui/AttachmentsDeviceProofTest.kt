@@ -294,7 +294,7 @@ class AttachmentsDeviceProofTest {
         assertEquals("both halves carry one stamp", 1, stamps.size)
         val stamp = stamps.single()
         assertEquals(
-            listOf("noteNFC-artifacts-$stamp.zip", "noteNFC-data-$stamp.zip"),
+            listOf("ServiceTag-artifacts-$stamp.zip", "ServiceTag-data-$stamp.zip"),
             asked.sorted(),
         )
 
@@ -311,7 +311,7 @@ class AttachmentsDeviceProofTest {
         }
 
         // The artifacts half is the attachment's bytes: manifest first, then one entry.
-        ZipFile(documentFor(folder, "noteNFC-artifacts-$stamp.zip")).use { zip ->
+        ZipFile(documentFor(folder, "ServiceTag-artifacts-$stamp.zip")).use { zip ->
             val entries = zip.entries().toList().map { it.name }
             assertEquals("manifest.json", entries.first())
             assertEquals(1, entries.count { it.startsWith("artifacts/") })
@@ -333,7 +333,7 @@ class AttachmentsDeviceProofTest {
         val writer = SafBackupSetWriter(context, context.contentResolver, DocumentFile.fromFile(dir))
         val failure = runCatching {
             runBlocking {
-                writer.write("noteNFC-artifacts-20260916-000000.zip") { out ->
+                writer.write("ServiceTag-artifacts-20260916-000000.zip") { out ->
                     out.write(ByteArray(4096))
                     error("rigged mid-write failure")
                 }
@@ -513,8 +513,8 @@ private const val PHOTO_NAME = "label.jpg"
 private const val RECEIPT_NAME = "receipt.pdf"
 private const val ENTRY_TITLE = "Oil change"
 
-/** `noteNFC-<half>-<yyyyMMdd-HHmmss>.zip`, the shape `BackupSetNames` writes. */
-private val SET_FILE = Regex("""^noteNFC-(?:data|artifacts)-(\d{8}-\d{6})\.zip$""")
+/** `ServiceTag-<half>-<yyyyMMdd-HHmmss>.zip`, the shape `BackupSetNames` writes. */
+private val SET_FILE = Regex("""^ServiceTag-(?:data|artifacts)-(\d{8}-\d{6})\.zip$""")
 
 private val context: Context get() = ApplicationProvider.getApplicationContext()
 
@@ -603,9 +603,9 @@ private suspend fun exportInto(folder: File): String =
         .exportSet(SafBackupSetWriter(context, context.contentResolver, DocumentFile.fromFile(folder)))
         .getOrThrow()
 
-private fun dataArchive(folder: File): File = documentFor(folder, "noteNFC-data-")
+private fun dataArchive(folder: File): File = documentFor(folder, "ServiceTag-data-")
 
-private fun artifactsArchive(folder: File): File = documentFor(folder, "noteNFC-artifacts-")
+private fun artifactsArchive(folder: File): File = documentFor(folder, "ServiceTag-artifacts-")
 
 /** The one document in [folder] whose name begins with [asked] — see the export scenario. */
 private fun documentFor(folder: File, asked: String): File =

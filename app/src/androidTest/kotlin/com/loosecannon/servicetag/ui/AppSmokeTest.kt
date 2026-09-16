@@ -38,7 +38,7 @@ import org.junit.Test
 private const val TIMEOUT_MS = 10_000L
 
 /** The `SharedPreferences` file `SharedPrefsStore` owns; cleared before every test. */
-private const val PREFS_NAME = "notenfc"
+private const val PREFS_NAME = "servicetag"
 
 internal val app: ServiceTagApp get() = ApplicationProvider.getApplicationContext()
 
@@ -101,7 +101,7 @@ internal fun exportedDataArchive(): ByteArray {
         override suspend fun delete(handle: String): Boolean = files.remove(handle) != null
     }
     runBlocking { BackupViewModel(app.graph).exportSet(sink).getOrThrow() }
-    return files.entries.single { it.key.startsWith("noteNFC-data-") }.value
+    return files.entries.single { it.key.startsWith("ServiceTag-data-") }.value
 }
 
 /** Waits until at least [count] nodes carrying [text] exist, then returns. */

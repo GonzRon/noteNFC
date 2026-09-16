@@ -212,7 +212,7 @@ class AppGraph(private val context: Context) {
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
 
     private companion object {
-        const val DB_NAME = "notenfc.db"
+        const val DB_NAME = "servicetag.db"
 
         /** Room's `@Database(version = ...)`; recorded in the manifest so an import can refuse. */
         const val SCHEMA_VERSION = 5

@@ -10,7 +10,7 @@ interface KeyValueStore {
 }
 
 class SharedPrefsStore(context: Context) : KeyValueStore {
-    private val prefs = context.applicationContext.getSharedPreferences("notenfc", Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences("servicetag", Context.MODE_PRIVATE)
     override fun getLong(key: String): Long? = if (prefs.contains(key)) prefs.getLong(key, 0L) else null
     override fun putLong(key: String, value: Long) { prefs.edit().putLong(key, value).apply() }
     override fun getString(key: String): String? = prefs.getString(key, null)

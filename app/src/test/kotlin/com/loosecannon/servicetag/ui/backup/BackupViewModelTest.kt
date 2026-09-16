@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -203,7 +204,7 @@ class BackupViewModelTest {
 
     // --- fixtures --------------------------------------------------------------------------
 
-    private val stamped = Regex("""^noteNFC-(data|artifacts)-\d{8}-\d{6}\.zip$""")
+    private val stamped = Regex("""^ServiceTag-(data|artifacts)-\d{8}-\d{6}\.zip$""")
 
     private val payload = ByteArray(5_000) { (it % 251).toByte() }
 
@@ -337,7 +338,7 @@ class BackupViewModelTest {
     @Test fun aFailedDataWriteWritesNothingAndLeavesTheNudgeAlone() = runTest {
         graph.createAsset.run("Pool pump", "Water")
         val vm = viewModel()
-        val sink = RecordingSink(failOnPrefix = "noteNFC-data")
+        val sink = RecordingSink(failOnPrefix = "ServiceTag-data")
 
         assertTrue(vm.exportSet(sink).isFailure)
 
@@ -350,7 +351,7 @@ class BackupViewModelTest {
         graph.createAsset.run("Pool pump", "Water")
         graph.now = 7_000L
         val vm = viewModel()
-        val sink = RecordingSink(failOnPrefix = "noteNFC-artifacts")
+        val sink = RecordingSink(failOnPrefix = "ServiceTag-artifacts")
 
         val said = async(Dispatchers.Main) { vm.messages.first() }
         vm.exportSetTo(sink)
@@ -484,8 +485,8 @@ class BackupViewModelTest {
         graph.now = 7_000L
         val vm = viewModel()
         val sink = RecordingSink(
-            failOnPrefix = "noteNFC-artifacts",
-            refuseDeleteOfPrefix = "noteNFC-data",
+            failOnPrefix = "ServiceTag-artifacts",
+            refuseDeleteOfPrefix = "ServiceTag-data",
         )
         val stamp = BackupSetNames.stamp(7_000L)
 
@@ -508,7 +509,7 @@ class BackupViewModelTest {
         addFile(pump.id)
         graph.now = 7_000L
         val vm = viewModel()
-        val sink = PartialWriteSink(failOnPrefix = "noteNFC-artifacts")
+        val sink = PartialWriteSink(failOnPrefix = "ServiceTag-artifacts")
 
         assertTrue(vm.exportSet(sink).isFailure)
 
@@ -528,7 +529,7 @@ class BackupViewModelTest {
         addFile(pump.id)
         graph.now = 7_000L
         val vm = viewModel()
-        val sink = SuspendingSink(holdOnPrefix = "noteNFC-artifacts")
+        val sink = SuspendingSink(holdOnPrefix = "ServiceTag-artifacts")
 
         val export = launch(Dispatchers.Main) { vm.exportSet(sink) }
         sink.holding.await()            // the data file is written and the artifacts one is open
@@ -732,5 +733,29 @@ class BackupViewModelTest {
         // Nothing to pair a files archive with, so nothing is remembered.
         assertNull(graph.prefs.lastRestoredBackupSetId)
         assertNull(vm.state.value.lastRestoredBackupSetId)
+    }
+
+    /**
+     * The retired product's file names still import. The name is not part of the format: the
+     * importer is handed bytes (`BackupIO.read()`), and `BackupSetNames` is only ever consulted
+     * on the export side (arch §7.3). This is the regression guard for the prefix change, so the
+     * owner's preserved `noteNFC-*` set stays importable after the rename.
+     */
+    @Test fun aPreservedRetiredPrefixArchiveStillImports() = runTest {
+        val vm = viewModel()
+        val sink = RecordingSink()
+        vm.exportSet(sink).getOrThrow()
+        val bytes = sink.files.entries.single { it.key.startsWith("ServiceTag-data-") }.value
+        val assetsBefore = graph.assets.all().size
+
+        // the very same bytes, as they sit in the owner's folder under the retired name
+        val preserved = mapOf("noteNFC-data-20260915-101010.zip" to bytes)
+        val report = vm.restoreData(MemoryIO(preserved.getValue("noteNFC-data-20260915-101010.zip"))).getOrThrow()
+
+        // a wipe-and-load of our own export puts back exactly what was there, and the set id is
+        // the one we exported: the file's name reached nothing at all.
+        assertEquals(assetsBefore, graph.assets.all().size)
+        assertNotNull(report.lastRestoredBackupSetId)
+        assertEquals(report.lastRestoredBackupSetId, vm.state.value.lastRestoredBackupSetId)
     }
 }

@@ -57,12 +57,12 @@ class SafBackupSetWriter(
         }
 }
 
-/** `noteNFC-data-<stamp>.zip` and `noteNFC-artifacts-<stamp>.zip`, stamp = local `yyyyMMdd-HHmmss`. */
+/** `ServiceTag-data-<stamp>.zip` and `ServiceTag-artifacts-<stamp>.zip`, stamp = local `yyyyMMdd-HHmmss`. */
 object BackupSetNames {
     fun stamp(at: Long): String =
         SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(at))
 
-    fun data(stamp: String): String = "noteNFC-data-$stamp.zip"
+    fun data(stamp: String): String = "ServiceTag-data-$stamp.zip"
 
-    fun artifacts(stamp: String): String = "noteNFC-artifacts-$stamp.zip"
+    fun artifacts(stamp: String): String = "ServiceTag-artifacts-$stamp.zip"
 }
