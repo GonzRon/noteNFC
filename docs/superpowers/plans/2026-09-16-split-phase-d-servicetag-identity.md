@@ -98,6 +98,15 @@ git commit -m "root project name is ServiceTag"
 
 ### Task 2 (§A.1 row 2): `namespace`, `applicationId`, the keystore path and the version ratchet
 
+> **Pre-flight ruling (controller, 2026-09-16), applied at execution:** changing `namespace` moves the
+> generated `R`/`BuildConfig` classes, and four Kotlin files import them by their full name
+> (`ui/components/NoteNfcIcons.kt`, `di/AppGraph.kt`, `ui/settings/SettingsScreen.kt`,
+> `debug/DebugBackupActivity.kt`). This task therefore also rewrites exactly those four import lines to
+> `com.loosecannon.servicetag.{R,BuildConfig}` — nothing else in those files — so `:app:assembleDebug`
+> is green after the task as §A.1 row 2 requires. They stay correct after Task 3 moves the package roots,
+> because `R`/`BuildConfig` follow the Gradle namespace, not the Kotlin package.
+
+
 **Files:**
 - Modify: `app/build.gradle.kts:12,17,21,24,25`
 
