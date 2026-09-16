@@ -142,11 +142,14 @@ abstraction is needed ahead of the phase.
 PDFs, photos from the Joplin export) in the app before schedules, so attachments come before
 Phase 3, as **4A** (below) with the rest as **4B** after 3R. Two decisions taken with it:
 
-- **The managed store is a user-selected SAF tree**, Google Drive intended as the first choice if
-  its DocumentsProvider exposes a writable tree on the owner's phone (spike S5 runs first and its
-  observed behaviour is recorded; if Drive does not, the observation is reported before any
-  architecture change — app-private storage is never silently made primary). The domain sees only
-  `AttachmentStore` and provider-relative locators.
+- **The managed store is a user-selected SAF tree.** Google Drive was the intended first choice
+  if its DocumentsProvider exposed a writable tree; spike S5 (2026-09-15,
+  `spikes/S5-saf-tree-provider.md`) found Drive is not installed on the owner's phone at all, and
+  proved the primary-storage provider end to end (persistable grant, create/write/read/delete,
+  survival of a process kill). The owner picked a Syncthing-replicated folder, so off-device
+  copies come from Syncthing; Proton Drive may be tried later without any change here.
+  App-private storage is never silently made primary. The domain sees only `AttachmentStore`
+  and provider-relative locators.
 - **Backup becomes a set of two archives under one `backupSetId`**: `noteNFC-data-<stamp>.zip`
   (manifest + data JSON incl. attachment metadata, no bytes) and
   `noteNFC-artifacts-<stamp>.zip` (manifest + bytes keyed by attachment id and checksum). Both
