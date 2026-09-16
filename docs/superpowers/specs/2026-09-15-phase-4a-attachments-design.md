@@ -216,9 +216,15 @@ own rows only), `all`, `delete(id)`, `deleteAll()`, `count()`, `observeForOwner(
 
 - Export: `Export backup set` → `OpenDocumentTree` (one-off, not persisted) → writes
   `noteNFC-data-<stamp>.zip` and `noteNFC-artifacts-<stamp>.zip` into that folder,
-  `<stamp>` = `yyyyMMdd-HHmmss` local. `lastBackupAt` is set only after both writes succeed;
-  a failed artifacts write deletes the data file too and reports. With zero attachments the
-  artifacts archive is still written (manifest only) so a set is always two files.
+  `<stamp>` = `yyyyMMdd-HHmmss` local. With zero attachments the artifacts archive is still
+  written (manifest only) so a set is always two files.
+- **Completeness (owner's ruling 2026-09-16).** The export succeeds only when the artifacts
+  writer reports no missing and no hash-mismatched row and its entry count and byte total equal
+  the plan's. Otherwise the export fails: both files are deleted, `lastBackupAt` does not
+  advance, and the message names how many files are missing or changed. The SAF writer deletes
+  the document it created whenever its write body throws, so a failure mid-archive leaves no
+  partial file either. Invariant: **a failed export leaves no file from that attempted set.**
+  `lastBackupAt` therefore keeps its meaning — a restorable set exists.
 - Restore data: `OpenDocument` on the data zip, the existing typed confirmation, then the
   report adds "N attachments listed; restore the artifacts file to get their contents".
 - Restore artifacts: `OpenDocument` on the artifacts zip (enabled always; refuses on set
@@ -332,6 +338,10 @@ code runs on the phone.
     UX is 4B by the owner's ruling.
 13. **The SPA import is a procedure** through the shipped picker, not seed code (instrumented
     runs would wipe the phone).
+14. **A backup is all-or-nothing** (owner's correction on approval): a set whose artifacts
+    archive lacks any managed row is not a backup; see §7.3. The artifacts reader's strictness
+    about entries absent from, or extra to, the manifest is review-level hardening, not a
+    redesign.
 
 ## 12. Proof
 
@@ -343,7 +353,12 @@ code runs on the phone.
   bad sha / duplicate locator; `ArtifactsCodec` round trip, `STORED` for compressed types,
   refuses newer format, sha mismatch skipped and reported; `RestoreArtifacts` set mismatch
   refused, missing rows counted, bytes land at the row's locator; `ExportBackupSet` plan lists
-  every managed row exactly once.
+  every managed row exactly once; `ArtifactsWritten.covers(plan)` false on any missing,
+  mismatched, short count or short byte total.
+- `:app` JVM (Backup ViewModel): `missingManagedAttachmentMakesExportFailAndLeavesNoArchives`,
+  `mismatchedManagedAttachmentMakesExportFailAndLeavesNoArchives`,
+  `midArtifactsWriteRemovesPartialArtifactsAndDataZip`; emulator: the real SAF writer removes
+  the document it created when the body throws.
 - `:app` JVM: migration 4→5 from `4.json`; `RoomAttachmentRepository` DAO round trip incl.
   cascade on asset and event delete and `observeForOwner`; `AttachmentStorage.state()` over a
   fake resolver; `Thumbnails` cache naming; ViewModel tests for the DOCUMENTS section states

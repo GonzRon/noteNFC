@@ -12,6 +12,15 @@
 
 ## Global Constraints
 
+- Test bodies written here as comments are contracts, not placeholders: the implementer turns
+  each comment into real assertions covering every clause. A test without an assertion is a
+  defect the task review rejects.
+- Export completeness (owner's ruling 2026-09-16): a backup set is successful only when every
+  managed attachment's bytes landed in the artifacts archive with the planned size; any missing
+  or hash-mismatched row fails the export, neither ZIP remains, and `lastBackupAt` does not
+  advance. The SAF writer deletes any document it created if its write body throws. Invariant:
+  **a failed export leaves no file from that attempted backup set.**
+
 - Toolchain unchanged. The only new dependency is `androidx.documentfile:documentfile:1.1.0`. No Coil, no CameraX, no WorkManager.
 - `:core` stays JVM-only: no `android.*` import anywhere in it. `java.util.zip`, `java.security` and `java.io` streams are allowed (they already are, in `BackupCodec`).
 - Bytes are never in Room. Rows hold metadata; the store holds bytes.
@@ -1724,13 +1733,27 @@ data class ArtifactsPlan(
     val entries: List<ArtifactsPlanEntry>,
 )
 
-/** What the write actually managed. `missing`/`mismatched` rows are left out of the manifest. */
+/**
+ * What the write actually managed. `missing`/`mismatched` rows are left out of the manifest —
+ * and the export treats any of them as a failed backup (owner's ruling, spec §7.3): a set that
+ * lists eight attachments and carries seven is not a restorable set.
+ */
 data class ArtifactsWritten(
     val count: Int,
     val bytes: Long,
     val missing: List<AttachmentId>,
     val mismatched: List<AttachmentId>,
-)
+) {
+    val complete: Boolean get() = missing.isEmpty() && mismatched.isEmpty()
+
+    /** True only when every planned row was written with its planned size. */
+    fun covers(plan: ArtifactsPlan): Boolean =
+        complete && count == plan.entries.size && bytes == plan.entries.sumOf { it.sizeBytes }
+}
+
+/** Thrown by the export when [ArtifactsWritten.covers] is false; the archives are already gone. */
+class BackupSetIncomplete(val missing: List<AttachmentId>, val mismatched: List<AttachmentId>) :
+    Exception("backup set incomplete: ${missing.size} missing, ${mismatched.size} mismatched")
 
 /**
  * Artifact format 1: a ZIP whose first entry is `manifest.json` and whose remaining entries are
@@ -1844,6 +1867,12 @@ object ArtifactsCodec {
         )
     }
 
+    /*
+     * Hardening the owner flagged for review, not for redesign: the reader should report
+     * manifest entries that have no ZIP entry, and ZIP entries the manifest does not name,
+     * rather than silently ignoring either. Add both counts to the read report if it fits
+     * this task cleanly; otherwise the task reviewer records it in the ledger for 4B.
+     */
     /**
      * Streams the archive. [onManifest] runs first and may throw to refuse the whole file;
      * [onEntry] is then called once per `artifacts/` entry with a stream bounded to that entry.
@@ -2390,6 +2419,17 @@ class ArtifactsUseCasesTest {
         assertFailsWith<com.loosecannon.notenfc.core.ports.StoreIoException> {
             restore.run(ByteArrayInputStream(archive), expectedSetId = "set-1")
         }
+    }
+
+    @Test fun coversIsTrueOnlyWhenEveryPlannedRowLandedWithItsSize() {
+        val plan = ArtifactsPlan(backupSetId = "set", createdAt = 1L, entries = listOf(
+            ArtifactsPlanEntry("att-1", "assets/a1/att-1.pdf", "0".repeat(64), 10L, "application/pdf"),
+            ArtifactsPlanEntry("att-2", "assets/a1/att-2.jpg", "1".repeat(64), 5L, "image/jpeg"),
+        ))
+        assertTrue(ArtifactsWritten(2, 15L, emptyList(), emptyList()).covers(plan))
+        assertFalse(ArtifactsWritten(1, 10L, listOf(AttachmentId("att-2")), emptyList()).covers(plan))
+        assertFalse(ArtifactsWritten(1, 10L, emptyList(), listOf(AttachmentId("att-2"))).covers(plan))
+        assertFalse(ArtifactsWritten(2, 14L, emptyList(), emptyList()).covers(plan))
     }
 
     @Test fun anInstallWithNoAttachmentsStillExportsAPlanAndAnArchive() = runTest {
@@ -3787,21 +3827,29 @@ import kotlinx.coroutines.withContext
 class SafBackupSetWriter(
     private val context: Context,
     private val resolver: ContentResolver,
-    treeUri: Uri,
-) {
-    private val tree: DocumentFile = DocumentFile.fromTreeUri(context.applicationContext, treeUri)
-        ?: error("cannot open the chosen folder")
-
-    suspend fun write(name: String, body: suspend (OutputStream) -> Unit): String =
+    private val tree: DocumentFile,          // the screen passes DocumentFile.fromTreeUri(...)
+) : BackupSetSink {
+    /**
+     * Creates the document, streams [body] into it, and — the invariant the owner asked for —
+     * deletes that document again if [body] throws, then rethrows. A failed export must leave
+     * no file from that attempted set, and the caller only knows the handles of writes that
+     * returned.
+     */
+    override suspend fun write(name: String, body: suspend (OutputStream) -> Unit): String =
         withContext(Dispatchers.IO) {
             val document = tree.createFile("application/zip", name)
                 ?: error("cannot create $name in the chosen folder")
-            resolver.openOutputStream(document.uri, "wt")?.use { body(it) }
-                ?: error("cannot open $name for writing")
+            try {
+                resolver.openOutputStream(document.uri, "wt")?.use { body(it) }
+                    ?: error("cannot open $name for writing")
+            } catch (t: Throwable) {
+                runCatching { document.delete() }
+                throw t
+            }
             document.uri.toString()
         }
 
-    suspend fun delete(handle: String) {
+    override suspend fun delete(handle: String) {
         withContext(Dispatchers.IO) {
             runCatching {
                 DocumentFile.fromSingleUri(context.applicationContext, handle.toUri())?.delete()
@@ -3854,16 +3902,25 @@ class BackupViewModel(
      * is a promise that a restorable set exists, and a data file with no artifacts beside it is
      * not one. A failed artifacts write deletes the data file this export already wrote.
      */
+    /**
+     * Completeness rule (owner's ruling, spec §7.3): the set is a backup only if every managed
+     * row's bytes landed in the artifacts archive with the planned size. A missing or drifted
+     * file fails the whole export, both files are removed, and `lastBackupAt` does not move.
+     */
     suspend fun exportSet(sink: BackupSetSink): Result<String> = runCatching {
         val set = exportBackupSet.run()
         val stamp = BackupSetNames.stamp(set.plan.createdAt)
         val dataHandle = sink.write(BackupSetNames.data(stamp)) { out -> out.write(set.data) }
+        var artifactsHandle: String? = null
         try {
-            sink.write(BackupSetNames.artifacts(stamp)) { out ->
+            lateinit var written: ArtifactsWritten
+            artifactsHandle = sink.write(BackupSetNames.artifacts(stamp)) { out ->
                 // With zero attachments this is a manifest-only archive: a set is always two files.
-                ArtifactsCodec.write(out, set.plan) { locator -> storage.store()?.open(locator) }
+                written = ArtifactsCodec.write(out, set.plan) { locator -> storage.store()?.open(locator) }
             }
+            if (!written.covers(set.plan)) throw BackupSetIncomplete(written.missing, written.mismatched)
         } catch (t: Throwable) {
+            artifactsHandle?.let { sink.delete(it) }   // the SAF sink already removed a partial one; harmless
             sink.delete(dataHandle)
             throw t
         }
@@ -3969,6 +4026,25 @@ private val STAMPED = Regex("""^noteNFC-(data|artifacts)-\d{8}-\d{6}\.zip$""")
 @Test fun aFailedArtifactsWriteRemovesTheDataFileAndLeavesTheNudgeAlone() {
     // RecordingSink("noteNFC-artifacts"): files empty, deleted names the data file,
     // lastBackupAt still null, the message says nothing was saved
+}
+
+@Test fun missingManagedAttachmentMakesExportFailAndLeavesNoArchives() {
+    // one attachment row exists but storage.store holds no bytes at its locator:
+    // exportSet returns failure with BackupSetIncomplete(missing = [that id]); sink.files is
+    // empty; sink.deleted names BOTH stamped files; prefs.lastBackupAt is still null; the
+    // screen message says "Backup not saved: 1 attachment file is missing"
+}
+
+@Test fun mismatchedManagedAttachmentMakesExportFailAndLeavesNoArchives() {
+    // the row's sha256 differs from the bytes in storage.store: same outcome, the message says
+    // "1 attachment file has changed since it was added"
+}
+
+@Test fun midArtifactsWriteRemovesPartialArtifactsAndDataZip() {
+    // a sink whose write records the created name BEFORE running body, and whose body throws
+    // half-way for the artifacts name: after exportSet fails, sink.files is empty, sink.deleted
+    // contains the data file, and the sink itself dropped the artifacts name (the SAF writer's
+    // own delete-on-throw, modelled in the fake); lastBackupAt still null
 }
 
 @Test fun restoringDataRemembersTheSetIdAndMentionsTheAttachmentsItListed() {
@@ -4193,6 +4269,20 @@ class AttachmentsDeviceProofTest {
     // ---------------------------------------------------------------- scenario (f)
     /** Export writes two stamped files into a test tree, through the Backup screen. */
     @Test fun exportingWritesTwoStampedFilesIntoThePickedFolder() { /* names match the stamped pattern */ }
+
+    /** The real writer's invariant: a body that throws leaves no document behind. */
+    @Test fun safWriterRemovesTheDocumentItCreatedWhenTheBodyThrows() = runTest {
+        val dir = File(context.getExternalFilesDir(null), "set-${System.nanoTime()}").apply { mkdirs() }
+        val writer = SafBackupSetWriter(context, context.contentResolver, DocumentFile.fromFile(dir))
+        val failure = runCatching {
+            writer.write("noteNFC-artifacts-20260916-000000.zip") { out ->
+                out.write(ByteArray(4096))
+                error("rigged mid-write failure")
+            }
+        }
+        assertTrue(failure.isFailure)
+        assertEquals(emptyList<String>(), dir.list()!!.toList())
+    }
 
     // ---------------------------------------------------------------- scenario (g)
     /** Data-only restore is a first-class outcome: rows come back reading "Not on this device". */
