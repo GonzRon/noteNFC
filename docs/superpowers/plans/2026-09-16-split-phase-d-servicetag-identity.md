@@ -2055,7 +2055,7 @@ git grep -lIE 'com\.loosecannon\.notenfc|notenfc://|md5_short|noteNFC|NoteNfc' \
   -- app core gradle settings.gradle.kts README.md
 ```
 
-Expected: **no output**, except the one line this plan permits — `app/src/test/kotlin/com/loosecannon/servicetag/ui/backup/BackupViewModelTest.kt`, whose retired-prefix import test names `noteNFC-data-20260915-101010.zip` on purpose (Task 10). Confirm that is the only reason:
+Expected: **no output**, except the two files this plan permits — `app/src/test/kotlin/com/loosecannon/servicetag/ui/backup/BackupViewModelTest.kt` and `app/src/androidTest/kotlin/com/loosecannon/servicetag/nfc/TagIdentityDispatchTest.kt` (its one line is the retired type as a negative case, O3), whose retired-prefix import test names `noteNFC-data-20260915-101010.zip` on purpose (Task 10). Confirm that is the only reason:
 
 ```bash
 git grep -nIE 'noteNFC' -- app core gradle settings.gradle.kts README.md
@@ -2094,7 +2094,7 @@ uses-permission: name='android.permission.NFC'
 - [ ] **Step 3: The merged manifest carries one filter, on the new type**
 
 ```bash
-MERGED="$(find app/build/intermediates -name AndroidManifest.xml -path '*ebug*' | head -1)"
+MERGED="$(find app/build/intermediates -name AndroidManifest.xml -path '*/processDebugMainManifest/*' | head -1)"   # the app manifest, not the androidTest one
 grep -oE 'android:(path|scheme)="[^"]*"' "$MERGED" | sort -u
 grep -c 'NDEF_DISCOVERED' "$MERGED"
 grep -c 'notenfc' "$MERGED"
@@ -2121,7 +2121,7 @@ export ANDROID_SERIAL=emulator-5554
 adb uninstall com.loosecannon.servicetag || true
 adb uninstall com.loosecannon.notenfc || true          # nothing of the retired package survives here
 ./gradlew :app:installDebug --console=plain
-adb shell monkey -p com.loosecannon.servicetag -c android.intent.category.LAUNCHER 1
+adb shell am start -W -n com.loosecannon.servicetag/.MainActivity   # not monkey: the debug build has two LAUNCHER activities
 adb shell pm list packages | grep loosecannon
 adb shell run-as com.loosecannon.servicetag ls databases
 adb shell run-as com.loosecannon.servicetag ls shared_prefs
@@ -2134,7 +2134,7 @@ The fresh install holds **no persisted SAF tree grant**, so Settings → Attachm
 - [ ] **Step 6: The clean-checkout build (§26)**
 
 ```bash
-CLEAN="$(mktemp -d)"
+CLEAN="$(mktemp -d -p "$SCRATCH")"   # a throwaway dir; a fresh clone has no local.properties, so ANDROID_HOME must be set
 git clone --no-local --branch product-split . "$CLEAN/ServiceTag"
 cd "$CLEAN/ServiceTag" && ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain
 ```
