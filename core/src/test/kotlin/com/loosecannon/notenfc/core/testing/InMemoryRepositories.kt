@@ -344,7 +344,7 @@ class InMemoryEventRepository : EventRepository, Rollbackable, Witnessed {
     override fun observe(id: EventId): Flow<AssetEvent?> = version.map { rows[id.value] }
 }
 
-class InMemoryAttachmentRepository : AttachmentRepository, Rollbackable, Witnessed {
+open class InMemoryAttachmentRepository : AttachmentRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, Attachment>()
     override var witness: TransactionWitness? = null
     private val version = MutableStateFlow(0)

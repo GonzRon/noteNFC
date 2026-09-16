@@ -1,5 +1,7 @@
 package com.loosecannon.notenfc.core.backup
 
+import com.loosecannon.notenfc.core.model.AttachmentOwner
+import com.loosecannon.notenfc.core.model.EventId
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
@@ -10,7 +12,11 @@ import kotlin.random.Random
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Test
 
 class BackupCodecTest {
@@ -165,8 +171,14 @@ class BackupCodecTest {
         return rezip(entries)
     }
 
-    private fun encoded(data: BackupData = fixture()): ByteArray =
-        BackupCodec.encode(data, appVersion = "2.0", schemaVersion = 1, createdAt = 1_726_000_000_000L)
+    private fun encoded(data: BackupData = fixture(), setId: String = "set-1"): ByteArray =
+        BackupCodec.encode(
+            data,
+            appVersion = "2.0",
+            schemaVersion = 1,
+            createdAt = 1_726_000_000_000L,
+            backupSetId = setId,
+        )
 
     // --- tests ---------------------------------------------------------------------------------
 
@@ -206,6 +218,7 @@ class BackupCodecTest {
                 "measurementDefinitions" to 0, "eventProfiles" to 0, "assetEvents" to 0,
                 "profileFields" to 0, "profileConsumables" to 0,
                 "measurements" to 0, "consumableUsages" to 0,
+                "attachments" to 0,
             ),
             manifest.counts,
         )
@@ -250,11 +263,11 @@ class BackupCodecTest {
     fun `a newer format version is refused`() {
         val entries = unzip(encoded())
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*4"), "\"formatVersion\": 5")
+            .replace(Regex("\"formatVersion\"\\s*:\\s*5"), "\"formatVersion\": 6")
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val e = assertFailsWith<BackupNewerFormat> { BackupCodec.decode(rezip(entries)) }
-        assertEquals(5, e.found)
-        assertEquals(4, e.supported)
+        assertEquals(6, e.found)
+        assertEquals(5, e.supported)
     }
 
     @Test
@@ -379,7 +392,7 @@ class BackupCodecTest {
         repeat(50) { round ->
             val data = randomData(rng)
             val decoded = BackupCodec.decode(
-                BackupCodec.encode(data, "2.0", 1, rng.nextLong(0, 2_000_000_000_000L)),
+                BackupCodec.encode(data, "2.0", 1, rng.nextLong(0, 2_000_000_000_000L), "set-1"),
             )
             assertEquals(data, decoded.data, "round $round did not survive the round trip")
         }
@@ -395,6 +408,7 @@ class BackupCodecTest {
             appVersion = "2.0",
             schemaVersion = 1,
             createdAt = 1_726_000_000_000L,
+            backupSetId = "",
             formatVersion = 1,
         )
         val decoded = BackupCodec.decode(bytes)
@@ -416,6 +430,7 @@ class BackupCodecTest {
                 "measurementDefinitions" to 1, "eventProfiles" to 1, "assetEvents" to 1,
                 "profileFields" to 1, "profileConsumables" to 1,
                 "measurements" to 1, "consumableUsages" to 1,
+                "attachments" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -550,6 +565,7 @@ class BackupCodecTest {
             appVersion = "2.0",
             schemaVersion = 1,
             createdAt = 1_726_000_000_000L,
+            backupSetId = "",
             formatVersion = 2,
         )
         val decoded = BackupCodec.decode(bytes)
@@ -653,6 +669,7 @@ class BackupCodecTest {
             appVersion = "2.0",
             schemaVersion = 1,
             createdAt = 1_726_000_000_000L,
+            backupSetId = "",
             formatVersion = 3,
         )
         val decoded = BackupCodec.decode(bytes)
@@ -697,7 +714,7 @@ class BackupCodecTest {
         )
         val decoded = BackupCodec.decode(encoded(data))
         assertEquals(data, decoded.data)
-        assertEquals(4, decoded.manifest.formatVersion)
+        assertEquals(5, decoded.manifest.formatVersion)
     }
 
     @Test
@@ -752,6 +769,202 @@ class BackupCodecTest {
         val data = BackupData(assets = listOf(bad), nfcTags = emptyList(), externalLinks = emptyList())
         val e = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data)) }
         assertTrue(e.message!!.contains("a1"), "unhelpful: ${e.message}")
+    }
+
+    // --- attachments (format 5) -------------------------------------------------------------------
+
+    private fun attachmentDto(
+        id: String,
+        assetId: String? = "a1",
+        eventId: String? = null,
+        locator: String = "assets/a1/$id.pdf",
+        sha256: String = "a".repeat(64),
+        sizeBytes: Long = 12L,
+        mode: String = "MANAGED",
+    ) = AttachmentDto(
+        id = id, assetId = assetId, eventId = eventId, kind = "DOCUMENT", mode = mode,
+        displayName = "Manual.pdf", mimeType = "application/pdf", sizeBytes = sizeBytes,
+        sha256 = sha256, storageProvider = "SAF_TREE", storageLocator = locator,
+        capturedOn = "2026-09-15", notes = "", createdAt = 1L, updatedAt = 2L,
+    )
+
+    @Test
+    fun formatFiveRoundTripsAttachmentsOnBothOwners() {
+        val data = BackupData(
+            assets = listOf(assetDto("a1")),
+            nfcTags = emptyList(),
+            externalLinks = emptyList(),
+            assetEvents = listOf(assetEventDto("e1", "a1")),
+            attachments = listOf(
+                attachmentDto("att-1"),
+                attachmentDto("att-2", assetId = null, eventId = "e1", locator = "events/e1/att-2.jpg"),
+            ),
+        )
+        val decoded = BackupCodec.decode(encoded(data))
+
+        assertEquals(5, decoded.manifest.formatVersion)
+        assertEquals("set-1", decoded.manifest.backupSetId)
+        assertEquals(1, decoded.manifest.artifactFormatVersion)
+        assertEquals(2, decoded.manifest.artifactCount)
+        assertEquals(24L, decoded.manifest.artifactBytes)
+        assertEquals(2, decoded.manifest.counts["attachments"])
+        assertEquals(data.attachments, decoded.data.attachments)
+        assertEquals(
+            AttachmentOwner.OfEvent(EventId("e1")),
+            decoded.data.attachments.first { it.id == "att-2" }.toDomain().owner,
+        )
+    }
+
+    @Test
+    fun aReferenceRowIsNotCountedAsAnArtifact() {
+        val data = BackupData(
+            assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList(),
+            attachments = listOf(
+                attachmentDto("att-1"),
+                attachmentDto("att-2", mode = "REFERENCE", locator = "assets/a1/att-2.pdf"),
+            ),
+        )
+        val manifest = BackupCodec.decode(encoded(data)).manifest
+        assertEquals(1, manifest.artifactCount)
+        assertEquals(12L, manifest.artifactBytes)
+        assertEquals(2, manifest.counts["attachments"])
+    }
+
+    @Test
+    fun formatFourFileStillDecodesWithNoAttachments() {
+        val data = BackupData(assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList())
+        val bytes = BackupCodec.encode(data, "2.3", 4, 1L, backupSetId = "", formatVersion = 4)
+        val decoded = BackupCodec.decode(bytes)
+        assertEquals(4, decoded.manifest.formatVersion)
+        assertEquals("", decoded.manifest.backupSetId)
+        assertTrue(decoded.data.attachments.isEmpty())
+        assertEquals(0, decoded.manifest.artifactCount)
+        assertEquals(0L, decoded.manifest.artifactBytes)
+    }
+
+    /** Drops [keys] from a JSON object entirely, the way a writer that never knew them would. */
+    private fun withoutKeys(text: String, keys: Set<String>): String {
+        val kept = Json.parseToJsonElement(text).jsonObject.filterKeys { it !in keys }
+        return Json.encodeToString(JsonObject.serializer(), JsonObject(kept))
+    }
+
+    @Test
+    fun aFormatFourArchiveMissingTheNewKeysEntirelyStillDecodes() {
+        val data = BackupData(assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList())
+        val bytes = BackupCodec.encode(data, "2.3", 4, 1L, backupSetId = "", formatVersion = 4)
+
+        // A real format-4 writer never emitted these keys at all, so resealing our own encoder's
+        // empty values would prove nothing about reading an actually-old file. Strip them for real.
+        val strippedData = withoutKeys(
+            String(unzip(bytes).getValue(BackupCodec.DATA_ENTRY), Charsets.UTF_8),
+            setOf("attachments"),
+        )
+        assertFalse("attachments" in strippedData, "the fixture still carries the new data key")
+        val entries = unzip(resealed(bytes, strippedData.toByteArray(Charsets.UTF_8)))
+        val strippedManifest = withoutKeys(
+            String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8),
+            setOf("backupSetId", "artifactFormatVersion", "artifactCount", "artifactBytes"),
+        )
+        assertFalse("backupSetId" in strippedManifest, "the fixture still carries the new manifest keys")
+        entries[BackupCodec.MANIFEST_ENTRY] = strippedManifest.toByteArray(Charsets.UTF_8)
+
+        val decoded = BackupCodec.decode(rezip(entries))
+        assertEquals(4, decoded.manifest.formatVersion)
+        assertEquals("", decoded.manifest.backupSetId)
+        assertEquals(1, decoded.manifest.artifactFormatVersion)
+        assertEquals(0, decoded.manifest.artifactCount)
+        assertEquals(0L, decoded.manifest.artifactBytes)
+        assertTrue(decoded.data.attachments.isEmpty())
+        assertEquals(data, decoded.data)
+    }
+
+    @Test
+    fun aFormatFiveFileWithNoSetIdIsCorrupt() {
+        val data = BackupData(assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList())
+        val boom = assertFailsWith<BackupCorrupt> { BackupCodec.decode(encoded(data, setId = "  ")) }
+        assertTrue("backupSetId" in boom.message!!, "unhelpful: ${boom.message}")
+    }
+
+    @Test
+    fun anAttachmentWithNoOwnerOrTwoOwnersIsCorrupt() {
+        val base = BackupData(assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList())
+        val noOwner = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(attachmentDto("att-1", assetId = null)))))
+        }
+        assertTrue("exactly one owner" in noOwner.message!!, "unhelpful: ${noOwner.message}")
+        val twoOwners = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(attachmentDto("att-1", eventId = "e1")))))
+        }
+        assertTrue("exactly one owner" in twoOwners.message!!, "unhelpful: ${twoOwners.message}")
+    }
+
+    @Test
+    fun anAttachmentPointingAtARowThatIsNotInTheFileIsCorrupt() {
+        val base = BackupData(assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList())
+        val onAGhostAsset = attachmentDto("att-1", assetId = "a9", locator = "assets/a9/att-1.pdf")
+        val ghostAsset = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(onAGhostAsset))))
+        }
+        assertTrue("not in assets" in ghostAsset.message!!, "unhelpful: ${ghostAsset.message}")
+        val onAGhostEvent = attachmentDto("att-2", assetId = null, eventId = "e9", locator = "events/e9/att-2.pdf")
+        val ghostEvent = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(onAGhostEvent))))
+        }
+        assertTrue("not in assetEvents" in ghostEvent.message!!, "unhelpful: ${ghostEvent.message}")
+    }
+
+    @Test
+    fun aBadShaABadLocatorANegativeSizeAndADuplicateLocatorAreAllCorrupt() {
+        val base = BackupData(assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList())
+        // uppercase hex is not the lowercase-hex shape the row promises
+        val upperSha = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(attachmentDto("att-1", sha256 = "A".repeat(64))))))
+        }
+        assertTrue("sha256" in upperSha.message!!, "unhelpful: ${upperSha.message}")
+        val shortSha = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(attachmentDto("att-1", sha256 = "abc")))))
+        }
+        assertTrue("sha256" in shortSha.message!!, "unhelpful: ${shortSha.message}")
+        val negative = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(attachmentDto("att-1", sizeBytes = -1L)))))
+        }
+        assertTrue("negative size" in negative.message!!, "unhelpful: ${negative.message}")
+        // a locator that belongs to another row's id
+        val strayLocator = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(attachmentDto("att-1", locator = "assets/a1/att-9.pdf")))))
+        }
+        assertTrue("not its own" in strayLocator.message!!, "unhelpful: ${strayLocator.message}")
+        // an event-shaped locator on an asset-owned row is not its own either
+        val wrongOwnerDir = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(encoded(base.copy(attachments = listOf(attachmentDto("att-1", locator = "events/a1/att-1.pdf")))))
+        }
+        assertTrue("not its own" in wrongOwnerDir.message!!, "unhelpful: ${wrongOwnerDir.message}")
+        // two rows claiming the same provider + locator. A locator always carries its own row's
+        // id (AttachmentLocator.matchesShape), so the duplicate id is what a real file trips on
+        // first; the locator set behind it is belt and braces for a later, looser provider.
+        val twins = assertFailsWith<BackupCorrupt> {
+            BackupCodec.decode(
+                encoded(
+                    base.copy(
+                        attachments = listOf(
+                            attachmentDto("att-1", locator = "assets/a1/att-1.pdf"),
+                            attachmentDto("att-1", locator = "assets/a1/att-1.pdf"),
+                        ),
+                    ),
+                ),
+            )
+        }
+        assertTrue("att-1" in twins.message!!, "unhelpful: ${twins.message}")
+    }
+
+    @Test
+    fun encodeIsStillReproducibleAndAttachmentsAreSortedById() {
+        val data = BackupData(
+            assets = listOf(assetDto("a1")), nfcTags = emptyList(), externalLinks = emptyList(),
+            attachments = listOf(attachmentDto("att-2", locator = "assets/a1/att-2.pdf"), attachmentDto("att-1")),
+        )
+        assertContentEquals(encoded(data), encoded(data))
+        assertEquals(listOf("att-1", "att-2"), BackupCodec.decode(encoded(data)).data.attachments.map { it.id })
     }
 
     // --- random fixture generation (ids pre-sorted, so the identity is literal) -----------------

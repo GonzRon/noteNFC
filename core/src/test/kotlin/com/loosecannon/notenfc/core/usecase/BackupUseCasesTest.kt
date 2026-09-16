@@ -6,6 +6,10 @@ import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.Attachment
+import com.loosecannon.notenfc.core.model.AttachmentId
+import com.loosecannon.notenfc.core.model.AttachmentKind
+import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.ConsumableUsage
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.DefinitionKind
@@ -29,9 +33,13 @@ import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.core.model.ValueType
+import com.loosecannon.notenfc.core.ports.ByteSource
 import com.loosecannon.notenfc.core.ports.Clock
+import com.loosecannon.notenfc.core.ports.IdGenerator
+import com.loosecannon.notenfc.core.testing.FakeAttachmentStorage
 import com.loosecannon.notenfc.core.testing.FakeUnitOfWork
 import com.loosecannon.notenfc.core.testing.InMemoryAssetRepository
+import com.loosecannon.notenfc.core.testing.InMemoryAttachmentRepository
 import com.loosecannon.notenfc.core.testing.InMemoryDefinitionRepository
 import com.loosecannon.notenfc.core.testing.InMemoryEventRepository
 import com.loosecannon.notenfc.core.testing.InMemoryLinkRepository
@@ -45,6 +53,7 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
@@ -55,12 +64,14 @@ class BackupUseCasesTest {
     private class Fakes(
         val definitions: InMemoryDefinitionRepository = InMemoryDefinitionRepository(),
         val assets: InMemoryAssetRepository = InMemoryAssetRepository(),
+        val attachments: InMemoryAttachmentRepository = InMemoryAttachmentRepository(),
     ) {
         val tags = InMemoryTagRepository()
         val links = InMemoryLinkRepository()
         val profiles = InMemoryProfileRepository()
         val events = InMemoryEventRepository()
-        val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events)
+        val storage = FakeAttachmentStorage()
+        val uow = FakeUnitOfWork(assets, tags, links, definitions, profiles, events, attachments)
     }
 
     private fun asset(
@@ -155,6 +166,20 @@ class BackupUseCasesTest {
         measurements = measurements, consumables = consumables,
     )
 
+    private fun attachment(id: String, owner: AttachmentOwner, locator: String) = Attachment(
+        id = AttachmentId(id),
+        owner = owner,
+        kind = AttachmentKind.DOCUMENT,
+        displayName = "Manual.pdf",
+        mimeType = "application/pdf",
+        sizeBytes = 12L,
+        sha256 = "a".repeat(64),
+        storageLocator = locator,
+        capturedOn = null,
+        createdAt = 1L,
+        updatedAt = 2L,
+    )
+
     private suspend fun populate(f: Fakes) {
         f.assets.upsert(asset("a1", "Furnace"))
         f.assets.upsert(asset("a2", "Mower", AssetStatus.ARCHIVED))
@@ -189,13 +214,16 @@ class BackupUseCasesTest {
 
     private fun exportOf(f: Fakes, now: Long = 1_726_000_000_000L): ByteArray = runBlocking {
         ExportBackup(
-            f.assets, f.tags, f.links, f.definitions, f.profiles, f.events,
-            f.uow, Clock { now }, appVersion = "2.0", schemaVersion = 1,
+            f.assets, f.tags, f.links, f.definitions, f.profiles, f.events, f.attachments,
+            f.uow, Clock { now }, IdGenerator { "set-1" }, appVersion = "2.0", schemaVersion = 1,
         ).run()
     }
 
     private fun importInto(f: Fakes, bytes: ByteArray): ImportReport = runBlocking {
-        ImportBackupReplace(f.assets, f.tags, f.links, f.definitions, f.profiles, f.events, f.uow).run(bytes)
+        ImportBackupReplace(
+            f.assets, f.tags, f.links, f.definitions, f.profiles, f.events, f.attachments,
+            f.storage, f.uow,
+        ).run(bytes)
     }
 
     @Test
@@ -213,7 +241,10 @@ class BackupUseCasesTest {
             assertEquals(source.links.all().sortedBy { it.id.value }, target.links.all().sortedBy { it.id.value })
         }
         assertEquals(
-            ImportReport(formatVersion = 4, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0, events = 0),
+            ImportReport(
+                formatVersion = 5, assets = 3, tags = 4, links = 3, definitions = 0, profiles = 0,
+                events = 0, attachments = 0, lastRestoredBackupSetId = "set-1",
+            ),
             report,
         )
     }
@@ -318,8 +349,8 @@ class BackupUseCasesTest {
         runBlocking { target.assets.upsert(asset("untouched", "Untouched")) }
 
         val e = assertFailsWith<BackupNewerFormat> { importInto(target, bytes) }
-        assertEquals(5, e.found)
-        assertEquals(4, e.supported)
+        assertEquals(6, e.found)
+        assertEquals(5, e.supported)
 
         runBlocking {
             assertEquals(listOf("untouched"), target.assets.all().map { it.id.value })
@@ -343,6 +374,7 @@ class BackupUseCasesTest {
                 "measurementDefinitions" to 0, "eventProfiles" to 0, "assetEvents" to 0,
                 "profileFields" to 0, "profileConsumables" to 0,
                 "measurements" to 0, "consumableUsages" to 0,
+                "attachments" to 0,
             ),
             decoded.manifest.counts,
         )
@@ -350,7 +382,13 @@ class BackupUseCasesTest {
         val target = Fakes()
         runBlocking { target.assets.upsert(asset("gone", "Gone")) }
         val report = importInto(target, exportOf(f))
-        assertEquals(ImportReport(formatVersion = 4, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0, events = 0), report)
+        assertEquals(
+            ImportReport(
+                formatVersion = 5, assets = 0, tags = 0, links = 0, definitions = 0, profiles = 0,
+                events = 0, attachments = 0, lastRestoredBackupSetId = "set-1",
+            ),
+            report,
+        )
         runBlocking { assertTrue(target.assets.all().isEmpty()) }
     }
 
@@ -395,7 +433,10 @@ class BackupUseCasesTest {
         val report = importInto(target, bytes)
 
         assertEquals(
-            ImportReport(formatVersion = 4, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1, events = 1),
+            ImportReport(
+                formatVersion = 5, assets = 1, tags = 0, links = 0, definitions = 1, profiles = 1,
+                events = 1, attachments = 0, lastRestoredBackupSetId = "set-1",
+            ),
             report,
         )
         runBlocking {
@@ -446,7 +487,8 @@ class BackupUseCasesTest {
         val v2Bytes = exportOf(source)
 
         val v2Report = importInto(Fakes(), v2Bytes)
-        assertEquals(4, v2Report.formatVersion)
+        assertEquals(5, v2Report.formatVersion)
+        assertEquals("set-1", v2Report.lastRestoredBackupSetId)
 
         // reseal the same, already-valid data under a manifest claiming format 1 — the same
         // trick BackupCodecTest's formatOneFileStillDecodes uses.
@@ -456,10 +498,110 @@ class BackupUseCasesTest {
             appVersion = "2.0",
             schemaVersion = 1,
             createdAt = 1_726_000_000_000L,
+            backupSetId = "",
             formatVersion = 1,
         )
         val v1Report = importInto(Fakes(), v1Bytes)
         assertEquals(1, v1Report.formatVersion)
+        assertEquals("", v1Report.lastRestoredBackupSetId)
+    }
+
+    // --- attachments (format 5) -------------------------------------------------------------------
+
+    @Test
+    fun `attachment rows survive the round trip and are reported`() {
+        val source = Fakes()
+        runBlocking {
+            populate(source)
+            populateJournal(source)
+            source.attachments.upsert(attachment("att-1", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-1.pdf"))
+            source.attachments.upsert(attachment("att-2", AttachmentOwner.OfEvent(EventId("e1")), "events/e1/att-2.jpg"))
+        }
+        val target = Fakes()
+        val report = importInto(target, exportOf(source))
+
+        runBlocking {
+            assertEquals(
+                source.attachments.all().sortedBy { it.id.value },
+                target.attachments.all().sortedBy { it.id.value },
+            )
+        }
+        assertEquals(2, report.attachments)
+        assertEquals(5, report.formatVersion)
+        assertEquals("set-1", report.lastRestoredBackupSetId)
+    }
+
+    @Test
+    fun `a replace import deletes the bytes of the rows it replaced`() {
+        val target = Fakes()
+        runBlocking {
+            populate(target)
+            target.attachments.upsert(attachment("old", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/old.pdf"))
+            target.storage.store.put("assets/a1/old.pdf", ByteSource { "x".toByteArray().inputStream() })
+        }
+        val source = Fakes()
+        runBlocking { populate(source) }
+        importInto(target, exportOf(source))
+
+        runBlocking {
+            assertTrue(target.attachments.all().isEmpty())
+            assertFalse(target.storage.store.exists("assets/a1/old.pdf"))
+        }
+    }
+
+    @Test
+    fun `a row that comes back in the file keeps its bytes`() {
+        val f = Fakes()
+        runBlocking {
+            populate(f)
+            f.attachments.upsert(attachment("att-1", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-1.pdf"))
+            f.storage.store.put("assets/a1/att-1.pdf", ByteSource { "x".toByteArray().inputStream() })
+        }
+        importInto(f, exportOf(f)) // export and re-import the same install
+
+        runBlocking {
+            assertEquals(listOf("att-1"), f.attachments.all().map { it.id.value })
+            assertTrue(f.storage.store.exists("assets/a1/att-1.pdf"))
+        }
+        assertEquals(0, f.storage.store.deletes)
+    }
+
+    /** Fails an upsert whose owner row is not in yet, to prove attachment rows go in last. */
+    private class FkCheckingAttachmentRepository : InMemoryAttachmentRepository() {
+        lateinit var assets: InMemoryAssetRepository
+        lateinit var events: InMemoryEventRepository
+
+        override suspend fun upsert(a: Attachment) {
+            val ownerIsIn = when (val owner = a.owner) {
+                is AttachmentOwner.OfAsset -> assets.get(owner.assetId) != null
+                is AttachmentOwner.OfEvent -> events.get(owner.eventId) != null
+            }
+            check(ownerIsIn) { "attachment ${a.id.value} has an owner that is not inserted yet" }
+            super.upsert(a)
+        }
+    }
+
+    @Test
+    fun `attachment rows are written after the owners they point at`() {
+        val source = Fakes()
+        runBlocking {
+            populate(source)
+            populateJournal(source)
+            source.attachments.upsert(attachment("att-1", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-1.pdf"))
+            source.attachments.upsert(attachment("att-2", AttachmentOwner.OfEvent(EventId("e1")), "events/e1/att-2.jpg"))
+        }
+        val target = Fakes(attachments = FkCheckingAttachmentRepository())
+        (target.attachments as FkCheckingAttachmentRepository).let {
+            it.assets = target.assets
+            it.events = target.events
+        }
+
+        val report = importInto(target, exportOf(source))
+
+        assertEquals(2, report.attachments)
+        runBlocking {
+            assertEquals(listOf("att-1", "att-2"), target.attachments.all().map { it.id.value })
+        }
     }
 
     /** Fails a DERIVED upsert whose sources are not yet in [rows], to prove insert order. */
@@ -560,7 +702,7 @@ class BackupUseCasesTest {
             }
         }
         val manifest = String(entries.getValue(BackupCodec.MANIFEST_ENTRY), Charsets.UTF_8)
-            .replace(Regex("\"formatVersion\"\\s*:\\s*4"), "\"formatVersion\": 5")
+            .replace(Regex("\"formatVersion\"\\s*:\\s*5"), "\"formatVersion\": 6")
         entries[BackupCodec.MANIFEST_ENTRY] = manifest.toByteArray(Charsets.UTF_8)
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zos ->

@@ -4,19 +4,25 @@ import com.loosecannon.notenfc.core.backup.BackupCodec
 import com.loosecannon.notenfc.core.backup.BackupData
 import com.loosecannon.notenfc.core.backup.toDto
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.AttachmentRepository
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
+import com.loosecannon.notenfc.core.ports.IdGenerator
 import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 
 /**
- * Reads every canonical table and returns the bytes of a v2 backup. Writing them is the caller's job.
+ * Reads every canonical table and returns the bytes of the data archive. Writing them is the
+ * caller's job.
  *
- * All seven table reads happen in one read transaction, so the file is a single consistent point
+ * Every table read happens inside one read transaction, so the file is a single consistent point
  * in time: a write landing mid-export cannot leave a tag in the archive whose asset is not.
+ *
+ * Each archive gets a fresh `backupSetId`, which is what a later restore matches the artifacts
+ * archive against.
  */
 class ExportBackup(
     private val assets: AssetRepository,
@@ -25,8 +31,10 @@ class ExportBackup(
     private val definitions: DefinitionRepository,
     private val profiles: ProfileRepository,
     private val events: EventRepository,
+    private val attachments: AttachmentRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
+    private val ids: IdGenerator,
     private val appVersion: String,
     private val schemaVersion: Int,
 ) {
@@ -39,6 +47,7 @@ class ExportBackup(
                 measurementDefinitions = definitions.all().map { it.toDto() },
                 eventProfiles = profiles.all().map { it.toDto() },
                 assetEvents = events.all().map { it.toDto() },
+                attachments = attachments.all().map { it.toDto() },
             )
         }
         return BackupCodec.encode(
@@ -46,6 +55,7 @@ class ExportBackup(
             appVersion = appVersion,
             schemaVersion = schemaVersion,
             createdAt = clock.nowMillis(),
+            backupSetId = ids.newId(),
         )
     }
 }

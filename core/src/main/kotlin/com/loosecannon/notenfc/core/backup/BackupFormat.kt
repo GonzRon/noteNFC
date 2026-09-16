@@ -4,6 +4,11 @@ import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.Attachment
+import com.loosecannon.notenfc.core.model.AttachmentId
+import com.loosecannon.notenfc.core.model.AttachmentKind
+import com.loosecannon.notenfc.core.model.AttachmentMode
+import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.ConsumableUsage
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.DefinitionKind
@@ -22,6 +27,7 @@ import com.loosecannon.notenfc.core.model.PayloadFormat
 import com.loosecannon.notenfc.core.model.ProfileConsumable
 import com.loosecannon.notenfc.core.model.ProfileField
 import com.loosecannon.notenfc.core.model.ProfileId
+import com.loosecannon.notenfc.core.model.StorageProvider
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagStatus
@@ -32,6 +38,10 @@ import kotlinx.serialization.Serializable
 /**
  * What the backup says about itself. `dataSha256` is the hex SHA-256 of the exact
  * `data.json` bytes in the same archive, so a truncated or edited file is caught on read.
+ *
+ * `formatVersion` keeps its name and becomes 5 (spec §11.4 — D7's `dataFormatVersion` is this
+ * field; renaming it would break the branch-on-version reader). The four new fields carry
+ * defaults so a format ≤4 manifest still decodes.
  */
 @Serializable
 data class BackupManifest(
@@ -41,6 +51,11 @@ data class BackupManifest(
     val createdAt: Long,
     val counts: Map<String, Int>,
     val dataSha256: String,
+    /** Ties this data archive to its artifacts archive. Empty only on a format ≤4 file. */
+    val backupSetId: String = "",
+    val artifactFormatVersion: Int = 1,
+    val artifactCount: Int = 0,
+    val artifactBytes: Long = 0L,
 )
 
 @Serializable
@@ -192,6 +207,26 @@ data class AssetEventDto(
     val consumables: List<ConsumableUsageDto>,
 )
 
+/** Owner is `assetId` xor `eventId`; there is no SQL CHECK, so the readers are the rule (§11.5). */
+@Serializable
+data class AttachmentDto(
+    val id: String,
+    val assetId: String?,
+    val eventId: String?,
+    val kind: String,
+    val mode: String,
+    val displayName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val sha256: String,
+    val storageProvider: String,
+    val storageLocator: String,
+    val capturedOn: String?,
+    val notes: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 /** The canonical tables. Everything derived is rebuilt after an import. */
 @Serializable
 data class BackupData(
@@ -201,6 +236,7 @@ data class BackupData(
     val measurementDefinitions: List<MeasurementDefinitionDto> = emptyList(),
     val eventProfiles: List<EventProfileDto> = emptyList(),
     val assetEvents: List<AssetEventDto> = emptyList(),
+    val attachments: List<AttachmentDto> = emptyList(),
 )
 
 /** A decoded archive: what it claims about itself, and what it holds. */
@@ -520,3 +556,46 @@ fun AssetEventDto.toDomain(): AssetEvent = AssetEvent(
     measurements = measurements.map { it.toDomain() },
     consumables = consumables.map { it.toDomain() },
 )
+
+fun Attachment.toDto(): AttachmentDto = AttachmentDto(
+    id = id.value,
+    assetId = (owner as? AttachmentOwner.OfAsset)?.assetId?.value,
+    eventId = (owner as? AttachmentOwner.OfEvent)?.eventId?.value,
+    kind = kind.name,
+    mode = mode.name,
+    displayName = displayName,
+    mimeType = mimeType,
+    sizeBytes = sizeBytes,
+    sha256 = sha256,
+    storageProvider = storageProvider.name,
+    storageLocator = storageLocator,
+    capturedOn = capturedOn,
+    notes = notes,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+fun AttachmentDto.toDomain(): Attachment {
+    if ((assetId == null) == (eventId == null)) {
+        throw BackupCorrupt("attachment $id must name exactly one owner, an asset or an event")
+    }
+    return Attachment(
+        id = AttachmentId(id),
+        owner = assetId?.let { AttachmentOwner.OfAsset(AssetId(it)) }
+            ?: AttachmentOwner.OfEvent(EventId(eventId!!)),
+        kind = enumOrCorrupt<AttachmentKind>(kind, "attachment kind", "attachment $id"),
+        mode = enumOrCorrupt<AttachmentMode>(mode, "attachment mode", "attachment $id"),
+        displayName = displayName,
+        mimeType = mimeType,
+        sizeBytes = sizeBytes,
+        sha256 = sha256,
+        storageProvider = enumOrCorrupt<StorageProvider>(
+            storageProvider, "storage provider", "attachment $id",
+        ),
+        storageLocator = storageLocator,
+        capturedOn = capturedOn,
+        notes = notes,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
+}

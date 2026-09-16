@@ -2,6 +2,9 @@ package com.loosecannon.notenfc.core.backup
 
 import com.loosecannon.notenfc.core.journal.derivedProblems
 import com.loosecannon.notenfc.core.model.AssetTree
+import com.loosecannon.notenfc.core.model.AttachmentLocator
+import com.loosecannon.notenfc.core.model.AttachmentMode
+import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.Money
@@ -19,46 +22,59 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Backup format v4: a ZIP holding exactly two entries.
+ * Backup format v5: a ZIP holding exactly two entries. This is the *data* archive; a format-5
+ * backup set pairs it with an artifacts archive, and `backupSetId` is what ties the two together.
  *
  * ```
- * manifest.json   { formatVersion, appVersion, schemaVersion, createdAt, counts, dataSha256 }
+ * manifest.json   { formatVersion, appVersion, schemaVersion, createdAt, counts, dataSha256,
+ *                    backupSetId, artifactFormatVersion, artifactCount, artifactBytes }
  * data.json       { assets: [...], nfcTags: [...], externalLinks: [...],
- *                    measurementDefinitions: [...], eventProfiles: [...], assetEvents: [...] }
+ *                    measurementDefinitions: [...], eventProfiles: [...], assetEvents: [...],
+ *                    attachments: [...] }
  * ```
  *
  * IDs are written verbatim, lists are sorted by id (children by sortOrder within their parent),
  * and the manifest carries the SHA-256 of the data entry, so the same input always produces the
  * same bytes and an edited file is refused. A format-1 file (the three original lists only), a
  * format-2 file (measurementDefinitions without kind/formula/sourceAId/sourceBId — every DERIVED
- * definition needs those) and a format-3 file (assets without the §4 fields) still decode: the
- * new fields default to ENTERED with no formula/sources, and to empty/null asset fields,
- * respectively. JDK ZIP + JDK SHA-256 + kotlinx-serialization only; no Android types anywhere in
- * here.
+ * definition needs those), a format-3 file (assets without the §4 fields) and a format-4 file
+ * (no attachments and none of the four new manifest fields) still decode: the new fields default
+ * to ENTERED with no formula/sources, to empty/null asset fields, and to an empty attachment list
+ * with an empty `backupSetId` and zero artifact tallies, respectively. JDK ZIP + JDK SHA-256 +
+ * kotlinx-serialization only; no Android types anywhere in here.
  */
 object BackupCodec {
-    const val FORMAT_VERSION = 4
+    const val FORMAT_VERSION = 5
     const val MANIFEST_ENTRY = "manifest.json"
     const val DATA_ENTRY = "data.json"
+
+    /** Lowercase hex, 64 chars — the shape every attachment row promises for its bytes. */
+    private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
 
     private val json = Json {
         prettyPrint = true
         encodeDefaults = true
     }
 
-    fun encode(data: BackupData, appVersion: String, schemaVersion: Int, createdAt: Long): ByteArray =
-        encode(data, appVersion, schemaVersion, createdAt, FORMAT_VERSION)
+    fun encode(
+        data: BackupData,
+        appVersion: String,
+        schemaVersion: Int,
+        createdAt: Long,
+        backupSetId: String,
+    ): ByteArray = encode(data, appVersion, schemaVersion, createdAt, backupSetId, FORMAT_VERSION)
 
     /**
      * [formatVersion] escape hatch exists only so tests can seal a manifest that claims an older
      * format than this codec writes by default (`formatOneFileStillDecodes`). Production callers
-     * use the four-arg overload above, which always stamps [FORMAT_VERSION].
+     * use the five-arg overload above, which always stamps [FORMAT_VERSION].
      */
     internal fun encode(
         data: BackupData,
         appVersion: String,
         schemaVersion: Int,
         createdAt: Long,
+        backupSetId: String,
         formatVersion: Int,
     ): ByteArray {
         val sorted = BackupData(
@@ -78,8 +94,12 @@ object BackupCodec {
                     consumables = event.consumables.sortedBy { it.sortOrder },
                 )
             },
+            attachments = data.attachments.sortedBy { it.id },
         )
         val dataBytes = json.encodeToString(BackupData.serializer(), sorted).toByteArray(Charsets.UTF_8)
+        // The artifact tallies are derived here, in one place, from the rows themselves: a MANAGED
+        // row is a row whose bytes belong in the artifacts archive.
+        val managed = sorted.attachments.filter { it.mode == AttachmentMode.MANAGED.name }
         val manifest = BackupManifest(
             formatVersion = formatVersion,
             appVersion = appVersion,
@@ -96,8 +116,13 @@ object BackupCodec {
                 "profileConsumables" to sorted.eventProfiles.sumOf { it.consumables.size },
                 "measurements" to sorted.assetEvents.sumOf { it.measurements.size },
                 "consumableUsages" to sorted.assetEvents.sumOf { it.consumables.size },
+                "attachments" to sorted.attachments.size,
             ),
             dataSha256 = sha256Hex(dataBytes),
+            backupSetId = backupSetId,
+            artifactFormatVersion = 1,
+            artifactCount = managed.size,
+            artifactBytes = managed.sumOf { it.sizeBytes },
         )
         val manifestBytes =
             json.encodeToString(BackupManifest.serializer(), manifest).toByteArray(Charsets.UTF_8)
@@ -126,6 +151,11 @@ object BackupCodec {
             throw BackupNewerFormat(manifest.formatVersion, FORMAT_VERSION)
         }
 
+        // A format-5 file without a set id could never be paired with its artifacts archive.
+        if (manifest.formatVersion >= 5 && manifest.backupSetId.isBlank()) {
+            throw BackupCorrupt("$MANIFEST_ENTRY is format ${manifest.formatVersion} with no backupSetId")
+        }
+
         val dataBytes = entries[DATA_ENTRY]
             ?: throw BackupCorrupt("backup is missing $DATA_ENTRY")
         val actual = sha256Hex(dataBytes)
@@ -147,6 +177,7 @@ object BackupCodec {
         data.measurementDefinitions.forEach { it.toDomain() }
         data.eventProfiles.forEach { it.toDomain() }
         data.assetEvents.forEach { it.toDomain() }
+        data.attachments.forEach { it.toDomain() }
 
         // And the graph has to hold together. A replace-mode import deletes everything and then
         // replays the insert loops in one transaction: a duplicate id or a reference to a row
@@ -349,6 +380,40 @@ object BackupCodec {
         }
         uniqueIds("measurements", measurementIds)
         uniqueIds("consumableUsages", consumableUsageIds)
+
+        // --- attachments (spec §7.1) ---------------------------------------------------------------
+
+        val eventIds = data.assetEvents.map { it.id }.toSet()
+        uniqueIds("attachments", data.attachments.map { it.id })
+        val locators = mutableSetOf<Pair<String, String>>()
+        data.attachments.forEach { attachment ->
+            // Already proven nameable in the enum-check pass above; this is how we get the owner.
+            val domain = attachment.toDomain()
+            when (val owner = domain.owner) {
+                is AttachmentOwner.OfAsset -> if (owner.assetId.value !in assetIds) throw BackupCorrupt(
+                    "attachments: attachment ${attachment.id} points at asset ${owner.assetId.value}, " +
+                        "which is not in assets",
+                )
+                is AttachmentOwner.OfEvent -> if (owner.eventId.value !in eventIds) throw BackupCorrupt(
+                    "attachments: attachment ${attachment.id} points at event ${owner.eventId.value}, " +
+                        "which is not in assetEvents",
+                )
+            }
+            if (!SHA256_HEX.matches(attachment.sha256)) throw BackupCorrupt(
+                "attachments: attachment ${attachment.id} has a malformed sha256",
+            )
+            if (attachment.sizeBytes < 0) throw BackupCorrupt(
+                "attachments: attachment ${attachment.id} has a negative size",
+            )
+            if (!AttachmentLocator.matchesShape(attachment.storageLocator, domain.owner, domain.id)) {
+                throw BackupCorrupt(
+                    "attachments: attachment ${attachment.id} has a locator that is not its own",
+                )
+            }
+            if (!locators.add(attachment.storageProvider to attachment.storageLocator)) throw BackupCorrupt(
+                "attachments: duplicate locator ${attachment.storageLocator}",
+            )
+        }
     }
 
     private fun uniqueIds(table: String, ids: List<String>): Set<String> {
