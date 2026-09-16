@@ -113,6 +113,8 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         onLogOutcome = { asset, kind ->
                             backStack.add(Route.EventEntry(asset, null, null, kind = kind))
                         },
+                        // DOCUMENTS with no attachment folder yet: 4A adds no route of its own.
+                        onOpenSettings = { backStack.add(Route.Settings) },
                     )
                 }
                 entry<Route.AssetEdit> { key ->
@@ -181,6 +183,7 @@ fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedF
                         // the entry screen does not need one handed to it.
                         onEdit = { asset, event -> backStack.add(Route.EventEntry(asset, null, event)) },
                         onBack = { backStack.removeLastOrNull() },
+                        onOpenSettings = { backStack.add(Route.Settings) },
                     )
                 }
                 entry<Route.Links> {

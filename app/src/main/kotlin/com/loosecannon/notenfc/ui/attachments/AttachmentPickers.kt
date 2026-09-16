@@ -1,0 +1,158 @@
+package com.loosecannon.notenfc.ui.attachments
+
+import android.content.ContentResolver
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
+import com.loosecannon.notenfc.di.AppGraph
+import java.io.FilterInputStream
+import java.io.InputStream
+import java.time.LocalDate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * The two launchers and the one intent the section needs, kept out of the screens: a multi-select
+ * document picker, a camera capture into a `FileProvider` cache URI, and `ACTION_VIEW`.
+ */
+class AttachmentPickers internal constructor(
+    val addFiles: () -> Unit,
+    val takePhoto: () -> Unit,
+    val open: (AttachmentRowState) -> Unit,
+)
+
+@Composable
+fun rememberAttachmentPickers(
+    graph: AppGraph,
+    onPicked: (List<PickedFile>) -> Unit,
+    onNoViewer: () -> Unit,
+    /** Nothing on this device can take a picture. Same shape as [onNoViewer], different wording. */
+    onNoCamera: () -> Unit = onNoViewer,
+): AttachmentPickers {
+    val context = LocalContext.current
+    val resolver = context.contentResolver
+    val scope = rememberCoroutineScope()
+
+    // The capture URI has to survive both the launch and a rotation while the camera is up.
+    var pendingCapture by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val pickFiles = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) onPicked(uris.map { uri -> resolver.pickedFile(uri) })
+    }
+
+    val capture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        val uri = pendingCapture?.toUri()
+        pendingCapture = null
+        when {
+            uri == null -> Unit
+            // The copy is what consumes the temp file: closing the stream deletes it (spec §8.1).
+            saved -> onPicked(listOf(resolver.cameraFile(uri)))
+            // Cancelled, so nothing will ever read it.
+            else -> resolver.deleteQuietly(uri)
+        }
+    }
+
+    // Not remembered: three lambdas per composition are cheaper than the stale captures a
+    // `remember` here would freeze in place.
+    return AttachmentPickers(
+        addFiles = { runCatching { pickFiles.launch(arrayOf("*/*")) }.onFailure { onNoViewer() } },
+        takePhoto = {
+            val uri = graph.cameraCaptureUri()
+            pendingCapture = uri.toString()
+            runCatching { capture.launch(uri) }.onFailure {
+                pendingCapture = null
+                resolver.deleteQuietly(uri)
+                onNoCamera()
+            }
+        },
+        open = { row ->
+            scope.launch {
+                // Resolving a document under the tree is several provider queries: not the main
+                // thread's work, even for one tap (spec §8.2).
+                val uri = withContext(Dispatchers.IO) { graph.attachmentStorage.viewUri(row.locator) }
+                val intent = uri?.let { viewIntent(it, row.mimeType) }
+                if (intent == null || intent.resolveActivity(context.packageManager) == null) {
+                    onNoViewer()
+                } else {
+                    runCatching { context.startActivity(intent) }.onFailure { onNoViewer() }
+                }
+            }
+        },
+    )
+}
+
+/** `ACTION_VIEW` on the document's own URI, with the one-shot read grant the viewer needs. */
+private fun viewIntent(uri: Uri, mimeType: String): Intent =
+    Intent(Intent.ACTION_VIEW)
+        .setDataAndType(uri, mimeType)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+/** Display name, size and mime as the provider reports them; the stream is opened on demand. */
+private fun ContentResolver.pickedFile(uri: Uri): PickedFile {
+    var name = uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+    var size: Long? = null
+    runCatching {
+        query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameAt = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameAt >= 0 && !cursor.isNull(nameAt)) name = cursor.getString(nameAt)
+                    val sizeAt = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeAt >= 0 && !cursor.isNull(sizeAt)) size = cursor.getLong(sizeAt)
+                }
+            }
+    }
+    return PickedFile(
+        displayName = name,
+        mimeType = getType(uri) ?: "application/octet-stream",
+        sizeBytes = size,
+        open = { openInputStream(uri) ?: error("no bytes at $uri") },
+    )
+}
+
+/**
+ * A capture in the cache directory. The name is the day rather than the uuid the file is called:
+ * the person renames it from the sheet if they want to, but a hex string is no one's photo.
+ *
+ * `sizeBytes` is null on purpose — the provider does not know it yet, so `AddAttachment` applies
+ * the size guard to what the store actually wrote.
+ */
+private fun ContentResolver.cameraFile(uri: Uri): PickedFile = PickedFile(
+    displayName = "Photo ${LocalDate.now()}.jpg",
+    mimeType = "image/jpeg",
+    sizeBytes = null,
+    fromCamera = true,
+    open = { DeleteOnClose(openInputStream(uri) ?: error("no bytes at $uri")) { deleteQuietly(uri) } },
+)
+
+/** A temp file's bytes are read exactly once; closing the stream is the moment to let it go. */
+private class DeleteOnClose(
+    stream: InputStream,
+    private val onClosed: () -> Unit,
+) : FilterInputStream(stream) {
+    override fun close() {
+        try {
+            super.close()
+        } finally {
+            onClosed()
+        }
+    }
+}
+
+/** A cache file the store already copied. Failing to delete it is the OS's problem, not a report. */
+private fun ContentResolver.deleteQuietly(uri: Uri) {
+    runCatching { delete(uri, null, null) }
+}

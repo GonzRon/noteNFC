@@ -1,5 +1,6 @@
 package com.loosecannon.notenfc.testing
 
+import com.loosecannon.notenfc.attachments.Thumbnails
 import com.loosecannon.notenfc.core.ports.AssetRepository
 import com.loosecannon.notenfc.core.ports.AttachmentRepository
 import com.loosecannon.notenfc.core.ports.Clock
@@ -47,6 +48,7 @@ import com.loosecannon.notenfc.data.room.RoomUnitOfWork
 import com.loosecannon.notenfc.data.room.inMemoryDb
 import com.loosecannon.notenfc.prefs.AppPrefs
 import com.loosecannon.notenfc.prefs.KeyValueStore
+import java.io.File
 
 /**
  * `AppGraph` without a `Context`: the same members, built on `inMemoryDb()` and the real Room
@@ -80,6 +82,14 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
      * `SafAttachmentStorageTest` and on the emulator.
      */
     val attachmentStorage: FakeAttachmentStorage = FakeAttachmentStorage()
+
+    /**
+     * Mirrors `AppGraph.thumbnails` so a ViewModel test can take the same collaborators. The
+     * decode itself needs `BitmapFactory`, so nothing on the JVM asks this for a real thumbnail
+     * and the cache directory below is a path that is never created.
+     */
+    val thumbnails: Thumbnails =
+        Thumbnails(File(System.getProperty("java.io.tmpdir"), "notenfc-jvm-thumbs"), attachmentStorage)
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)

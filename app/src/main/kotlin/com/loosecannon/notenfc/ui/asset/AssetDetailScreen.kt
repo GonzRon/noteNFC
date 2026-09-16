@@ -52,6 +52,7 @@ import com.loosecannon.notenfc.core.journal.classify
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.EventKind
@@ -65,6 +66,7 @@ import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.ValueType
 import com.loosecannon.notenfc.core.model.isRetired
 import com.loosecannon.notenfc.di.AppGraph
+import com.loosecannon.notenfc.ui.attachments.AttachmentsSection
 import com.loosecannon.notenfc.ui.components.ActionGrid
 import com.loosecannon.notenfc.ui.components.ActionSpec
 import com.loosecannon.notenfc.ui.components.IdentityPlate
@@ -115,6 +117,8 @@ fun AssetDetailScreen(
     onAddComponent: (parentAssetId: String) -> Unit,
     /** A free-form entry of one [EventKind] — the retirement follow-on of spec §7 opens it. */
     onLogOutcome: (assetId: String, kind: String) -> Unit,
+    /** DOCUMENTS sends the person here when there is no attachment folder yet (spec §8.1). */
+    onOpenSettings: () -> Unit,
 ) {
     val model: AssetDetailViewModel = viewModel(key = assetId) { AssetDetailViewModel(graph, assetId) }
     val state by model.state.collectAsStateWithLifecycle()
@@ -226,6 +230,12 @@ fun AssetDetailScreen(
             ServiceRecordSection(current.events, current.definitions, onOpenEvent)
             TagsSection(current.tags)
             LinksSection(current.links)
+            AttachmentsSection(
+                graph = graph,
+                owner = AttachmentOwner.OfAsset(current.asset.id),
+                snackbars = snackbars,
+                onOpenSettings = onOpenSettings,
+            )
             NotesSection(current.asset.notes)
             Spacer(Modifier.height(24.dp))
         }

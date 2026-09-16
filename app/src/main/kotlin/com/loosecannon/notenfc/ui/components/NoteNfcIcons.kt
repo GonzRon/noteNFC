@@ -26,6 +26,8 @@ object NoteNfcIcons {
     val DeleteForever: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_delete_forever)
     val Speed: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_speed)
     val Backup: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_backup)
+    val Photo: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_photo)
+    val AttachFile: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_attach_file)
 
     /** An equals sign: the kind glyph on a reading that is computed rather than entered. */
     val Equal: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_equal)
