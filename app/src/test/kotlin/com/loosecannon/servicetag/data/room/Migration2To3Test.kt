@@ -27,7 +27,7 @@ class Migration2To3Test {
 
     @Test
     fun migratesAndKeepsJournalRows() = runTest {
-        val file = File.createTempFile("notenfc-migrate-2-3", ".db").also { it.delete() }
+        val file = File.createTempFile("servicetag-migrate-2-3", ".db").also { it.delete() }
         try {
             createSchemaVersion(2, file, ::seedPhase2a)
 

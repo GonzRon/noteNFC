@@ -34,7 +34,7 @@ class Migration1To5Test {
 
     @Test
     fun v1UpgradesThroughAllFourMigrations() = runTest {
-        val file = File.createTempFile("notenfc-migrate-1-5", ".db").also { it.delete() }
+        val file = File.createTempFile("servicetag-migrate-1-5", ".db").also { it.delete() }
         try {
             createSchemaVersion(1, file, ::seedPhase1)
 

@@ -23,7 +23,7 @@ class Migration1To2Test {
 
     @Test
     fun migratesAndKeepsPhase1Rows() = runTest {
-        val file = File.createTempFile("notenfc-migrate", ".db").also { it.delete() }
+        val file = File.createTempFile("servicetag-migrate", ".db").also { it.delete() }
         try {
             createSchemaVersion(1, file, ::seedPhase1)
 

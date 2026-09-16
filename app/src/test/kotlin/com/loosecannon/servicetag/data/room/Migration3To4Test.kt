@@ -27,7 +27,7 @@ class Migration3To4Test {
 
     @Test
     fun migratesAndKeepsEverythingThatPointsAtAnAsset() = runTest {
-        val file = File.createTempFile("notenfc-migrate-3-4", ".db").also { it.delete() }
+        val file = File.createTempFile("servicetag-migrate-3-4", ".db").also { it.delete() }
         try {
             createSchemaVersion(3, file, ::seedPhase2b1)
 
@@ -104,7 +104,7 @@ class Migration3To4Test {
      */
     @Test
     fun aStoredRetiredStatusBecomesArchived() = runTest {
-        val file = File.createTempFile("notenfc-migrate-3-4-retired", ".db").also { it.delete() }
+        val file = File.createTempFile("servicetag-migrate-3-4-retired", ".db").also { it.delete() }
         try {
             createSchemaVersion(3, file) { c ->
                 c.execSQL(

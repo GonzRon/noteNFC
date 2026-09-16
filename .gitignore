@@ -10,7 +10,7 @@ build/
 .DS_Store
 local.properties
 
-# signing material never belongs in the repo (it lives in ~/.config/notenfc)
+# signing material never belongs in the repo (it lives in ~/.config/servicetag)
 keystore.properties
 *.jks
 *.keystore

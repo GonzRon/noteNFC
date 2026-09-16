@@ -92,7 +92,7 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
      * and the cache directory below is a path that is never created.
      */
     val thumbnails: Thumbnails =
-        Thumbnails(File(System.getProperty("java.io.tmpdir"), "notenfc-jvm-thumbs"), attachmentStorage)
+        Thumbnails(File(System.getProperty("java.io.tmpdir"), "servicetag-jvm-thumbs"), attachmentStorage)
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)

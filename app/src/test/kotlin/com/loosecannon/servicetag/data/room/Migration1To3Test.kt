@@ -29,7 +29,7 @@ class Migration1To3Test {
 
     @Test
     fun v1UpgradesThroughBothMigrations() = runTest {
-        val file = File.createTempFile("notenfc-migrate-1-3", ".db").also { it.delete() }
+        val file = File.createTempFile("servicetag-migrate-1-3", ".db").also { it.delete() }
         try {
             createSchemaVersion(1, file, ::seedPhase1)
 

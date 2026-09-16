@@ -31,7 +31,7 @@ class Migration4To5Test {
 
     @Test
     fun addsTheAttachmentTableAndLeavesEverythingElseAlone() = runTest {
-        val file = File.createTempFile("notenfc-migrate-4-5", ".db").also { it.delete() }
+        val file = File.createTempFile("servicetag-migrate-4-5", ".db").also { it.delete() }
         try {
             createSchemaVersion(4, file, ::seedPhase2b2)
 
