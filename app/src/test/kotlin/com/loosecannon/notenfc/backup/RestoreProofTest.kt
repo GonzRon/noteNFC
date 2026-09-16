@@ -6,6 +6,7 @@ import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.Attachment
 import com.loosecannon.notenfc.core.model.DefinitionKind
 import com.loosecannon.notenfc.core.model.DerivedFormula
 import com.loosecannon.notenfc.core.model.EventKind
@@ -20,13 +21,16 @@ import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.core.ports.Clock
+import com.loosecannon.notenfc.core.ports.IdGenerator
+import com.loosecannon.notenfc.core.ports.StoreState
 import com.loosecannon.notenfc.core.usecase.ConsumableInput
 import com.loosecannon.notenfc.core.usecase.EventCommand
-import com.loosecannon.notenfc.core.usecase.ExportBackup
+import com.loosecannon.notenfc.core.usecase.ExportBackupSet
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.ImportReport
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
+import com.loosecannon.notenfc.data.room.RoomAttachmentRepository
 import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
 import com.loosecannon.notenfc.data.room.RoomEventRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
@@ -34,6 +38,7 @@ import com.loosecannon.notenfc.data.room.RoomProfileRepository
 import com.loosecannon.notenfc.data.room.RoomTagRepository
 import com.loosecannon.notenfc.data.room.RoomUnitOfWork
 import com.loosecannon.notenfc.data.room.inMemoryDb
+import com.loosecannon.notenfc.testing.FakeAttachmentStorage
 import com.loosecannon.notenfc.testing.FakeGraph
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -59,12 +64,18 @@ class RestoreProofTest {
         val definitions = RoomDefinitionRepository(db.definitionDao())
         val profiles = RoomProfileRepository(db.profileDao())
         val events = RoomEventRepository(db.eventDao())
+        val attachments = RoomAttachmentRepository(db.attachmentDao())
         val uow = RoomUnitOfWork(db)
-        val export = ExportBackup(
-            assets, tags, links, definitions, profiles, events, uow,
-            Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
+        // This proof is about the data archive. The set's artifacts half carries bytes, and
+        // bytes are what `BackupViewModelTest` and `ArtifactsCodecTest` prove.
+        val export = ExportBackupSet(
+            assets, tags, links, definitions, profiles, events, attachments, uow,
+            IdGenerator { FIXED_SET_ID }, Clock { FIXED_NOW }, "test", SCHEMA_VERSION,
         )
-        val import = ImportBackupReplace(assets, tags, links, definitions, profiles, events, uow)
+        val import = ImportBackupReplace(
+            assets, tags, links, definitions, profiles, events, attachments,
+            FakeAttachmentStorage(state = StoreState.NotConfigured), uow,
+        )
     }
 
     private data class Snapshot(
@@ -74,6 +85,7 @@ class RestoreProofTest {
         val definitions: List<MeasurementDefinition>,
         val profiles: List<EventProfile>,
         val events: List<AssetEvent>,
+        val attachments: List<Attachment>,
     )
 
     private suspend fun snapshot(g: Graph): Snapshot = Snapshot(
@@ -83,6 +95,7 @@ class RestoreProofTest {
         definitions = g.definitions.all().sortedBy { it.id.value },
         profiles = g.profiles.all().sortedBy { it.id.value },
         events = g.events.all().sortedBy { it.id.value },
+        attachments = g.attachments.all().sortedBy { it.id.value },
     )
 
     private fun graphOver(db: AppDatabase) = Graph(db)
@@ -198,7 +211,7 @@ class RestoreProofTest {
         try {
             val g1 = graphOver(db1)
             seed(g1)
-            bytes = g1.export.run()
+            bytes = g1.export.run().data
             before = snapshot(g1)
         } finally {
             db1.close() // the "uninstall": that database and everything in it is gone
@@ -217,8 +230,9 @@ class RestoreProofTest {
             assertEquals(before, after)
             assertEquals(
                 ImportReport(
-                    formatVersion = 4, assets = 2, tags = 3, links = 2,
-                    definitions = 0, profiles = 0, events = 0,
+                    formatVersion = 5, assets = 2, tags = 3, links = 2,
+                    definitions = 0, profiles = 0, events = 0, attachments = 0,
+                    lastRestoredBackupSetId = FIXED_SET_ID,
                 ),
                 report,
             )
@@ -252,7 +266,7 @@ class RestoreProofTest {
         try {
             val gd = graphOver(donor)
             seed(gd)
-            backup = gd.export.run()
+            backup = gd.export.run().data
         } finally {
             donor.close()
         }
@@ -314,8 +328,9 @@ class RestoreProofTest {
             val report = g.import.run(backup)
             assertEquals(
                 ImportReport(
-                    formatVersion = 4, assets = 2, tags = 3, links = 2,
-                    definitions = 0, profiles = 0, events = 0,
+                    formatVersion = 5, assets = 2, tags = 3, links = 2,
+                    definitions = 0, profiles = 0, events = 0, attachments = 0,
+                    lastRestoredBackupSetId = FIXED_SET_ID,
                 ),
                 report,
             )
@@ -339,12 +354,14 @@ class RestoreProofTest {
      * it — a template applied by [com.loosecannon.notenfc.core.usecase.CreateAsset], an event
      * logged through [com.loosecannon.notenfc.core.usecase.LogEvent] — so the rows under test are
      * rows the production path actually produces, children and their ids included. Then the whole
-     * seven-table graph goes out to a backup and comes back into an empty database unchanged.
+     * seven-table graph — attachment rows included — goes out to a backup and comes back
+     * into an empty database unchanged.
      */
     @Test
     fun theJournalSurvivesTheSameRoundTrip() = runTest {
         val before: Snapshot
         val bytes: ByteArray
+        val setId: String
         val g1 = FakeGraph()
         try {
             val spa = g1.createAsset.run(name = "Hot tub", templateKey = "hot_tub")
@@ -363,7 +380,10 @@ class RestoreProofTest {
                     consumables = listOf(ConsumableInput("Chlorine", "2", "tab")),
                 ),
             )
-            bytes = g1.exportBackup.run()
+            // Only the data archive: see the note on `Graph.export` above.
+            val set = g1.exportBackupSet.run()
+            bytes = set.data
+            setId = set.plan.backupSetId
             before = snapshot(graphOver(g1.db))
         } finally {
             g1.close()
@@ -382,17 +402,20 @@ class RestoreProofTest {
             val report = g2.import.run(bytes)
             assertEquals(
                 ImportReport(
-                    formatVersion = 4,
+                    formatVersion = 5,
                     assets = 1,
                     tags = 0,
                     links = 0,
                     definitions = before.definitions.size,
                     profiles = before.profiles.size,
                     events = 1,
+                    attachments = 0,
+                    lastRestoredBackupSetId = setId,
                 ),
                 report,
             )
-            // All seven tables, compared whole: ids, child ids, foreign keys, snapshot units.
+            // All seven tables the backup carries, attachments included, compared whole:
+            // ids, child ids, foreign keys, snapshot units.
             assertEquals(before, snapshot(g2))
 
             // And the journal reads back through its own relationship queries, not only `all()`.
@@ -435,7 +458,8 @@ class RestoreProofTest {
                     consumables = emptyList(),
                 ),
             )
-            bytes = g1.exportBackup.run()
+            // Only the data archive: see the note on `Graph.export` above.
+            bytes = g1.exportBackupSet.run().data
             before = snapshot(graphOver(g1.db))
         } finally {
             g1.close()
@@ -492,7 +516,7 @@ class RestoreProofTest {
             val before = snapshot(g)
             assertEquals(3, before.assets.size)
 
-            val bytes = g.export.run()
+            val bytes = g.export.run().data
 
             // The wipe half on its own, against the tree: children-first or nothing.
             g.uow.write { g.assets.deleteAll() }
@@ -543,6 +567,7 @@ class RestoreProofTest {
 
     private companion object {
         const val FIXED_NOW = 1_757_000_000_000L
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
+        const val FIXED_SET_ID = "backup-set-restore-proof"
     }
 }

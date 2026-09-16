@@ -7,9 +7,11 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.documentfile.provider.DocumentFile
 import com.loosecannon.notenfc.NoteNfcApp
 import com.loosecannon.notenfc.R
 import com.loosecannon.notenfc.backup.SafBackupIO
+import com.loosecannon.notenfc.backup.SafBackupSetWriter
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
@@ -22,9 +24,7 @@ import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.model.TagStatus
 import com.loosecannon.notenfc.core.model.TagTarget
 import com.loosecannon.notenfc.di.AppGraph
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.loosecannon.notenfc.ui.backup.BackupViewModel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -175,13 +175,9 @@ class DebugBackupActivity : Activity() {
         "wiped"
     }
 
+    /** A folder, not a document: an export is a *set* of two files now (spec §7.3). */
     private fun pickExportTarget() {
-        val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
-            .addCategory(Intent.CATEGORY_OPENABLE)
-            .setType(MIME_ZIP)
-            .putExtra(Intent.EXTRA_TITLE, "notenfc-backup-$stamp.zip")
-        startActivityForResult(intent, REQUEST_EXPORT)
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQUEST_EXPORT)
     }
 
     private fun pickImportSource() {
@@ -204,9 +200,12 @@ class DebugBackupActivity : Activity() {
         }
         when (requestCode) {
             REQUEST_EXPORT -> run("export") {
-                val bytes = graph.exportBackup.run()
-                SafBackupIO(contentResolver, uri).write(bytes)
-                "exported ${bytes.size} bytes"
+                // The same code path the Backup screen uses, including the rule that both files
+                // land or neither does: a harness that exported differently would prove nothing.
+                val tree = DocumentFile.fromTreeUri(applicationContext, uri)
+                    ?: error("cannot open the chosen folder")
+                val sink = SafBackupSetWriter(applicationContext, contentResolver, tree)
+                "exported " + BackupViewModel(graph).exportSet(sink).getOrThrow()
             }
             REQUEST_IMPORT -> run("import") {
                 val bytes = SafBackupIO(contentResolver, uri).read()

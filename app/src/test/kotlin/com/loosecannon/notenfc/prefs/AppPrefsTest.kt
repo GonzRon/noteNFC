@@ -49,4 +49,31 @@ class AppPrefsTest {
         val prefs = AppPrefs(store)
         assertEquals(AppearanceMode.SYSTEM, prefs.appearanceMode)
     }
+
+    @Test
+    fun attachmentTreeUriRoundTripsAndClears() {
+        val prefs = AppPrefs(FakeKeyValueStore())
+        assertNull(prefs.attachmentTreeUri)
+
+        prefs.attachmentTreeUri = "content://com.android.externalstorage.documents/tree/primary%3ANotes"
+        assertEquals(
+            "content://com.android.externalstorage.documents/tree/primary%3ANotes",
+            prefs.attachmentTreeUri,
+        )
+
+        prefs.attachmentTreeUri = null
+        assertNull(prefs.attachmentTreeUri)
+    }
+
+    @Test
+    fun lastRestoredBackupSetIdRoundTripsAndClears() {
+        val prefs = AppPrefs(FakeKeyValueStore())
+        assertNull(prefs.lastRestoredBackupSetId)
+
+        prefs.lastRestoredBackupSetId = "set-42"
+        assertEquals("set-42", prefs.lastRestoredBackupSetId)
+
+        prefs.lastRestoredBackupSetId = null
+        assertNull(prefs.lastRestoredBackupSetId)
+    }
 }

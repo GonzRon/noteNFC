@@ -4398,7 +4398,7 @@ git commit -m "attachments device proof on the emulator"
 - Modify: `app/build.gradle.kts` (`versionCode = 6`, `versionName = "2.4"`)
 - Create: `docs/design/phase-4a-evidence.md`
 - Modify: `README.md` (one feature line), `docs/design/README.md` (one row)
-- Modify: `docs/design/04-data-model-and-storage.md` §11 and `docs/design/07-phasing.md`'s Phase 4 block per spec §11 (the deviations the spec records: `formatVersion` keeps its name, no SQL `CHECK`, no `LOCAL` provider, two-step restore, store change blocked once rows exist)
+- Modify: `docs/design/04-domain-data-model.md` §11 and `docs/design/07-implementation-sequence.md`'s Phase 4 block per spec §11 (the deviations the spec records: `formatVersion` keeps its name, no SQL `CHECK`, no `LOCAL` provider, two-step restore, store change blocked once rows exist)
 
 **Interfaces:**
 - Consumes: the shipped 2.4 debug build.

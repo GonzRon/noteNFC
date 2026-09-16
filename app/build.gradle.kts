@@ -21,8 +21,8 @@ android {
         applicationId = "com.loosecannon.notenfc"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "2.3"
+        versionCode = 6
+        versionName = "2.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -70,6 +70,7 @@ room3 {
 dependencies {
     implementation(project(":core"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.documentfile)
     implementation(libs.room3.runtime)
     ksp(libs.room3.compiler)
     // No sqlite-bundled on the production classpath: AndroidSQLiteDriver comes from

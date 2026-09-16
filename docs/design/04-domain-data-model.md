@@ -513,17 +513,24 @@ WorkManager worker. This is what makes "delete a schedule" safe: the domain row 
 | Column | Notes |
 |---|---|
 | `id` PK | |
-| `asset_id` FK CASCADE, nullable / `event_id` FK CASCADE, nullable | exactly one (`CHECK`) |
+| `asset_id` FK CASCADE, nullable / `event_id` FK CASCADE, nullable | exactly one — **no SQL `CHECK`**; enforced in the entity mapper and in the backup reader (4A, spec §11.5) |
 | `kind` | `PHOTO` \| `LABEL_PHOTO` \| `RECEIPT` \| `MANUAL` \| `WARRANTY` \| `DOCUMENT` \| `OTHER` |
 | `mode` | `MANAGED` (bytes copied into the configured store; noteNFC owns lifecycle) \| `REFERENCE` (durable pointer to a document the user keeps elsewhere) |
 | `display_name`, `mime_type`, `size_bytes`, `sha256` | |
-| `storage_provider` | `LOCAL` \| `SAF_TREE` \| `SAF_DOCUMENT` (reference) \| reserved: `WEBDAV`, `S3`, `GDRIVE`, `ONEDRIVE`, `DROPBOX` |
-| `storage_locator` | provider-relative: `LOCAL` and `SAF_TREE` use `assets/<asset-id>/<attachment-id>.<ext>` relative to the store root (the root itself is one setting, so switching trees or providers does not touch rows); `SAF_DOCUMENT` stores the persisted `content://` URI |
+| `storage_provider` | `SAF_TREE` \| `SAF_DOCUMENT` (reference, reserved for 4B). **No `LOCAL` member** — absent, not reserved, by the owner's ruling (4A, spec §11.8); `WEBDAV`, `S3`, `GDRIVE`, `ONEDRIVE`, `DROPBOX` are not in the enum either |
+| `storage_locator` | provider-relative: `SAF_TREE` uses `assets/<asset-id>/<attachment-id>.<ext>` or `events/<event-id>/<attachment-id>.<ext>` relative to the store root (the root itself is one setting, so switching trees does not touch rows); `SAF_DOCUMENT` will store the persisted `content://` URI in 4B |
 | `captured_on`, `notes`, `created_at`, `updated_at` | |
 
-Indexes: `asset_id`, `event_id`, `(storage_provider, storage_locator)`.
+Indexes: `asset_id`, `event_id`, and **unique** `(storage_provider, storage_locator)` — two rows
+cannot claim the same file.
 
 Bytes are never in Room. Backups include managed bytes and only metadata for references (D3 §11).
+
+**As built in Phase 4A** (schema v5, migration 4→5): the table above, with the `CHECK` and the
+`LOCAL` provider dropped as noted, the unique locator index added, and both FKs `ON DELETE CASCADE`
+so deleting an asset takes its own rows *and* its events' rows. The bytes behind a cascaded row are
+swept by `DeleteAsset` / `DeleteEvent`, not by the database. Evidence:
+[phase-4a-evidence.md](phase-4a-evidence.md).
 
 ## 12. Canonical vs derived — the summary table
 

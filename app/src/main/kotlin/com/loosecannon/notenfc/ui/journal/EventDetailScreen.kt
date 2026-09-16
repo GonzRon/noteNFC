@@ -20,6 +20,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,10 +39,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.notenfc.core.journal.Reading
 import com.loosecannon.notenfc.core.journal.classify
 import com.loosecannon.notenfc.core.model.AssetEvent
+import com.loosecannon.notenfc.core.model.AttachmentOwner
+import com.loosecannon.notenfc.core.model.EventId
 import com.loosecannon.notenfc.core.model.DefinitionId
 import com.loosecannon.notenfc.core.model.MeasurementDefinition
 import com.loosecannon.notenfc.core.model.ValueType
 import com.loosecannon.notenfc.di.AppGraph
+import com.loosecannon.notenfc.ui.attachments.AttachmentsSection
 import com.loosecannon.notenfc.ui.components.InstrumentList
 import com.loosecannon.notenfc.ui.components.InstrumentRow
 import com.loosecannon.notenfc.ui.components.QuietLine
@@ -63,10 +68,13 @@ fun EventDetailScreen(
     eventId: String,
     onEdit: (assetId: String, eventId: String) -> Unit,
     onBack: () -> Unit,
+    /** DOCUMENTS sends the person here when there is no attachment folder yet (spec §8.1). */
+    onOpenSettings: () -> Unit,
 ) {
     val model: EventDetailViewModel = viewModel(key = eventId) { EventDetailViewModel(graph, eventId) }
     val state by model.state.collectAsStateWithLifecycle()
     val missing by model.missing.collectAsStateWithLifecycle()
+    val snackbars = remember { SnackbarHostState() }
     var confirming by remember { mutableStateOf(false) }
 
     // Deleting an entry makes it missing too, so both routes out are funnelled through one latch:
@@ -89,6 +97,7 @@ fun EventDetailScreen(
 
     val current = state
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
                 title = {
@@ -145,6 +154,12 @@ fun EventDetailScreen(
                 modifier = Modifier.padding(top = 2.dp),
             )
             ReadingsSection(current.event, current.definitions, current.derived)
+            AttachmentsSection(
+                graph = graph,
+                owner = AttachmentOwner.OfEvent(EventId(eventId)),
+                snackbars = snackbars,
+                onOpenSettings = onOpenSettings,
+            )
             MaterialsSection(current.event)
             NotesSection(current.event.notes)
             Spacer(Modifier.height(24.dp))

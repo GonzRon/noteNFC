@@ -17,3 +17,6 @@ value class ProfileId(val value: String)
 
 @JvmInline
 value class EventId(val value: String)
+
+@JvmInline
+value class AttachmentId(val value: String)

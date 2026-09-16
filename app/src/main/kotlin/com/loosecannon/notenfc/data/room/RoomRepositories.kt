@@ -5,16 +5,21 @@ import androidx.room3.withWriteTransaction
 import com.loosecannon.notenfc.core.model.Asset
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetTree
+import com.loosecannon.notenfc.core.model.Attachment
+import com.loosecannon.notenfc.core.model.AttachmentId
+import com.loosecannon.notenfc.core.model.AttachmentOwner
 import com.loosecannon.notenfc.core.model.ExternalLink
 import com.loosecannon.notenfc.core.model.LinkId
 import com.loosecannon.notenfc.core.model.PayloadFormat
 import com.loosecannon.notenfc.core.model.TagBinding
 import com.loosecannon.notenfc.core.model.TagId
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.AttachmentRepository
 import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
 import com.loosecannon.notenfc.data.room.dao.AssetDao
+import com.loosecannon.notenfc.data.room.dao.AttachmentDao
 import com.loosecannon.notenfc.data.room.dao.ExternalLinkDao
 import com.loosecannon.notenfc.data.room.dao.NfcTagDao
 import com.loosecannon.notenfc.data.room.entities.NfcTagEntity
@@ -97,6 +102,35 @@ class RoomLinkRepository(private val dao: ExternalLinkDao) : LinkRepository {
 
     override fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>> =
         dao.observeForAsset(assetId.value).map { list -> list.map { it.toDomain() } }
+}
+
+/**
+ * The `attachment` table's side of [AttachmentRepository]. Metadata only: the bytes are the
+ * store's, never Room's, and `storage_locator` is the only thing here that knows where they are.
+ * Every write goes through [requireExactlyOneOwner], so a row with both owners or neither is
+ * refused before SQLite ever sees it (spec §11.5).
+ */
+class RoomAttachmentRepository(private val dao: AttachmentDao) : AttachmentRepository {
+    override suspend fun upsert(a: Attachment) = dao.upsert(a.toEntity().requireExactlyOneOwner())
+    override suspend fun get(id: AttachmentId): Attachment? = dao.byId(id.value)?.toDomain()
+
+    override suspend fun forOwner(owner: AttachmentOwner): List<Attachment> = when (owner) {
+        is AttachmentOwner.OfAsset -> dao.forAsset(owner.assetId.value)
+        is AttachmentOwner.OfEvent -> dao.forEvent(owner.eventId.value)
+    }.map { it.toDomain() }
+
+    override suspend fun forAsset(assetId: AssetId): List<Attachment> =
+        dao.forAsset(assetId.value).map { it.toDomain() }
+
+    override suspend fun all(): List<Attachment> = dao.all().map { it.toDomain() }
+    override suspend fun delete(id: AttachmentId) = dao.delete(id.value)
+    override suspend fun deleteAll() = dao.deleteAll()
+    override suspend fun count(): Int = dao.count()
+
+    override fun observeForOwner(owner: AttachmentOwner): Flow<List<Attachment>> = when (owner) {
+        is AttachmentOwner.OfAsset -> dao.observeForAsset(owner.assetId.value)
+        is AttachmentOwner.OfEvent -> dao.observeForEvent(owner.eventId.value)
+    }.map { list -> list.map { it.toDomain() } }
 }
 
 class RoomUnitOfWork(private val db: AppDatabase) : UnitOfWork {

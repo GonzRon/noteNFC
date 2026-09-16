@@ -24,6 +24,11 @@ import androidx.test.core.app.ApplicationProvider
 import com.loosecannon.notenfc.MainActivity
 import com.loosecannon.notenfc.NoteNfcApp
 import com.loosecannon.notenfc.ShareActivity
+import com.loosecannon.notenfc.ui.backup.BackupSetSink
+import com.loosecannon.notenfc.ui.backup.BackupViewModel
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.OutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -44,6 +49,10 @@ internal val app: NoteNfcApp get() = ApplicationProvider.getApplicationContext()
  * here: every screen under test reads its data from repository flows and re-reads the preferences
  * on each emission, so wiping the store after the activity is up simply produces one more
  * emission — the fresh-install one the test is about to assert on.
+ *
+ * The preference wipe takes the two Phase 4A preferences with it (`attachment_tree_uri` and
+ * `last_restored_backup_set_id`) because it clears the whole file; the attachment *rows* and the
+ * thumbnail cache have to be named.
  */
 internal fun clearInstall() {
     ApplicationProvider.getApplicationContext<Context>()
@@ -54,6 +63,8 @@ internal fun clearInstall() {
     val graph = app.graph
     runBlocking {
         graph.uow.write {
+            // Attachment rows point at assets and events, so they go before the rows they name.
+            graph.attachments.deleteAll()
             graph.events.deleteAll()
             graph.profiles.deleteAll()
             graph.definitions.deleteAll()
@@ -62,6 +73,35 @@ internal fun clearInstall() {
             graph.assets.deleteAll()
         }
     }
+    // A thumbnail is keyed by id and sha256 prefix, so a stale one cannot normally be served — but
+    // a scenario that re-adds the same bytes under the same id could, and none of them should pass
+    // on a file a previous test decoded.
+    File(ApplicationProvider.getApplicationContext<Context>().cacheDir, "thumbs").deleteRecursively()
+}
+
+/**
+ * Exports a backup set into memory — the way the Backup screen exports one into a folder the owner
+ * picks — and returns the data archive's bytes.
+ *
+ * Both files are written through the production path, because the export refuses to call a set
+ * where only one landed a backup at all; a round trip then reads the data half back, which is the
+ * half that carries rows. The artifacts half carries bytes, and bytes are proved by the
+ * attachments device proof and by `BackupViewModelTest`.
+ */
+internal fun exportedDataArchive(): ByteArray {
+    val files = LinkedHashMap<String, ByteArray>()
+    val sink = object : BackupSetSink {
+        override suspend fun write(name: String, body: suspend (OutputStream) -> Unit): String {
+            val out = ByteArrayOutputStream()
+            body(out)
+            files[name] = out.toByteArray()
+            return name
+        }
+
+        override suspend fun delete(handle: String): Boolean = files.remove(handle) != null
+    }
+    runBlocking { BackupViewModel(app.graph).exportSet(sink).getOrThrow() }
+    return files.entries.single { it.key.startsWith("noteNFC-data-") }.value
 }
 
 /** Waits until at least [count] nodes carrying [text] exist, then returns. */
@@ -174,11 +214,14 @@ class AppSmokeTest {
         rule.awaitText("Export now")
         rule.onNodeWithText("Export now").performClick()
 
-        rule.awaitText("Export backup")
-        rule.onNodeWithText("Export backup").assertIsDisplayed()
-        rule.onNodeWithText("Import (replace everything)").assertIsDisplayed()
+        rule.awaitText("Export backup set")
+        // Three actions on a scrolling column now, so each one is scrolled to before it is asked
+        // whether it is on screen.
+        rule.onNodeWithText("Export backup set").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Restore data").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Restore files").performScrollTo().assertIsDisplayed()
         // "Last backup: Never" — the screen agrees with the nudge that sent us here.
-        rule.onNodeWithText("Never").assertIsDisplayed()
+        rule.onNodeWithText("Never").performScrollTo().assertIsDisplayed()
     }
 }
 

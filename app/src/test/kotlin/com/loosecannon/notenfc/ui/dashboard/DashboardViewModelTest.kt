@@ -66,7 +66,7 @@ class DashboardViewModelTest {
         assertTrue(before.needsBackup)
         assertNull(before.lastBackupAt)
 
-        // What the backup screen does after `SafBackupIO.write` returns.
+        // What the backup screen does once both files of a set have landed.
         graph.prefs.markBackupExported(9_000L)
         vm.refresh()
 

@@ -2,8 +2,10 @@ package com.loosecannon.notenfc.core.usecase
 
 import com.loosecannon.notenfc.core.journal.SeedTemplates
 import com.loosecannon.notenfc.core.model.*
+import com.loosecannon.notenfc.core.ports.ByteSource
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.IdGenerator
+import com.loosecannon.notenfc.core.ports.StoreState
 import com.loosecannon.notenfc.core.testing.*
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
@@ -13,7 +15,9 @@ class EventUseCasesTest {
     private val defs = InMemoryDefinitionRepository()
     private val profiles = InMemoryProfileRepository()
     private val events = InMemoryEventRepository()
-    private val uow = FakeUnitOfWork(assets, defs, profiles, events)
+    private val attachments = InMemoryAttachmentRepository()
+    private val storage = FakeAttachmentStorage()
+    private val uow = FakeUnitOfWork(assets, defs, profiles, events, attachments)
     private var seq = 0
     private val ids = IdGenerator { "id-${++seq}" }
     private var now = 1_000L
@@ -22,7 +26,7 @@ class EventUseCasesTest {
     private val apply = ApplyTemplate(defs, profiles, assets, uow, ids, clock)
     private val logEvent = LogEvent(events, defs, profiles, assets, uow, ids, clock)
     private val updateEvent = UpdateEvent(events, defs, profiles, uow, ids, clock)
-    private val deleteEvent = DeleteEvent(events, uow)
+    private val deleteEvent = DeleteEvent(events, attachments, storage, uow)
 
     private suspend fun asset(id: String, name: String): Asset =
         Asset(id = AssetId(id), name = name, createdAt = now, updatedAt = now).also { assets.upsert(it) }
@@ -334,5 +338,84 @@ class EventUseCasesTest {
 
         assertEquals(3, event.measurements.size)
         assertNull(event.measurements.firstOrNull { it.definitionId == rejection })
+    }
+
+    @Test fun deletingAnEventRemovesItsAttachmentBytes() = runTest {
+        // This file's seed helpers (`seedHotTub()` etc.) generate ids, so seed explicit ids here:
+        val assetId = seedHotTub()
+        events.upsert(
+            AssetEvent(
+                id = EventId("e1"), assetId = assetId, kind = EventKind.MAINTENANCE,
+                title = "Filter change", profileId = null, occurredOn = "2026-09-15",
+                occurredTime = null, tzId = "UTC", notes = "", source = EventSource.MANUAL,
+                sourceRef = null, createdAt = 1L, updatedAt = 1L,
+                measurements = emptyList(), consumables = emptyList(),
+            ),
+        )
+        attachments.upsert(
+            Attachment(
+                id = AttachmentId("att-1"), owner = AttachmentOwner.OfEvent(EventId("e1")),
+                kind = AttachmentKind.PHOTO, displayName = "before.jpg", mimeType = "image/jpeg",
+                sizeBytes = 3L, sha256 = "0".repeat(64), storageLocator = "events/e1/att-1.jpg",
+                capturedOn = null, createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+        // a row on a second event, which this delete must not touch
+        events.upsert(
+            AssetEvent(
+                id = EventId("e2"), assetId = assetId, kind = EventKind.MAINTENANCE,
+                title = "Drain", profileId = null, occurredOn = "2026-09-16",
+                occurredTime = null, tzId = "UTC", notes = "", source = EventSource.MANUAL,
+                sourceRef = null, createdAt = 1L, updatedAt = 1L,
+                measurements = emptyList(), consumables = emptyList(),
+            ),
+        )
+        attachments.upsert(
+            Attachment(
+                id = AttachmentId("att-2"), owner = AttachmentOwner.OfEvent(EventId("e2")),
+                kind = AttachmentKind.PHOTO, displayName = "after.jpg", mimeType = "image/jpeg",
+                sizeBytes = 3L, sha256 = "0".repeat(64), storageLocator = "events/e2/att-2.jpg",
+                capturedOn = null, createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+        storage.store.put("events/e1/att-1.jpg", ByteSource { "abc".toByteArray().inputStream() })
+        storage.store.put("events/e2/att-2.jpg", ByteSource { "abc".toByteArray().inputStream() })
+
+        deleteEvent.run(EventId("e1"))
+
+        assertFalse(storage.store.exists("events/e1/att-1.jpg"))
+        assertTrue(storage.store.exists("events/e2/att-2.jpg"))
+        assertEquals(1, storage.store.deletes)
+        assertNull(events.rows["e1"])
+        assertNotNull(events.rows["e2"])
+    }
+
+    @Test fun anAbsentStoreIsNotAReasonToKeepTheEvent() = runTest {
+        val assetId = seedHotTub()
+        events.upsert(
+            AssetEvent(
+                id = EventId("e1"), assetId = assetId, kind = EventKind.MAINTENANCE,
+                title = "Filter change", profileId = null, occurredOn = "2026-09-15",
+                occurredTime = null, tzId = "UTC", notes = "", source = EventSource.MANUAL,
+                sourceRef = null, createdAt = 1L, updatedAt = 1L,
+                measurements = emptyList(), consumables = emptyList(),
+            ),
+        )
+        attachments.upsert(
+            Attachment(
+                id = AttachmentId("att-1"), owner = AttachmentOwner.OfEvent(EventId("e1")),
+                kind = AttachmentKind.PHOTO, displayName = "before.jpg", mimeType = "image/jpeg",
+                sizeBytes = 3L, sha256 = "0".repeat(64), storageLocator = "events/e1/att-1.jpg",
+                capturedOn = null, createdAt = 1L, updatedAt = 1L,
+            ),
+        )
+        storage.store.put("events/e1/att-1.jpg", ByteSource { "abc".toByteArray().inputStream() })
+        storage.state = StoreState.AccessLost("Attachments")
+
+        deleteEvent.run(EventId("e1"))
+
+        assertNull(events.rows["e1"])
+        assertEquals(0, storage.store.deletes)
+        assertTrue(storage.store.exists("events/e1/att-1.jpg"))   // an orphan for 4B to sweep
     }
 }

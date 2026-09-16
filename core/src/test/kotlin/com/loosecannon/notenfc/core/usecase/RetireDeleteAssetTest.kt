@@ -1,12 +1,25 @@
 package com.loosecannon.notenfc.core.usecase
 
 import com.loosecannon.notenfc.core.model.Asset
+import com.loosecannon.notenfc.core.model.AssetEvent
 import com.loosecannon.notenfc.core.model.AssetId
 import com.loosecannon.notenfc.core.model.AssetStatus
+import com.loosecannon.notenfc.core.model.Attachment
+import com.loosecannon.notenfc.core.model.AttachmentId
+import com.loosecannon.notenfc.core.model.AttachmentKind
+import com.loosecannon.notenfc.core.model.AttachmentOwner
+import com.loosecannon.notenfc.core.model.EventId
+import com.loosecannon.notenfc.core.model.EventKind
+import com.loosecannon.notenfc.core.model.EventSource
 import com.loosecannon.notenfc.core.model.isRetired
+import com.loosecannon.notenfc.core.ports.ByteSource
 import com.loosecannon.notenfc.core.ports.Clock
+import com.loosecannon.notenfc.core.ports.StoreState
+import com.loosecannon.notenfc.core.testing.FakeAttachmentStorage
 import com.loosecannon.notenfc.core.testing.FakeUnitOfWork
 import com.loosecannon.notenfc.core.testing.InMemoryAssetRepository
+import com.loosecannon.notenfc.core.testing.InMemoryAttachmentRepository
+import com.loosecannon.notenfc.core.testing.InMemoryEventRepository
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,11 +35,14 @@ import kotlin.test.assertTrue
  */
 class RetireDeleteAssetTest {
     private val assets = InMemoryAssetRepository()
-    private val uow = FakeUnitOfWork(assets)
+    private val events = InMemoryEventRepository()
+    private val attachments = InMemoryAttachmentRepository()
+    private val storage = FakeAttachmentStorage()
+    private val uow = FakeUnitOfWork(assets, events, attachments)
     private var now = 1_000L
     private val clock = Clock { now }
     private val retire = RetireAsset(assets, uow, clock)
-    private val delete = DeleteAsset(assets, uow)
+    private val delete = DeleteAsset(assets, events, attachments, storage, uow)
     private val archive = ArchiveAsset(assets, uow, clock)
 
     private suspend fun store(id: String, name: String, parent: AssetId? = null): Asset {
@@ -111,5 +127,55 @@ class RetireDeleteAssetTest {
         // nor does retiring one
         retire.retire(AssetId("a1"), "2026-09-15")
         assertNull(assets.rows["a2"]!!.retiredOn)
+    }
+
+    @Test fun deletingAnAssetRemovesItsOwnAndItsEventsAttachmentBytes() = runTest {
+        store("a1", "Hot tub")
+        events.upsert(
+            AssetEvent(
+                id = EventId("e1"), assetId = AssetId("a1"), kind = EventKind.MAINTENANCE,
+                title = "Filter change", profileId = null, occurredOn = "2026-09-15",
+                occurredTime = null, tzId = "UTC", notes = "", source = EventSource.MANUAL,
+                sourceRef = null, createdAt = 1L, updatedAt = 1L,
+                measurements = emptyList(), consumables = emptyList(),
+            ),
+        )
+        val onAsset = attachment("att-1", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-1.pdf")
+        val onEvent = attachment("att-2", AttachmentOwner.OfEvent(EventId("e1")), "events/e1/att-2.jpg")
+        // a third row on another asset, which must survive
+        store("a2", "Mower")
+        val elsewhere = attachment("att-3", AttachmentOwner.OfAsset(AssetId("a2")), "assets/a2/att-3.pdf")
+
+        delete.run(AssetId("a1"))
+
+        assertFalse(storage.store.exists(onAsset.storageLocator))
+        assertFalse(storage.store.exists(onEvent.storageLocator))
+        assertTrue(storage.store.exists(elsewhere.storageLocator))
+        assertEquals(2, storage.store.deletes)   // the survivor was never asked about
+        assertEquals(setOf("a2"), assets.rows.keys)
+        assertEquals(1, uow.commits)             // locators read and rows deleted in one write
+    }
+
+    @Test fun anAbsentStoreIsNotAReasonToKeepTheAsset() = runTest {
+        store("a1", "Hot tub")
+        val orphaned = attachment("att-1", AttachmentOwner.OfAsset(AssetId("a1")), "assets/a1/att-1.pdf")
+        storage.state = StoreState.AccessLost("Attachments")
+        delete.run(AssetId("a1"))
+        assertTrue(assets.rows.isEmpty())
+        assertEquals(0, storage.store.deletes)
+        assertTrue(storage.store.exists(orphaned.storageLocator))   // an orphan for 4B to sweep
+    }
+
+    /** Seeds a row and its bytes: the fake repository has no cascade, so the row goes too. */
+    private suspend fun attachment(id: String, owner: AttachmentOwner, locator: String): Attachment {
+        val row = Attachment(
+            id = AttachmentId(id), owner = owner, kind = AttachmentKind.DOCUMENT,
+            displayName = "$id.pdf", mimeType = "application/pdf", sizeBytes = 3L,
+            sha256 = "0".repeat(64), storageLocator = locator, capturedOn = null,
+            createdAt = 1L, updatedAt = 1L,
+        )
+        attachments.upsert(row)
+        storage.store.put(locator, ByteSource { "abc".toByteArray().inputStream() })
+        return row
     }
 }

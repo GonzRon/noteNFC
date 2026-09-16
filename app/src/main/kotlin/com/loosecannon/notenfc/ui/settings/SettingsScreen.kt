@@ -1,6 +1,11 @@
 package com.loosecannon.notenfc.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,17 +34,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.loosecannon.notenfc.BuildConfig
+import com.loosecannon.notenfc.core.ports.StoreState
 import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.links.LinkLauncher
 import com.loosecannon.notenfc.prefs.AppearanceMode
@@ -46,6 +57,7 @@ import com.loosecannon.notenfc.ui.components.LabelValue
 import com.loosecannon.notenfc.ui.components.NoteNfcIcons
 import com.loosecannon.notenfc.ui.components.QuietLine
 import com.loosecannon.notenfc.ui.components.SectionHeader
+import com.loosecannon.notenfc.ui.theme.ControlShape
 import kotlinx.coroutines.launch
 
 /** Where the app's source lives. The only outbound link the app ships with. */
@@ -77,6 +89,63 @@ fun SettingsScreen(
     var mode by remember { mutableStateOf(prefs.appearanceMode) }
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val resolver = LocalContext.current.contentResolver
+
+    var store by remember { mutableStateOf(graph.attachmentStorage.state()) }
+    // Read once: the answer only changes by adding or deleting a file, neither of which happens
+    // on this screen, and the question costs a query.
+    var attachmentRows by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { attachmentRows = graph.attachments.count() }
+
+    // Moving existing attachments is a later release (spec §11.12), so a *working* folder that
+    // already holds some is fixed. The two other states are not:
+    //
+    //  - `AccessLost`, where re-choosing the same folder is the only repair there is; refusing it
+    //    would leave the owner with rows they can never reach again.
+    //  - `NotConfigured`, which is what a data-only restore onto a new phone looks like: rows
+    //    exist and no folder does, so there is nothing to move and choosing one is the whole
+    //    point — the restore of the files archive cannot happen until it is chosen.
+    //
+    // The same-folder barrier is therefore only about *rows*: with no attachments at all there is
+    // nothing to reach again, and insisting on a folder whose grant is gone — a card that was
+    // removed, a cloud account that was signed out — would leave the owner unable to choose any
+    // folder at all.
+    val repairing = store is StoreState.AccessLost && attachmentRows > 0
+    val folderFixed = attachmentRows > 0 && store is StoreState.Ready
+
+    val chooseFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { picked ->
+        val stored = prefs.attachmentTreeUri
+        when {
+            picked == null -> Unit
+            repairing && stored != null && !sameTree(stored, picked) -> scope.launch {
+                snackbars.showSnackbar("That is a different folder. Choose the same one to restore access.")
+            }
+            else -> {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                // Take first, release second. A provider that will not give a lasting grant (some
+                // cloud ones will not) throws here, inside an activity-result callback, where an
+                // escaping exception is a crash — and if the new grant is not ours, letting the
+                // old one go would leave the owner with no folder at all. So on failure the pref
+                // and the old grant are both untouched, and `store` is re-read so the screen
+                // still shows what is actually true.
+                if (runCatching { resolver.takePersistableUriPermission(picked, flags) }.isFailure) {
+                    store = graph.attachmentStorage.state()
+                    scope.launch { snackbars.showSnackbar("Could not keep access to that folder") }
+                } else {
+                    // Grants accumulate otherwise (spike S5), and releasing one the system no
+                    // longer holds throws — which must not undo the take that just succeeded.
+                    stored?.takeIf { it != picked.toString() }?.let { old ->
+                        runCatching { resolver.releasePersistableUriPermission(old.toUri(), flags) }
+                    }
+                    prefs.attachmentTreeUri = picked.toString()
+                    store = graph.attachmentStorage.state()
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -124,6 +193,41 @@ fun SettingsScreen(
                 QuietLine("Dynamic colour arrives in a later release")
             }
 
+            SectionHeader(title = "Attachment storage")
+            Column(
+                modifier = Modifier.padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                when (val current = store) {
+                    StoreState.NotConfigured -> LabelValue(label = "Folder", value = "Not set")
+                    is StoreState.Ready -> {
+                        LabelValue(label = "Folder", value = current.displayName)
+                        LabelValue(label = "Provider", value = current.authority)
+                    }
+                    is StoreState.AccessLost -> {
+                        LabelValue(label = "Folder", value = current.displayName)
+                        LabelValue(label = "Provider", value = authorityOf(prefs.attachmentTreeUri))
+                        QuietLine("access lost — choose the folder again")
+                    }
+                }
+                QuietLine(
+                    "Files are written as ordinary documents in this folder; a sync tool such as " +
+                        "Syncthing owns any off-device copy.",
+                )
+                Button(
+                    onClick = { chooseFolder.launch(null) },
+                    enabled = !folderFixed,
+                    shape = ControlShape,
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    Text("Choose folder")
+                }
+                // D12 §14: the reason a control is unavailable is shown, not hidden with it.
+                if (folderFixed) {
+                    QuietLine("Moving attachments to another folder arrives in a later release")
+                }
+            }
+
             SectionHeader(title = "Utilities")
             UtilityRow(
                 icon = NoteNfcIcons.Contactless,
@@ -154,6 +258,22 @@ fun SettingsScreen(
         }
     }
 }
+
+/**
+ * Whether a picked tree is the folder already stored: same provider, same tree document id. The
+ * whole URI cannot be compared — a provider is free to hand back a differently-spelled URI for
+ * the same folder — and the id alone cannot either, because two providers may both call a folder
+ * `primary:Attachments`.
+ */
+private fun sameTree(stored: String, picked: Uri): Boolean {
+    val old = stored.toUri()
+    val oldId = runCatching { DocumentsContract.getTreeDocumentId(old) }.getOrNull()
+    val pickedId = runCatching { DocumentsContract.getTreeDocumentId(picked) }.getOrNull()
+    return oldId != null && oldId == pickedId && old.authority == picked.authority
+}
+
+/** The provider behind the stored tree, for the Provider line when the store cannot answer. */
+private fun authorityOf(treeUri: String?): String = treeUri?.toUri()?.authority ?: "unknown"
 
 /** One radio row. The whole row is the target, so the label is not a decoration next to a dot. */
 @Composable

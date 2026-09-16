@@ -316,7 +316,7 @@ class EditorsDeviceProofTest {
         }
 
         val before = counts()
-        val bytes = runBlocking { app.graph.exportBackup.run() }
+        val bytes = exportedDataArchive()
         clearInstall()
         assertEquals("the wipe emptied the store", 0, counts().values.sum())
         runBlocking { app.graph.importBackupReplace.run(bytes) }

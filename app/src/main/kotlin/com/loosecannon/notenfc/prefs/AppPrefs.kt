@@ -26,8 +26,24 @@ class AppPrefs(private val store: KeyValueStore) {
     var appearanceMode: AppearanceMode
         get() = store.getString(KEY_APPEARANCE)?.let { runCatching { AppearanceMode.valueOf(it) }.getOrNull() } ?: AppearanceMode.SYSTEM
         set(value) = store.putString(KEY_APPEARANCE, value.name)
+
+    /** The SAF tree the owner chose for attachments. Device-local, never in a backup. */
+    var attachmentTreeUri: String?
+        get() = store.getString(KEY_ATTACHMENT_TREE).orNullIfBlank()
+        set(value) = store.putString(KEY_ATTACHMENT_TREE, value ?: "")
+
+    /** The set id of the last data archive restored, so a later artifacts restore can refuse (spec 7.3). */
+    var lastRestoredBackupSetId: String?
+        get() = store.getString(KEY_LAST_RESTORED_SET).orNullIfBlank()
+        set(value) = store.putString(KEY_LAST_RESTORED_SET, value ?: "")
+
     private companion object {
         const val KEY_LAST_BACKUP = "last_backup_at"
         const val KEY_APPEARANCE = "appearance_mode"
+        const val KEY_ATTACHMENT_TREE = "attachment_tree_uri"
+        const val KEY_LAST_RESTORED_SET = "last_restored_backup_set_id"
     }
 }
+
+/** `KeyValueStore.putString` cannot store null, so clearing writes "": one state, not two. */
+private fun String?.orNullIfBlank(): String? = this?.takeIf { it.isNotBlank() }

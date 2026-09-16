@@ -199,3 +199,38 @@ val MIGRATION_3_4: Migration = object : Migration(3, 4) {
         )
     }
 }
+
+/**
+ * Schema v4 -> v5: the `attachment` table (spec §9.1). Nothing existing changes, so this is a
+ * plain `CREATE TABLE` plus its three indexes — no recreate, no copy, no rewrite. Every row that
+ * was on disk before the migration is untouched by construction.
+ *
+ * As everywhere in this file the SQL is copied verbatim from the exported `5.json`, so the
+ * migration and the compiled entity have one source and Room validates the result on open.
+ */
+val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `attachment` (`id` TEXT NOT NULL, `asset_id` TEXT, " +
+                "`event_id` TEXT, `kind` TEXT NOT NULL, `mode` TEXT NOT NULL, " +
+                "`display_name` TEXT NOT NULL, `mime_type` TEXT NOT NULL, " +
+                "`size_bytes` INTEGER NOT NULL, `sha256` TEXT NOT NULL, " +
+                "`storage_provider` TEXT NOT NULL, `storage_locator` TEXT NOT NULL, " +
+                "`captured_on` TEXT, `notes` TEXT NOT NULL, `created_at` INTEGER NOT NULL, " +
+                "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                "FOREIGN KEY(`asset_id`) REFERENCES `asset`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`event_id`) REFERENCES `asset_event`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_attachment_asset_id` ON `attachment` (`asset_id`)",
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_attachment_event_id` ON `attachment` (`event_id`)",
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                "`index_attachment_storage_provider_storage_locator` ON `attachment` " +
+                "(`storage_provider`, `storage_locator`)",
+        )
+    }
+}

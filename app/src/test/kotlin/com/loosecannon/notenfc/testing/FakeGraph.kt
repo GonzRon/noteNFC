@@ -1,6 +1,8 @@
 package com.loosecannon.notenfc.testing
 
+import com.loosecannon.notenfc.attachments.Thumbnails
 import com.loosecannon.notenfc.core.ports.AssetRepository
+import com.loosecannon.notenfc.core.ports.AttachmentRepository
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.DefinitionRepository
 import com.loosecannon.notenfc.core.ports.EventRepository
@@ -9,29 +11,34 @@ import com.loosecannon.notenfc.core.ports.LinkRepository
 import com.loosecannon.notenfc.core.ports.ProfileRepository
 import com.loosecannon.notenfc.core.ports.TagRepository
 import com.loosecannon.notenfc.core.ports.UnitOfWork
+import com.loosecannon.notenfc.core.usecase.AddAttachment
 import com.loosecannon.notenfc.core.usecase.ApplyTemplate
 import com.loosecannon.notenfc.core.usecase.ArchiveAsset
 import com.loosecannon.notenfc.core.usecase.ArchiveDefinition
 import com.loosecannon.notenfc.core.usecase.ArchiveProfile
 import com.loosecannon.notenfc.core.usecase.CreateAsset
 import com.loosecannon.notenfc.core.usecase.DeleteAsset
+import com.loosecannon.notenfc.core.usecase.DeleteAttachment
 import com.loosecannon.notenfc.core.usecase.DeleteDefinition
 import com.loosecannon.notenfc.core.usecase.DeleteEvent
 import com.loosecannon.notenfc.core.usecase.DeleteLink
 import com.loosecannon.notenfc.core.usecase.DeleteProfile
-import com.loosecannon.notenfc.core.usecase.ExportBackup
+import com.loosecannon.notenfc.core.usecase.ExportBackupSet
 import com.loosecannon.notenfc.core.usecase.ImportBackupReplace
 import com.loosecannon.notenfc.core.usecase.LogEvent
 import com.loosecannon.notenfc.core.usecase.ProvisionTag
 import com.loosecannon.notenfc.core.usecase.ReorderDefinitions
 import com.loosecannon.notenfc.core.usecase.ReorderProfiles
+import com.loosecannon.notenfc.core.usecase.RestoreArtifacts
 import com.loosecannon.notenfc.core.usecase.RetireAsset
 import com.loosecannon.notenfc.core.usecase.SaveDefinition
 import com.loosecannon.notenfc.core.usecase.SaveProfile
 import com.loosecannon.notenfc.core.usecase.UpdateAsset
+import com.loosecannon.notenfc.core.usecase.UpdateAttachment
 import com.loosecannon.notenfc.core.usecase.UpdateEvent
 import com.loosecannon.notenfc.data.room.AppDatabase
 import com.loosecannon.notenfc.data.room.RoomAssetRepository
+import com.loosecannon.notenfc.data.room.RoomAttachmentRepository
 import com.loosecannon.notenfc.data.room.RoomDefinitionRepository
 import com.loosecannon.notenfc.data.room.RoomEventRepository
 import com.loosecannon.notenfc.data.room.RoomLinkRepository
@@ -41,6 +48,7 @@ import com.loosecannon.notenfc.data.room.RoomUnitOfWork
 import com.loosecannon.notenfc.data.room.inMemoryDb
 import com.loosecannon.notenfc.prefs.AppPrefs
 import com.loosecannon.notenfc.prefs.KeyValueStore
+import java.io.File
 
 /**
  * `AppGraph` without a `Context`: the same members, built on `inMemoryDb()` and the real Room
@@ -66,18 +74,34 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val definitions: DefinitionRepository = RoomDefinitionRepository(db.definitionDao())
     val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
     val events: EventRepository = RoomEventRepository(db.eventDao())
+    val attachments: AttachmentRepository = RoomAttachmentRepository(db.attachmentDao())
+
+    /**
+     * The store a test drives by hand: `state` is a `var` and the bytes are a map, so a refusal
+     * and a successful write are both one line away. `SafAttachmentStorage` itself is proved by
+     * `SafAttachmentStorageTest` and on the emulator.
+     */
+    val attachmentStorage: FakeAttachmentStorage = FakeAttachmentStorage()
+
+    /**
+     * Mirrors `AppGraph.thumbnails` so a ViewModel test can take the same collaborators. The
+     * decode itself needs `BitmapFactory`, so nothing on the JVM asks this for a real thumbnail
+     * and the cache directory below is a path that is never created.
+     */
+    val thumbnails: Thumbnails =
+        Thumbnails(File(System.getProperty("java.io.tmpdir"), "notenfc-jvm-thumbs"), attachmentStorage)
 
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
     val archiveAsset: ArchiveAsset = ArchiveAsset(assets, uow, clock)
     val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
-    val deleteAsset: DeleteAsset = DeleteAsset(assets, uow)
+    val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
     val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
     val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
     val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
-    val deleteEvent: DeleteEvent = DeleteEvent(events, uow)
+    val deleteEvent: DeleteEvent = DeleteEvent(events, attachments, attachmentStorage, uow)
     val saveDefinition: SaveDefinition =
         SaveDefinition(definitions, events, profiles, assets, uow, ids, clock)
     val archiveDefinition: ArchiveDefinition = ArchiveDefinition(definitions, uow, clock)
@@ -88,20 +112,30 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)
 
+    // Phase 4A — attachments.
+    val addAttachment: AddAttachment =
+        AddAttachment(attachments, assets, events, attachmentStorage, uow, ids, clock)
+    val updateAttachment: UpdateAttachment = UpdateAttachment(attachments, uow, clock)
+    val deleteAttachment: DeleteAttachment = DeleteAttachment(attachments, attachmentStorage, uow)
+    val restoreArtifacts: RestoreArtifacts = RestoreArtifacts(attachments, attachmentStorage)
+
     /** Device-local preferences, in a map: a test can read back exactly what the UI wrote. */
     val prefs: AppPrefs = AppPrefs(InMemoryKeyValueStore())
 
-    val exportBackup: ExportBackup = ExportBackup(
-        assets, tags, links, definitions, profiles, events, uow, clock, APP_VERSION, SCHEMA_VERSION,
+    /** Both halves of a set: `run().data` for the data archive, `run().plan` for the other one. */
+    val exportBackupSet: ExportBackupSet = ExportBackupSet(
+        assets, tags, links, definitions, profiles, events, attachments, uow, ids, clock,
+        APP_VERSION, SCHEMA_VERSION,
     )
-    val importBackupReplace: ImportBackupReplace =
-        ImportBackupReplace(assets, tags, links, definitions, profiles, events, uow)
+    val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
+        assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
+    )
 
     fun close() = db.close()
 
     private companion object {
         const val APP_VERSION = "test"
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
     }
 }
 
