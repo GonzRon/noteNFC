@@ -14,11 +14,13 @@ Phase 1  Tag survival (M1)  =  1A persistence + legacy migration + backup/restor
    ▼
 Phase 2  Journal + profiles
    ▼
+Phase 4A Attachments: SAF-tree managed store + data/artifacts backup split   (pulled ahead 2026-09-15)
+   ▼
 Phase 3  Scheduling + local reminders
    ▼
-Phase 3R Resilience: automatic versioned backup   (before attachments change the size class)
+Phase 3R Resilience: automatic versioned backup   (scheduling, retention, health; the format split is already in 4A)
    ▼
-Phase 4  Attachments          (R-6: first, because manuals/photos/provenance records pay off immediately)
+Phase 4B Attachments: referenced documents, store migration UX          (R-6: first, because manuals/photos/provenance records pay off immediately)
    ▼
 Phase 5  Todoist              (R-6: second)
    ▼
@@ -135,6 +137,27 @@ abstraction is needed ahead of the phase.
 | **Rollback / compat** | Feature is additive and off until a destination is chosen; manual export/import unchanged. |
 
 ## Phase 4 — Attachments and the storage-provider boundary
+
+**Reorder and split (decided 2026-09-15).** The owner wants the rest of the real records (manuals,
+PDFs, photos from the Joplin export) in the app before schedules, so attachments come before
+Phase 3, as **4A** (below) with the rest as **4B** after 3R. Two decisions taken with it:
+
+- **The managed store is a user-selected SAF tree**, Google Drive intended as the first choice if
+  its DocumentsProvider exposes a writable tree on the owner's phone (spike S5 runs first and its
+  observed behaviour is recorded; if Drive does not, the observation is reported before any
+  architecture change — app-private storage is never silently made primary). The domain sees only
+  `AttachmentStore` and provider-relative locators.
+- **Backup becomes a set of two archives under one `backupSetId`**: `noteNFC-data-<stamp>.zip`
+  (manifest + data JSON incl. attachment metadata, no bytes) and
+  `noteNFC-artifacts-<stamp>.zip` (manifest + bytes keyed by attachment id and checksum). Both
+  manifests carry `backupSetId`, `createdAt`, `dataFormatVersion`, `artifactFormatVersion`. A
+  data-only restore succeeds and marks attachments unavailable; restoring the matching artifacts
+  archive completes the set. Phase 3R later automates both without changing the format.
+
+| | 4A | 4B |
+|---|---|---|
+| Scope | attachment model + `AttachmentStore` port; SAF-tree managed store (chosen once in Settings → Attachment storage, persistable grant); attach from the document picker and camera to assets and events; open with the system viewer; image thumbnails; DOCUMENTS sections; backup set split (data + artifacts); import of the owner's eight SPA files onto the hot tub | REFERENCED documents (single-document grants, "not available on this device" after restore, grant health finding); store-location change with the copy-loop migration; app-private LOCAL as an explicit alternative provider |
+
 
 | | |
 |---|---|
