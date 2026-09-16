@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -173,8 +174,29 @@ class AttachmentsSectionViewModel(
         // The whole pass lives on `Dispatchers.IO`: nothing in it touches the UI, and a job that
         // runs for the life of the screen should not be bouncing off the main thread to do it.
         viewModelScope.launch(Dispatchers.IO) {
-            combine(rows, refresh) { attachmentRows, _ -> attachmentRows }
-                .collectLatest { scan(it) }
+            try {
+                combine(rows, refresh) { attachmentRows, _ -> attachmentRows }
+                    .collectLatest { guardedScan(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                // The row flow itself died (a database closed under a screen that is going away,
+                // a provider that broke mid-query). A background check must never take the app
+                // down or escape to the uncaught handler; the rows the combine already holds
+                // stay on screen, and the next refresh starts a fresh pass.
+                if (isActive) _messages.tryEmit(SCAN_FAILED)
+            }
+        }
+    }
+
+    /** One pass that fails leaves the rows it did not reach on their glyphs and the collector alive. */
+    private suspend fun guardedScan(attachmentRows: List<Attachment>) {
+        try {
+            scan(attachmentRows)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            _messages.tryEmit(SCAN_FAILED)
         }
     }
 
@@ -342,3 +364,6 @@ class AttachmentsSectionViewModel(
         _messages.tryEmit(line)
     }
 }
+
+/** Said once per failed presence/thumbnail pass; the rows stay, only their checks are unknown. */
+internal const val SCAN_FAILED = "Could not check the attachment folder"
