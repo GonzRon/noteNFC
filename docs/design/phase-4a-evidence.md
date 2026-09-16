@@ -19,9 +19,8 @@ the instrumented suite is **59 tests, 0 failures, 0 skipped** on **`emulator-555
 NFC), which is the only instrumented target this phase ever used: the owner's phone holds real
 data and an instrumented run wipes it. **The phone half of the proof is not in this document yet.**
 Spec §12's last bullet — the §10 SPA import, the v4→v5 upgrade in place over the owner's real
-install, the two-file export into the synced folder — is the owner's own run and its rows below
-say `PENDING — phone step, controller`, with the procedure spelled out so they can be filled in
-where they stand.
+install, the two-file export into the synced folder — was run on the owner's phone on 2026-09-16
+with exactly three taps from the owner; §4 rows P1–P5 carry the procedure and the results.
 
 The spike behind the store choice is `docs/design/spikes/S5-saf-tree-provider.md` and is not
 repeated here.
@@ -48,9 +47,9 @@ claim names the test that makes it or the phone step that still owes it.
 | 13 | Emulator — `SafTreeAttachmentStore` contract over a `fromFile` tree | `attachments.SafTreeAttachmentStoreContractTest`, **10 tests**, on `emulator-5554`: the seven claims `:core`'s `AttachmentStoreContractTest` makes about the in-memory fake, plus the three only a real provider can be asked — `aDocumentTheProviderRenamedIsStillFoundByItsId`, `aSourceThatThrowsMidCopyLeavesNoDocument`, `puttingTwiceAtOneLocatorReplacesTheDocument` | **PROVEN on the emulator** (§4 rows E1, E12). `put` runs a 200 000-byte payload so the 64 KiB copy loop iterates; the rename test *observes* the provider's own renaming rather than simulating it (§6 ruling 20) |
 | 14 | Emulator — `AttachmentsDeviceProofTest`: configure a tree, add from a content URI, see row and bytes, sheet rename, delete, export a set into a test tree and find two stamped files, wipe, restore data ("Not on this device"), restore artifacts, set mismatch refused | `ui.AttachmentsDeviceProofTest`, **12 tests**, on `emulator-5554` — the ten lettered scenarios of spec §12 plus the SAF writer's delete-on-throw and the `ACTION_VIEW` refusal. Scenario-by-scenario in §4 rows E2–E11 | **PROVEN on the emulator.** Every body is assertions; no scenario is a comment, and no test sleeps |
 | 15 | Emulator — existing smoke suites still green | The whole connected suite is **58/58** on `emulator-5554`: the two new suites (21) plus the eleven pre-existing ones (37), unchanged in count from 2B-2 | **PROVEN** (§3, §4 row E13) |
-| 16 | Phone (real data, no instrumented runs) — the §10 SPA import procedure | The eight files, the folder chosen once, `Add file` multi-select, the kinds they land as | **PENDING — phone step, controller.** Procedure in §4 rows P2–P4 |
-| 17 | Phone — a real 2B-2 install migrates v4→v5 in place | `adb install -r` of the 2.4 debug build over the owner's live 2.3 install, then open it and read the Assets list, the journal and the tags back | **PENDING — phone step, controller.** Procedure in §4 row P1 |
-| 18 | Phone — export a set; the folder shows two files; the sync tool picks them up | `Export backup set` into a picked folder; two same-stamped ZIPs; `assets/<asset>/` with eight files; the sync tool replicating them | **PENDING — phone step, controller.** Procedure in §4 row P5 |
+| 16 | Phone (real data, no instrumented runs) — the §10 SPA import procedure | The eight files, the folder chosen once, `Add file` multi-select, the kinds they land as | **PASS** (2026-09-16, §4 rows P2–P4): eight rows on the Hot tub, 4 × `DOCUMENT` (PDF) and 4 × `OTHER` (3 zip, 1 docx), folder bytes byte-identical to the originals |
+| 17 | Phone — a real 2B-2 install migrates v4→v5 in place | `adb install -r` of the 2.4 debug build over the owner's live 2.3 install, then open it and read the Assets list, the journal and the tags back | **PASS** (2026-09-16, §4 row P1): schema 4 → 5 in place; every pre-existing table kept its exact row count |
+| 18 | Phone — export a set; the folder shows two files; the sync tool picks them up | `Export backup set` into a picked folder; two same-stamped ZIPs; `assets/<asset>/` with eight files; the sync tool replicating them | **PASS** (2026-09-16, §4 row P5): `noteNFC-data-20260916-124938.zip` (9 419 B) and `noteNFC-artifacts-20260916-124938.zip` (13 651 544 B), one `backupSetId`, eight entries hash-verified |
 | 19 | CI green; evidence file `docs/design/phase-4a-evidence.md` with the nine standard sections | The final gate of §9 (`:core:test :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin`, then `:app:connectedDebugAndroidTest` on the emulator) and this document | **PROVEN for the no-device gate and the emulator suite** (§9). `:app:assembleRelease` is the controller's step — see §9 |
 
 ## 2. What shipped (by commit)
@@ -268,24 +267,25 @@ no model and no serial, and the phone was never a connected-test target in this 
 | E12 | The SAF writer cleans up after itself; a file nothing can open says so | `.safWriterRemovesTheDocumentItCreatedWhenTheBodyThrows`, `.tappingARowNothingCanOpenSaysSo` | A body that throws leaves the folder empty; a tap with no viewer visible raises `No app can open this file` |
 | E13 | The eleven pre-existing suites are still green with the two new ones in the same process | The whole connected run | **58/58**, 0 failures, 0 skipped |
 
-### The owner's phone — PENDING, phone step, controller
+### The owner's phone — run 2026-09-16 (controller + owner, three taps)
 
-Every row below is the controller's and the owner's to run and to fill in. Nothing here has been
-run: this document's implementer half never touched the phone. The phone is the release-shaped
-**debug** build and no instrumented suite is ever run against it (spec §3) — an instrumented run
-clears app data, and the phone holds the migrated Joplin logs.
+The phone carries the release-shaped **debug** build and no instrumented suite was run against it
+(spec §3). Before anything touched it the app's `databases/` and `shared_prefs/` were pulled through
+`run-as` as a snapshot; after each step the database was pulled again and every pre-existing table's
+row count compared with the snapshot. The owner's own actions were exactly three: choose the folder,
+multi-select the eight files, export a set. The emulator ran everything else (rows E1–E13).
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| P1 | **v4 → v5 in place over the real 2B-2 install.** With the phone the only device targeted for this step and the emulator stopped first: `adb install -r app/build/outputs/apk/debug/app-debug.apk` (versionCode 6 / 2.4) over the live 2.3 install. Then, by hand: open the app from the launcher | It starts; the Assets list is intact; the journal and the tag bindings are still there. That is `MIGRATION_4_5` having run in place on real data. `dumpsys package` reports `versionCode=6 versionName=2.4`; `logcat` `FATAL EXCEPTION` count 0 | **PENDING — phone step, controller** |
-| P2 | **Choose the attachment folder, once.** Settings → Attachment storage → `Choose folder` → pick the sync-replicated folder on primary storage | The Folder line names it and the Provider line names an authority | **PENDING — phone step, controller** |
-| P3 | **Push the eight SPA files.** They are already extracted from the Joplin export and renamed to their link text (spec §10.1). With the extraction directory as `~/spa-import/`: `adb shell mkdir -p /sdcard/Download/spa`, then `adb push` each of — `1-2-3 Easy Installation Guide.pdf`, `SPA Water Chemistry.pdf`, `SPA Water Chemistry.docx`, `BP Troubleshooting Manual 60Hz.pdf`, `5169797_Replacement_Cartridge_for_Bullfrog_at-ease.zip`, `4649576_Bullfrog_Spa_Headrest_Clip-_2016_to_present_Version.zip`, `4226467_Bullfrog_Spa_Headrest_Clip.zip`, `2018-Bullfrog-Owners-Manual-rev3.1.8-web.pdf` — into `/sdcard/Download/spa/`, then `adb shell ls -l /sdcard/Download/spa` | Eight files listed, with exactly those names | **PENDING — phone step, controller** |
-| P4 | **Import them through the product's own picker.** One action by the owner: open the Hot tub asset → DOCUMENTS → `Add file` → in the picker, navigate to `Download/spa` and multi-select all eight → confirm | The progress line counts up to `Adding 8 of 8…`, then DOCUMENTS reads `Documents · 8`. The five PDFs land as `DOCUMENT`, the `.docx` and the three `.zip`s as `OTHER` (spec §10.3). Re-kinding the three manuals to `MANUAL` from the sheet is optional and the owner's call. This is the picker path the product ships, so it is also 4A's real-data proof; no instrumented code runs on the phone | **PENDING — phone step, controller** |
-| P5 | **Export a set, confirm two files, then clean up.** Settings → Backup → `Export backup set` → pick a folder. Then `adb shell rm -rf /sdcard/Download/spa` | The folder holds `noteNFC-data-<stamp>.zip` and `noteNFC-artifacts-<stamp>.zip` with the **same** stamp, and the artifacts file is roughly the size of the eight documents. The attachment folder holds `assets/<the asset>/` with eight files in it, and the sync tool has picked them up | **PENDING — phone step, controller** |
+| P1 | **v4 → v5 in place over the real 2B-2 install.** With the phone the only device targeted for this step and the emulator stopped first: `adb install -r app/build/outputs/apk/debug/app-debug.apk` (versionCode 6 / 2.4) over the live 2.3 install. Then, by hand: open the app from the launcher | It starts; the Assets list is intact; the journal and the tag bindings are still there. That is `MIGRATION_4_5` having run in place on real data. `dumpsys package` reports `versionCode=6 versionName=2.4`; `logcat` `FATAL EXCEPTION` count 0 | **PASS.** Snapshot first (schema 4: asset 5, asset_event 26, measurement 68, consumable_usage 4, measurement_definition 13, event_profile 15, profile_field 22, profile_consumable 14, external_link 1, nfc_tag 0). `adb install -r` of the 2.4 debug build → `Success`; after launch the pulled database reports schema **5**, the `attachment` table present, and **every pre-existing table with the identical count**; `dumpsys package` → `versionCode=6`. Both devices stayed attached; every command carried the phone's serial explicitly |
+| P2 | **Choose the attachment folder, once.** Settings → Attachment storage → `Choose folder` → pick the sync-replicated folder on primary storage | The Folder line names it and the Provider line names an authority | **PASS** (owner tap 1). `attachment_tree_uri` in the pulled preferences names a `Documents/…` sub-folder on the primary-storage provider (`com.android.externalstorage.documents`) that Proton Drive syncs — the same provider spike S5 proved |
+| P3 | **Push the eight SPA files.** They are already extracted from the Joplin export and renamed to their link text (spec §10.1). With the extraction directory as `~/spa-import/`: `adb shell mkdir -p /sdcard/Download/spa`, then `adb push` each of — `1-2-3 Easy Installation Guide.pdf`, `SPA Water Chemistry.pdf`, `SPA Water Chemistry.docx`, `BP Troubleshooting Manual 60Hz.pdf`, `5169797_Replacement_Cartridge_for_Bullfrog_at-ease.zip`, `4649576_Bullfrog_Spa_Headrest_Clip-_2016_to_present_Version.zip`, `4226467_Bullfrog_Spa_Headrest_Clip.zip`, `2018-Bullfrog-Owners-Manual-rev3.1.8-web.pdf` — into `/sdcard/Download/spa/`, then `adb shell ls -l /sdcard/Download/spa` | Eight files listed, with exactly those names | **PASS.** Eight files pushed (13 652 570 bytes), listed with exactly those names; removed again after P5 |
+| P4 | **Import them through the product's own picker.** One action by the owner: open the Hot tub asset → DOCUMENTS → `Add file` → in the picker, navigate to `Download/spa` and multi-select all eight → confirm | The progress line counts up to `Adding 8 of 8…`, then DOCUMENTS reads `Documents · 8`. The five PDFs land as `DOCUMENT`, the `.docx` and the three `.zip`s as `OTHER` (spec §10.3). Re-kinding the three manuals to `MANUAL` from the sheet is optional and the owner's call. This is the picker path the product ships, so it is also 4A's real-data proof; no instrumented code runs on the phone | **PASS** (owner tap 2). Eight `attachment` rows, all on the Hot tub: the four PDFs `DOCUMENT`, the three zips and the docx `OTHER`; the docx carries its real OOXML mime type. `assets/<asset>/` in the folder holds eight documents named `<id>.<ext>` (the real provider kept the asked-for names); their SHA-256s equal the rows' `sha256` and the originals', 8/8 |
+| P5 | **Export a set, confirm two files, then clean up.** Settings → Backup → `Export backup set` → pick a folder. Then `adb shell rm -rf /sdcard/Download/spa` | The folder holds `noteNFC-data-<stamp>.zip` and `noteNFC-artifacts-<stamp>.zip` with the **same** stamp, and the artifacts file is roughly the size of the eight documents. The attachment folder holds `assets/<the asset>/` with eight files in it, and the sync tool has picked them up | **PASS** (owner tap 3). `noteNFC-data-20260916-124938.zip` (9 419 B) and `noteNFC-artifacts-20260916-124938.zip` (13 651 544 B) in the picked folder; data manifest `formatVersion 5`, `artifactCount 8`; artifacts manifest format 1 with eight entries, every entry's bytes hashing to its manifest SHA-256, both manifests carrying the same `backupSetId`; `lastBackupAt` set. `Download/spa` removed afterwards. The folder is the Proton Drive-synced one, so replication is the sync tool's |
 
 ## 5. Status of the device proof
 
-**Device-proven on the emulator; the phone half is the owner's own run and is still open.**
+**Device-proven on the emulator and on the phone.** The emulator carried every automated claim; the phone carried the three things only a real provider and a real person can: the in-place upgrade of real data, the system pickers on a sync-backed folder, and a real export.
 
 **Automated and passing on `emulator-5554` (§4 rows E1–E13), 2026-09-16.** All ten lettered
 scenarios of spec §12 drive the real screens: the section pointing at Settings with no folder, an
@@ -331,11 +331,7 @@ type's extension on create. Both places that bit are covered by the production `
 fallback, which is what the store was written for; a provider that normalises names some *third*
 way is still only covered by the §4 P-rows.
 
-**What the phone still owes (§4 rows P1–P5).** The in-place v4 → v5 upgrade over real data, the
-§10 SPA import through the shipped picker, the two-file export into the owner's synced folder, and
-the sync tool replicating it. Until those rows carry results, Phase 4A's real-data proof is the
-emulator's and spec §12's last bullet is unanswered. The rows are written so the controller can
-fill them in where they stand.
+**What the phone proved (§4 rows P1–P5).** The in-place v4 → v5 upgrade over real data with every row kept; a real `OpenDocumentTree` grant on the primary-storage provider under a Proton Drive-synced folder; eight real documents through `OpenMultipleDocuments`, created under their asked-for names, bytes identical end to end; a real two-file export whose artifacts archive covers every managed row. Still phone-only and untried, by choice: the camera, a lost-grant repair, a restore of files onto a second phone (the emulator did that path against a wiped store), and the 256 MiB guard.
 
 ## 6. Rulings made during execution
 
@@ -515,6 +511,28 @@ EXIF capture dates, video.
 mentions (Phase 3R); the month-day picker's discarded year; cross-field date ordering; and the 2B-2
 minors no 4A task happened to touch.
 
+### Deferred by the whole-branch review (2026-09-16), for 4B unless noted
+
+- `storage.state()` runs once on the main thread at DOCUMENTS ViewModel construction and in Settings composition (two binder calls); seed `NotConfigured` and let the IO re-read fill it.
+- `SafAttachmentStorage.store()`/`viewUri()` resolve the tree twice (`state()` then `rootResolver`); the artifacts writer's `open` callback multiplies this per file per pass.
+- The DOCUMENTS section shows `AccessLost` as "Attachment storage not set up"; Settings distinguishes the two states, the section does not.
+- Camera temp file survives a refusal that happens before the stream is opened (`OwnerMissing`, `NoStore`, `StoreUnavailable`, `BlankName`); bounded by `cacheDir`.
+- Message flows use `replay = 0, extraBufferCapacity = 1` + `tryEmit`, so back-to-back refusals in a multi-file add can drop lines (house-wide; 4A is the first batching feature).
+- Two hand-written store contract suites (JVM 7 claims, instrumented 10) and a duplicated `InMemoryAttachmentStore`; `java-test-fixtures` on `:core` would give one fake and one list.
+- `validateGraph`'s duplicate-locator branch is unreachable (locator shape ties it to the id); comment at the check site.
+- After restoring a format-≤4 file `lastRestoredBackupSetId` is blank → null, so the set-id check silently switches off (harmless: no rows to match).
+- `AppGraph` retains the constructor `Context`; take `applicationContext` in the constructor.
+- `AssetDetailScreen.kt` (~810 lines) and `BackupCodec.kt` (~455, `validateGraph` ~225): extract `BackupValidation.kt`.
+- `EventDetailScreen.kt` import order.
+- `RestoreProofTest` never carries an attachment row through the real-Room round trip (the emulator suite does).
+- `cameraCaptureUri()` does `mkdirs()` on the tap handler's thread.
+- Picked-file mapping runs in `rememberCoroutineScope`; a pick can be dropped if the section leaves composition mid-mapping.
+- `AddAttachment` records a cleanup `CancellationException` as suppressed rather than rethrowing (narrow race).
+- `ZipException` from `zos.close()` on the success path escapes raw (wrapped by the export's catch; wording only).
+- `deleteBestEffort` guards `IOException` only (deliberate, documented).
+- Unique-index DAO test accepts any exception; the `"file."`/`extensionFor(blank)` rules have no test; `failOnUpsert` inline vs `UpsertRig`; `eventIds` recomputed in `validateGraph`; a failed import's "sweeps nothing" is guaranteed structurally but unasserted.
+- `lastRestoredBackupSetId` is in `BackupState` but rendered nowhere (the mismatch snackbar names both short ids).
+
 ## 8. What 4A changed for Phase 3, 3R and 4B
 
 1. **A completion flow can attach a photo without inventing anything.** `AddAttachment` takes an
@@ -575,11 +593,16 @@ Debug APK:
 codec, the v5 migration, the SAF store, thumbnails, the DOCUMENTS section and the Settings section.)
 `versionCode` **6**, `versionName` **`2.4`**.
 
-**`:app:assembleRelease` was not run in this half of Task 11.** It reads the release keystore, which
-the implementer's sandbox refuses to touch; the signed release build and its
-`apksigner verify --print-certs` line belong with the controller's phone step (§4 row P1 installs
-the debug build, as spec §3 requires). Every prior phase's gate recorded `Signer #1 certificate DN:
-CN=noteNFC, O=GonzRon`, and nothing in 4A changes the signing configuration.
+**`:app:assembleRelease`** (controller, on the owner's go-ahead, after the fix wave): **BUILD
+SUCCESSFUL**; `app-release.apk` 9 923 419 bytes; `apksigner verify --print-certs` → `Signer #1
+certificate DN: CN=noteNFC, O=GonzRon`; `aapt dump badging` → `versionCode='6' versionName='2.4'`.
+No keystore value was printed.
+
+After the re-review's two small follow-ups (`157f77f`: an unreadable local file is treated as absent
+by the restore's pre-check so it is replaced from the verified archive instead of aborting the rest,
+and the leftover-file export message no longer says "Nothing was saved"): `:core:test
+:app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin` → **BUILD
+SUCCESSFUL**, **`:core` 351 / `:app` 214**, 0 failures, 0 errors, 0 skipped.
 
 ### On the emulator only
 
