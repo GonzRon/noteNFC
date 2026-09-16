@@ -2,12 +2,14 @@ package com.loosecannon.notenfc.core.backup
 
 import com.loosecannon.notenfc.core.model.AttachmentId
 import com.loosecannon.notenfc.core.model.MimeTypes
+import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.DigestInputStream
 import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
+import java.util.zip.ZipException
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.serialization.Serializable
@@ -77,9 +79,20 @@ data class ArtifactsReadReport(
     val unexpectedEntries: List<String>,
 )
 
-/** Thrown by the export when [ArtifactsWritten.covers] is false; the archives are already gone. */
-class BackupSetIncomplete(val missing: List<AttachmentId>, val mismatched: List<AttachmentId>) :
-    Exception("backup set incomplete: ${missing.size} missing, ${mismatched.size} mismatched")
+/**
+ * Zip-level damage is the reader's business, not the caller's: a truncated or garbage archive
+ * arrives as `EOFException`/`ZipException` from the stream and leaves as [BackupCorrupt], the
+ * family the restore is built on. Only operations on the zip stream itself are wrapped — a
+ * callback's own failure (`ArtifactsSetMismatch`, a `StoreIoException` from a put) travels intact.
+ */
+private inline fun <T> readingZip(block: () -> T): T =
+    try {
+        block()
+    } catch (e: ZipException) {
+        throw BackupCorrupt("artifacts archive is not readable: ${e.message}")
+    } catch (e: EOFException) {
+        throw BackupCorrupt("artifacts archive is not readable: ${e.message}")
+    }
 
 /**
  * Artifact format 1: a ZIP whose first entry is `manifest.json` and whose remaining entries are
@@ -160,6 +173,7 @@ object ArtifactsCodec {
             },
         )
 
+        var writtenBytes = 0L
         ZipOutputStream(sink).use { zos ->
             val manifestBytes = json
                 .encodeToString(ArtifactsManifest.serializer(), manifest)
@@ -178,16 +192,35 @@ object ArtifactsCodec {
                 } else {
                     zipEntry.method = ZipEntry.DEFLATED
                 }
-                zos.putNextEntry(zipEntry)
-                val source = open(entry.locator)
-                    ?: throw BackupCorrupt("artifacts: ${entry.locator} vanished mid-export")
-                source.use { it.copyTo(zos, BUFFER) }
-                zos.closeEntry()
+                // Pass two trusts nothing pass one measured: the entry is already in the archive
+                // by the time a drifted source shows itself, so a difference is a failed write,
+                // never something to report and keep.
+                writtenBytes += try {
+                    zos.putNextEntry(zipEntry)
+                    val source = open(entry.locator)
+                        ?: throw ArtifactsWriteFailed("artifacts: ${entry.locator} vanished mid-export")
+                    val copied = source.use { it.copyTo(zos, BUFFER) }
+                    if (copied != entry.sizeBytes) {
+                        throw ArtifactsWriteFailed(
+                            "artifacts: ${entry.locator} changed mid-export: " +
+                                "wrote $copied bytes, planned ${entry.sizeBytes}",
+                        )
+                    }
+                    zos.closeEntry()
+                    copied
+                } catch (e: ZipException) {
+                    // A STORED entry whose source grew or shrank between the passes: the JDK
+                    // refuses the entry against the size and CRC pass one declared.
+                    throw ArtifactsWriteFailed(
+                        "artifacts: ${entry.locator} could not be written: ${e.message}",
+                        e,
+                    )
+                }
             }
         }
         return ArtifactsWritten(
             count = resolved.size,
-            bytes = resolved.sumOf { (entry, _) -> entry.sizeBytes },
+            bytes = writtenBytes,
             missing = missing,
             mismatched = mismatched,
         )
@@ -210,12 +243,14 @@ object ArtifactsCodec {
         val unexpected = mutableListOf<String>()
         val manifest: ArtifactsManifest
         ZipInputStream(source).use { zin ->
-            val first = zin.nextEntry ?: throw BackupCorrupt("artifacts archive has no entries")
+            val first = readingZip { zin.nextEntry }
+                ?: throw BackupCorrupt("artifacts archive has no entries")
             if (first.name != MANIFEST_ENTRY) {
                 throw BackupCorrupt("artifacts archive must start with $MANIFEST_ENTRY, found ${first.name}")
             }
+            val manifestBytes = readingZip { zin.readBytes() }
             manifest = try {
-                json.decodeFromString(ArtifactsManifest.serializer(), String(zin.readBytes(), Charsets.UTF_8))
+                json.decodeFromString(ArtifactsManifest.serializer(), String(manifestBytes, Charsets.UTF_8))
             } catch (e: kotlinx.serialization.SerializationException) {
                 throw BackupCorrupt("$MANIFEST_ENTRY is not readable: ${e.message}")
             }
@@ -225,7 +260,7 @@ object ArtifactsCodec {
             onManifest(manifest)
             val byName = manifest.entries.associateBy { it.entryName }
             while (true) {
-                val zipEntry = zin.nextEntry ?: break
+                val zipEntry = readingZip { zin.nextEntry } ?: break
                 val entry = byName[zipEntry.name]
                 if (entry == null) {
                     // not in the manifest: not ours, but worth saying so rather than ignoring
@@ -242,10 +277,15 @@ object ArtifactsCodec {
         )
     }
 
-    /** So a callback's `use {}` cannot close the whole zip stream out from under the loop. */
+    /**
+     * So a callback's `use {}` cannot close the whole zip stream out from under the loop. Reads
+     * go through [readingZip] as well: a truncation inside an entry's bytes is zip-level damage
+     * wherever it surfaces, even though the read was asked for from inside a callback.
+     */
     private class NonClosing(private val delegate: InputStream) : InputStream() {
-        override fun read(): Int = delegate.read()
-        override fun read(b: ByteArray, off: Int, len: Int): Int = delegate.read(b, off, len)
+        override fun read(): Int = readingZip { delegate.read() }
+        override fun read(b: ByteArray, off: Int, len: Int): Int =
+            readingZip { delegate.read(b, off, len) }
         override fun close() { /* the ZipInputStream owns its own lifetime */ }
     }
 }

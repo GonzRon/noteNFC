@@ -62,9 +62,18 @@ class RestoreArtifacts(
                     }
                     row.sha256 != entry.sha256 -> skipped += 1
                     else -> {
-                        val stored = store.put(row.storageLocator, ByteSource { bytes })
+                        // A put that dies mid-copy has already written something; those bytes are
+                        // nobody's, and the row above them claims they are good.
+                        val stored = try {
+                            store.put(row.storageLocator, ByteSource { bytes })
+                        } catch (t: Throwable) {
+                            store.deleteBestEffort(row.storageLocator)
+                            throw t
+                        }
                         if (stored.sha256 != row.sha256) {
-                            store.delete(row.storageLocator)
+                            // Best effort: a store that will not delete leaves an orphan for 4B,
+                            // not a reason to abandon the entries after this one.
+                            store.deleteBestEffort(row.storageLocator)
                             skipped += 1
                         } else {
                             restored += 1

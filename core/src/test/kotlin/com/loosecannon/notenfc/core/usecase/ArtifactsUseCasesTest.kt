@@ -13,6 +13,8 @@ import com.loosecannon.notenfc.core.model.AttachmentId
 import com.loosecannon.notenfc.core.model.AttachmentKind
 import com.loosecannon.notenfc.core.model.AttachmentMode
 import com.loosecannon.notenfc.core.model.AttachmentOwner
+import com.loosecannon.notenfc.core.ports.AttachmentStorage
+import com.loosecannon.notenfc.core.ports.AttachmentStore
 import com.loosecannon.notenfc.core.ports.ByteSource
 import com.loosecannon.notenfc.core.ports.Clock
 import com.loosecannon.notenfc.core.ports.IdGenerator
@@ -199,6 +201,38 @@ class ArtifactsUseCasesTest {
         assertTrue(store.files.isEmpty())
     }
 
+    @Test fun aPutThatDiesMidCopyLeavesNoBytesBehindAndStillFailsTheRestore() = runTest {
+        val row = seed()
+        val archive = writeArchive()
+        store.files.clear()
+        store.failOnPut = row.storageLocator
+
+        assertFailsWith<StoreIoException> {
+            restore.run(ByteArrayInputStream(archive), expectedSetId = "set-1")
+        }
+        assertEquals(1, store.deletes)   // the locator was swept before the failure travelled on
+        assertTrue(store.files.isEmpty())
+    }
+
+    @Test fun aSweepTheStoreRefusesStillCountsTheSkipAndKeepsGoing() = runTest {
+        val first = seed("att-1")
+        seed("att-2")
+        val archive = writeArchive()
+        store.files.clear()
+        // att-1's bytes rotted, and the store will not delete them either
+        val entries = unzip(archive)
+        entries[ArtifactsCodec.ENTRY_PREFIX + "att-1.pdf"] = "rotted".toByteArray()
+        val stubborn = RestoreArtifacts(
+            attachments,
+            FixedStorage(DeleteRefusingStore(store, first.storageLocator)),
+        )
+
+        val report = stubborn.run(ByteArrayInputStream(rezip(entries)), expectedSetId = "set-1")
+        assertEquals(1, report.skipped)
+        assertEquals(1, report.restored)   // att-2 still landed
+        assertContentEquals(payload, store.open("assets/a1/att-2.pdf")!!.use { it.readBytes() })
+    }
+
     @Test fun restoreWithNoStoreConfiguredIsAnIoFailureNotAPartialRestore() = runTest {
         seed()
         val archive = writeArchive()
@@ -239,6 +273,27 @@ class ArtifactsUseCasesTest {
         assertEquals(0, report.restored)
         assertEquals(0, report.skipped)
         assertEquals("set-1", report.backupSetId)
+    }
+
+    // --- store doubles -------------------------------------------------------------------------
+
+    /** A store that refuses to delete one locator, so the best-effort sweep is really exercised. */
+    private class DeleteRefusingStore(
+        private val delegate: InMemoryAttachmentStore,
+        private val refused: String,
+    ) : AttachmentStore {
+        override suspend fun put(locator: String, source: ByteSource) = delegate.put(locator, source)
+        override suspend fun open(locator: String) = delegate.open(locator)
+        override suspend fun exists(locator: String) = delegate.exists(locator)
+        override suspend fun delete(locator: String) {
+            if (locator == refused) throw StoreIoException("rigged delete failure at $locator")
+            delegate.delete(locator)
+        }
+    }
+
+    private class FixedStorage(private val store: AttachmentStore) : AttachmentStorage {
+        override fun state() = StoreState.Ready("Attachments", "com.example.provider")
+        override fun store() = store
     }
 
     // --- zip helpers, mirroring BackupCodecTest's pair ------------------------------------------

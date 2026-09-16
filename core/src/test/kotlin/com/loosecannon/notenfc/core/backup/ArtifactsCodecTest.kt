@@ -5,7 +5,9 @@ import com.loosecannon.notenfc.core.testing.InMemoryAttachmentStore
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.zip.ZipEntry
+import java.util.zip.ZipException
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.test.Test
@@ -37,6 +39,16 @@ class ArtifactsCodecTest {
     private fun sources(vararg pairs: Pair<String, ByteArray>): suspend (String) -> ByteArrayInputStream? {
         val map = pairs.toMap()
         return { locator -> map[locator]?.let { ByteArrayInputStream(it) } }
+    }
+
+    /** A source that hands back different bytes on each pass — `null` meaning it is gone. */
+    private fun drifting(vararg passes: ByteArray?): suspend (String) -> InputStream? {
+        var call = 0
+        return { _ ->
+            val bytes = passes[minOf(call, passes.size - 1)]
+            call += 1
+            bytes?.let { ByteArrayInputStream(it) }
+        }
     }
 
     private fun zipEntries(bytes: ByteArray): List<ZipEntry> = buildList {
@@ -163,6 +175,64 @@ class ArtifactsCodecTest {
         ZipOutputStream(out).use { }
         assertFailsWith<BackupCorrupt> {
             ArtifactsCodec.read(ByteArrayInputStream(out.toByteArray()), onManifest = { }, onEntry = { _, _ -> })
+        }
+    }
+
+    @Test fun aSourceThatVanishesBetweenThePassesFailsTheWrite() = runTest {
+        val a = planEntry("att-1", text, "text/plain", "txt")
+        val out = ByteArrayOutputStream()
+        val boom = assertFailsWith<ArtifactsWriteFailed> {
+            ArtifactsCodec.write(out, plan(a), drifting(text, null))
+        }
+        assertTrue(boom.message!!.contains(a.locator), "unhelpful: ${boom.message}")
+    }
+
+    @Test fun aDeflatedSourceThatShrinksBetweenThePassesFailsTheWrite() = runTest {
+        val a = planEntry("att-1", text, "text/plain", "txt")
+        val out = ByteArrayOutputStream()
+        val boom = assertFailsWith<ArtifactsWriteFailed> {
+            ArtifactsCodec.write(out, plan(a), drifting(text, "short".toByteArray()))
+        }
+        assertTrue(boom.message!!.contains("changed mid-export"), "unhelpful: ${boom.message}")
+    }
+
+    @Test fun aStoredSourceThatDriftsBetweenThePassesFailsTheWriteWithTheZipsReason() = runTest {
+        val a = planEntry("att-1", pdf, "application/pdf", "pdf")
+        val out = ByteArrayOutputStream()
+        val boom = assertFailsWith<ArtifactsWriteFailed> {
+            // STORED declares pass one's size and CRC up front, so the JDK itself refuses these
+            ArtifactsCodec.write(out, plan(a), drifting(pdf, pdf + pdf))
+        }
+        assertTrue(boom.cause is ZipException, "cause was ${boom.cause}")
+    }
+
+    @Test fun aTruncatedArchiveIsCorrupt() = runTest {
+        val a = planEntry("att-1", pdf, "application/pdf", "pdf")
+        val out = ByteArrayOutputStream()
+        ArtifactsCodec.write(out, plan(a), sources(a.locator to pdf))
+        val half = out.toByteArray().let { it.copyOf(it.size / 2) }
+
+        val boom = assertFailsWith<BackupCorrupt> {
+            ArtifactsCodec.read(
+                ByteArrayInputStream(half),
+                onManifest = { },
+                onEntry = { _, bytes -> bytes.readBytes() },
+            )
+        }
+        // the zip stream's own EOF, translated — not a manifest that happened to be cut short
+        assertTrue(
+            boom.message!!.contains("artifacts archive is not readable"),
+            "wrong path: ${boom.message}",
+        )
+    }
+
+    @Test fun garbageBytesAreCorrupt() = runTest {
+        assertFailsWith<BackupCorrupt> {
+            ArtifactsCodec.read(
+                ByteArrayInputStream("this was never a zip file".toByteArray()),
+                onManifest = { },
+                onEntry = { _, bytes -> bytes.readBytes() },
+            )
         }
     }
 
