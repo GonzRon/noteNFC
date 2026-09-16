@@ -14,8 +14,8 @@ rows only) beside `noteNFC-artifacts-<stamp>.zip` (artifact format 1, bytes) und
 reference to a document the app does not own: `StorageProvider` has no `LOCAL` member at all, and
 `SAF_DOCUMENT` is reserved for 4B (spec §2, §11.8).
 
-**Read the status first (§5).** The JVM suites are green — `:core` **346**, `:app` **210** — and
-the instrumented suite is **58 tests, 0 failures, 0 skipped** on **`emulator-5554`** (API 37.1, no
+**Read the status first (§5).** The JVM suites are green — `:core` **350**, `:app` **214** — and
+the instrumented suite is **59 tests, 0 failures, 0 skipped** on **`emulator-5554`** (API 37.1, no
 NFC), which is the only instrumented target this phase ever used: the owner's phone holds real
 data and an instrumented run wipes it. **The phone half of the proof is not in this document yet.**
 Spec §12's last bullet — the §10 SPA import, the v4→v5 upgrade in place over the owner's real
@@ -45,7 +45,7 @@ claim names the test that makes it or the phone step that still owes it.
 | 10 | `:app` JVM — migration 4→5 from `4.json`; `RoomAttachmentRepository` DAO round trip incl. cascade on asset and event delete and `observeForOwner` | `Migration4To5Test.addsTheAttachmentTableAndLeavesEverythingElseAlone`, `Migration1To5Test.v1UpgradesThroughAllFourMigrations`, `AttachmentDaoTest` (7: `roundTripsARowOnAnAssetAndOnAnEvent`, the three cascade tests, `twoRowsCannotClaimTheSameProviderAndLocator`, `aRowWithBothOwnersOrNeitherIsRefusedByTheMapper`, `observeForOwnerEmitsOnEveryWriteAndIsOrderedByName`) | **PROVEN on the JVM.** The v1→v5 chain is green; the table arrives with the unique `(storage_provider, storage_locator)` index and nothing else in the database moves. The **in-place** upgrade over the owner's real v4 install is §4 row P1 |
 | 11 | `:app` JVM — `AttachmentStorage.state()` over a fake resolver; `Thumbnails` cache naming | `SafAttachmentStorageTest` (4: `noPreferenceIsNotConfigured`, `aResolvableWritableGrantedTreeIsReady`, `aRevokedGrantAnUnresolvableTreeAndAReadOnlyTreeAreAllAccessLost`, `clearingThePreferenceGoesBackToNotConfigured`), `ThumbnailsTest` (5: `theCacheNameCarriesTheIdAndTheShaPrefix`, `bytesThatChangedCannotBeServedFromTheOldThumbnail`, `noFolderMeansNoThumbnail`, `sampleSizeBringsTheLongEdgeToTwoFiftySixOrBelow`, `theSampledLongEdgeIsNeverAboveTwoFiftySix`) | **PROVEN on the JVM** — the state machine is unit-testable at all because the seam sits one level up, at `AttachmentRoot`, rather than at `DocumentFile` (§6 ruling 3) |
 | 12 | `:app` JVM — ViewModel tests for the DOCUMENTS section states (ready / not configured / access lost / missing bytes) | `AttachmentsSectionViewModelTest` (17): `aFreshInstallSaysTheStoreIsNotConfiguredAndListsNothing`, `withAFolderChosenAddedFilesAppearAsRowsOrderedByName`, `anAccessLostStoreRefusesAddAndSaysWhyOnce`, `aRowWhoseBytesAreGoneIsMarkedNotPresent`, `comingBackFromSettingsWithAFolderChosenFlipsTheSectionOver`, `aResubscriptionAlsoReReadsTheFolder`, `theProgressLineNamesTheFileNumberAndTheTotal`, `addingSeveralFilesReportsProgressAndKeepsGoingPastAFailure`, `anEventOwnerSeesOnlyItsOwnFiles`, the four sheet/save/delete failure tests, `capturedOnDefaultsToTodayForAPickedFile`, `aCameraCaptureIsAPhotoWhateverElseItLooksLike`; plus `DocumentsSectionTest` (2) for the size and kind labels | **PROVEN on the JVM.** All four states, and the two lifecycle cases that matter: coming back from Settings flips the section over, and a resubscription re-reads the folder |
-| 13 | Emulator — `SafTreeAttachmentStore` contract over a `fromFile` tree | `attachments.SafTreeAttachmentStoreContractTest`, **9 tests**, on `emulator-5554`: the six claims `:core`'s `AttachmentStoreContractTest` makes about the in-memory fake, plus the three only a real provider can be asked — `aDocumentTheProviderRenamedIsStillFoundByItsId`, `aSourceThatThrowsMidCopyLeavesNoDocument`, `puttingTwiceAtOneLocatorReplacesTheDocument` | **PROVEN on the emulator** (§4 rows E1, E12). `put` runs a 200 000-byte payload so the 64 KiB copy loop iterates; the rename test *observes* the provider's own renaming rather than simulating it (§6 ruling 20) |
+| 13 | Emulator — `SafTreeAttachmentStore` contract over a `fromFile` tree | `attachments.SafTreeAttachmentStoreContractTest`, **10 tests**, on `emulator-5554`: the seven claims `:core`'s `AttachmentStoreContractTest` makes about the in-memory fake, plus the three only a real provider can be asked — `aDocumentTheProviderRenamedIsStillFoundByItsId`, `aSourceThatThrowsMidCopyLeavesNoDocument`, `puttingTwiceAtOneLocatorReplacesTheDocument` | **PROVEN on the emulator** (§4 rows E1, E12). `put` runs a 200 000-byte payload so the 64 KiB copy loop iterates; the rename test *observes* the provider's own renaming rather than simulating it (§6 ruling 20) |
 | 14 | Emulator — `AttachmentsDeviceProofTest`: configure a tree, add from a content URI, see row and bytes, sheet rename, delete, export a set into a test tree and find two stamped files, wipe, restore data ("Not on this device"), restore artifacts, set mismatch refused | `ui.AttachmentsDeviceProofTest`, **12 tests**, on `emulator-5554` — the ten lettered scenarios of spec §12 plus the SAF writer's delete-on-throw and the `ACTION_VIEW` refusal. Scenario-by-scenario in §4 rows E2–E11 | **PROVEN on the emulator.** Every body is assertions; no scenario is a comment, and no test sleeps |
 | 15 | Emulator — existing smoke suites still green | The whole connected suite is **58/58** on `emulator-5554`: the two new suites (21) plus the eleven pre-existing ones (37), unchanged in count from 2B-2 | **PROVEN** (§3, §4 row E13) |
 | 16 | Phone (real data, no instrumented runs) — the §10 SPA import procedure | The eight files, the folder chosen once, `Add file` multi-select, the kinds they land as | **PENDING — phone step, controller.** Procedure in §4 rows P2–P4 |
@@ -74,13 +74,15 @@ d297479  thumbnails actually hit 256, one mime table instead of two
 98fe599  cancelled export cleans up too, damaged files archive says so
 b9ac047  attachments device proof on the emulator
 37f9c81  settings barrier that only settings satisfies, and the replace-a-document claim
+11b652d  phase 4a evidence, design docs, versionCode 6
+6412425  restore keeps bytes that already match, backup work off the main thread
 ```
 
-Eighteen commits — eleven tasks, six of which needed one review fix round each, plus one plan-text
-correction — 9 179 insertions and 240 deletions across 84 files. The eleven-task plan's shape
-survives in them: the odd-looking pairs (`3e48664`+`192fd05`, `bca6128`+`0c7f79a`,
-`aa6ef97`+`d282d55`, `f5bc0f3`+`d297479`, `2823d97`+`5460e78`, `7a6d97a`+`98fe599`,
-`b9ac047`+`37f9c81`) are each a task and its review round.
+Twenty commits — eleven tasks, six of which needed one review fix round each, plus one plan-text
+correction, the evidence-and-docs commit, and the whole-branch review's one fix wave. The
+eleven-task plan's shape survives in them: the odd-looking pairs (`3e48664`+`192fd05`,
+`bca6128`+`0c7f79a`, `aa6ef97`+`d282d55`, `f5bc0f3`+`d297479`, `2823d97`+`5460e78`,
+`7a6d97a`+`98fe599`, `b9ac047`+`37f9c81`) are each a task and its review round.
 
 - **`a6085c3` — the model and its three pure rules.** `AttachmentId`, the three enums, the
   `AttachmentOwner` sealed interface, `Attachment` with `isImage`, the closed `AttachmentProblem`
@@ -90,7 +92,8 @@ survives in them: the odd-looking pairs (`3e48664`+`192fd05`, `bca6128`+`0c7f79a
 - **`9b4a076` — the store boundary.** `AttachmentStore` (`put`/`open`/`exists`/`delete`),
   `ByteSource`, `StoredBytes`, `StoreIoException`, `StoreState`
   (`NotConfigured`/`Ready`/`AccessLost`), `AttachmentStorage`, `AttachmentRepository`, the
-  in-memory fakes, and `AttachmentStoreContractTest` — the six claims every store must satisfy,
+  in-memory fakes, and `AttachmentStoreContractTest` — the claims every store must satisfy (six
+  here, a seventh added by the final fix wave),
   written once against the fake and re-run against the real one on the emulator (§3).
 - **`3e48664` + `192fd05` — the use cases.** `AttachmentResult<out T>` (`Ok`/`Refused`) rather than
   a two-parameter `Result` the language cannot express; `AddAttachment` puts bytes first and the row
@@ -136,22 +139,34 @@ survives in them: the odd-looking pairs (`3e48664`+`192fd05`, `bca6128`+`0c7f79a
 - **`b9ac047` + `37f9c81` — the device proof.** The two new instrumented suites, on the emulator
   only. The fix round replaced scenario (a)'s post-navigation barrier with two that only Settings
   can satisfy, and added the replace-a-document contract claim.
+- **`6412425` — the whole-branch review's one fix wave.** The critical one first: `RestoreArtifacts`
+  now checks the *local* digest before it writes, so a damaged archive entry can never destroy good
+  bytes (§6 ruling 22) and the restore is idempotent. Then `BackupViewModel` moved its zips and
+  digests onto `Dispatchers.IO`; an export with managed rows and no folder refuses with Settings'
+  own wording instead of counting every file as missing; `BackupSetSink.delete` returns whether the
+  file is really gone, and a failure that left one behind names it; Settings' same-folder barrier
+  applies only when there are rows to reach, and it takes the new persistable grant before it
+  releases the old one. Folded in with them: `mimeForExtension` aliases (`jpeg`, `tif`, `htm`), a
+  document-picker-specific "No app can pick files", a `Restore failed:` lead-in to match the export
+  side's, and the store contract's seventh claim — a put that fails over an existing document leaves
+  the locator empty — in both suites, with both JVM fakes taught to behave that way.
 
 ## 3. Tests
 
 ### JVM (`./gradlew :core:test :app:testDebugUnitTest`)
 
-Totals from the JUnit XML: **`:core` 346 tests, 0 failures, 0 skipped**; **`:app` 210 tests, 0
+Totals from the JUnit XML: **`:core` 350 tests, 0 failures, 0 skipped**; **`:app` 214 tests, 0
 failures, 0 skipped**. Master `41af038` finished at `:core` **273** / `:app` **158**, so 4A added
-**73** and **52**.
+**77** and **56**. (Before the final fix wave `6412425` the totals were 346 and 210; the wave added
+four tests to each module — they are marked in the table.)
 
 | Module | Class | Tests | |
 |---|---|---|---|
-| `:core` | `AttachmentRulesTest` | 7 | new |
-| `:core` | `AttachmentStoreContractTest` | 6 | new — the store contract, against the fake |
+| `:core` | `AttachmentRulesTest` | 8 | new — 7, +1 in `6412425` (the mime aliases) |
+| `:core` | `AttachmentStoreContractTest` | 7 | new — the store contract, against the fake; 6, +1 in `6412425` |
 | `:core` | `AttachmentUseCasesTest` | 15 | new |
 | `:core` | `ArtifactsCodecTest` | 16 | new |
-| `:core` | `ArtifactsUseCasesTest` | 12 | new |
+| `:core` | `ArtifactsUseCasesTest` | 14 | new — 12, +2 in `6412425` (the two C1 claims) |
 | `:core` | `BackupCodecTest` | 55 | 46 → 55 (format 5) |
 | `:core` | `BackupUseCasesTest` | 18 | 14 → 18 |
 | `:core` | `EventUseCasesTest` | 18 | 16 → 18 (`DeleteEvent`'s byte sweep) |
@@ -164,26 +179,33 @@ failures, 0 skipped**. Master `41af038` finished at `:core` **273** / `:app` **1
 | `:app` | `ThumbnailsTest` | 5 | new |
 | `:app` | `AttachmentsSectionViewModelTest` | 17 | new |
 | `:app` | `DocumentsSectionTest` | 2 | new |
-| `:app` | `BackupViewModelTest` | 15 | 2 → 15 (the set: export, both restores, every failure path) |
+| `:app` | `BackupViewModelTest` | 19 | 2 → 15 (the set: export, both restores, every failure path), +4 in `6412425` |
 | `:app` | `AppPrefsTest` | 6 | 4 → 6 (the two new preferences) |
 | `:app` | (23 classes unchanged from 2B-2) | 152 | |
 
 ### The two contract suites, as a pair
 
-The store contract is written once and asked twice. `:core`'s **`AttachmentStoreContractTest`** (6)
-makes the six claims against the in-memory fake:
+The store contract is written once and asked twice. `:core`'s **`AttachmentStoreContractTest`** (7)
+makes the seven claims against the in-memory fake:
 `putThenOpenRoundTripsTheBytes`, `putReturnsTheShaAndSizeTheStoreItselfSaw`,
 `aLocatorWithTwoDirectoryLevelsIsCreated`, `openOfAnAbsentLocatorIsNull`, `existsAnswersForBothCases`,
-`deleteOfAnAbsentLocatorIsSilent`. `:app`'s instrumented
-**`SafTreeAttachmentStoreContractTest`** (9) makes the same six against the real
-`SafTreeAttachmentStore` over `DocumentFile.fromFile(getExternalFilesDir/attachments-contract)`,
+`deleteOfAnAbsentLocatorIsSilent`, `aPutThatFailsOverAnExistingDocumentLeavesTheLocatorEmpty`.
+`:app`'s instrumented **`SafTreeAttachmentStoreContractTest`** (10) makes the same seven against the
+real `SafTreeAttachmentStore` over `DocumentFile.fromFile(getExternalFilesDir/attachments-contract)`,
 and adds the three that only a real provider can be asked: the provider-rename fallback, the
 failed-write cleanup, and the replace-at-one-locator path. A store that passes the first and fails
 the second is exactly what the pair is for.
 
+The seventh claim is the whole-branch review's lesson, and it is why the pair exists. `put` deletes
+the stale document *before* it creates the new one, so a put that fails takes the old bytes with it
+— and both JVM fakes used to keep them, which is exactly how C1 (§6 ruling 22) stayed invisible to
+346 green tests. The fakes now remove the locator before they read the source, the claim is made in
+both suites, and the restore no longer relies on either.
+
 ### Instrumented (`ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest`)
 
-**58 tests, 0 failures, 0 skipped** on **`emulator-5554`** (API 37.1, no NFC), 2026-09-16. The
+**59 tests, 0 failures, 0 skipped** on **`emulator-5554`** (API 37.1, no NFC), 2026-09-16 — 58
+before the final fix wave, which added the contract suite's seventh claim. The
 device is quoted from the generated results:
 `app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 17.xml`, carrying
 `<property name="device" value="emulator-5554" />` for every suite, and Gradle's own line
@@ -191,7 +213,7 @@ device is quoted from the generated results:
 
 | Suite | Tests | Time | |
 |---|---|---|---|
-| `attachments.SafTreeAttachmentStoreContractTest` | 9 | 0.04s | new |
+| `attachments.SafTreeAttachmentStoreContractTest` | 10 | 0.05s | new |
 | `ui.AttachmentsDeviceProofTest` | 12 | 15.94s | new |
 | `ui.AppSmokeTest` | 5 | 9.08s | `clearInstall` grew two lines |
 | `ui.AssetModelDeviceProofTest` | 8 | 19.95s | |
@@ -203,8 +225,15 @@ device is quoted from the generated results:
 | `ui.ShareActivitySmokeTest` | 1 | 1.15s | |
 | `ui.DeepLinkSmokeTest` | 1 | 1.02s | |
 
-2B-2's 37 are all still there and still 37; 4A adds the 21 of the two new suites. There is no
+2B-2's 37 are all still there and still 37; 4A adds the 22 of the two new suites. There is no
 manual instrumented row and no test is skipped or ignored.
+
+After the final fix wave the three suites the wave touched were re-run individually on
+`emulator-5554` (one class per invocation — a comma-separated list only runs the first):
+`SafTreeAttachmentStoreContractTest` **10 / 0 failures**, `AttachmentsDeviceProofTest` **12 / 0**,
+`AppSmokeTest` **5 / 0**, each reported by Gradle as
+`Running tests on devices: emulator-5554 - 17`. The owner's phone was checked before and after and
+is untouched: `versionCode=5`, the same `lastUpdateTime` as the phase's baseline fingerprint.
 
 **Two defects the first emulator run found, both in the plan's own test code, neither in the app.**
 `RawDocumentFile.createFile` appends the extension it derives from the mime type, so asking for
@@ -225,7 +254,7 @@ no model and no serial, and the phone was never a connected-test target in this 
 
 | # | Scenario (spec §12) | Test | What it actually asserts |
 |---|---|---|---|
-| E1 | The store contract against a real `DocumentFile` tree | `SafTreeAttachmentStoreContractTest` (9) | The six fake-store claims, plus: a document the provider renamed is still found by its `<id>.` prefix and still round-trips its bytes; a source that throws mid-copy leaves the owner directory **empty**, not merely no file at the locator; a second `put` at one locator leaves exactly one document holding the second payload's bytes, sha and (different) length |
+| E1 | The store contract against a real `DocumentFile` tree | `SafTreeAttachmentStoreContractTest` (10) | The seven fake-store claims — including that a put failing over an existing document leaves the locator empty — plus: a document the provider renamed is still found by its `<id>.` prefix and still round-trips its bytes; a source that throws mid-copy leaves the owner directory **empty**, not merely no file at the locator; a second `put` at one locator leaves exactly one document holding the second payload's bytes, sha and (different) length |
 | E2 | (a) No folder chosen → the section points at Settings | `AttachmentsDeviceProofTest.withNoFolderTheDocumentsSectionPointsAtSettings` | `DOCUMENTS`, `Attachment storage not set up`, `Choose a folder in Settings`; `Add file` / `Take photo` / `No documents yet` all **absent**; `Open settings` lands on Settings, proven by two barriers the asset screen cannot satisfy — `Choose folder` present and `Choose a folder in Settings` gone (§6 ruling 21) |
 | E3 | (b) An added file is a row and a file in the tree | `.anAddedFileIsARowAndAFileInTheTree` | The document on disk is named `<attachment-id>.…` and its bytes equal the source byte-for-byte; `viewUri(locator)` is non-null; `DOCUMENTS · 1`; the row node carries the name **and** `Document · 2.0 KB · <today>` |
 | E4 | (c) The sheet renames and re-kinds | `.theSheetRenamesAndReKindsTheRow` | Overflow → sheet → new name, `Manual` chip, `Save`; the row redraws, the old name is gone, the sheet closes — **and** the document's name, its bytes and the row's `storageLocator` are unchanged. A rename never moves bytes |
@@ -266,7 +295,7 @@ document, an export writing two same-stamped files, a data-only restore reading 
 device", an artifacts restore bringing the bytes and the thumbnail back, a foreign set refused by
 its short id, and an event's files living and dying with the entry. The store contract is asked of
 the real `DocumentFile` store, not only of the fake. With the 37 from 1C, 2A, 2B-1 and 2B-2 the
-instrumented suite is **58 tests, 0 failures, 0 skipped**.
+instrumented suite is **59 tests, 0 failures, 0 skipped**.
 
 **What is proven only on the emulator, and why.** This list is Task 10's verbatim in substance;
 none of it is a failure, and each is a claim the emulator structurally cannot make.
@@ -393,6 +422,43 @@ Every ruling in the SDD ledger, in plain words, with why.
     own `Choose a folder in Settings` to go, because `NavDisplay` can have both entries composed
     during a push and `onNodeWithText` demands exactly one match.
 
+22. **A restore never writes over bytes that already match — C1, the whole-branch review's one
+    critical finding.** `RestoreArtifacts` used to `put` every entry whose manifest digest matched
+    the row and check the store's own digest *afterwards*. But a `put` replaces the document —
+    `SafTreeAttachmentStore` deletes the old one before it creates the new one — so a damaged
+    archive entry over good local bytes deleted the good bytes, then deleted the damage, and left
+    the row with no bytes anywhere. On a screen that says "It adds files and deletes nothing." The
+    fix is a cheap question asked first: if what is at the row's locator already hashes to
+    `row.sha256`, the entry is counted `alreadyPresent` and skipped. Restoring the same set twice
+    is now a no-op that says so ("; N already present"), and the digest-mismatch branch's delete
+    survives because it can now only ever remove bytes the restore itself wrote. Both JVM fakes
+    were the reason nobody saw it: their `put` kept the old bytes when the source threw, where the
+    real store cannot — so they now remove the locator first, and the claim is a contract case in
+    both suites (§3).
+23. **An export with managed rows and no attachment folder refuses before it writes anything.**
+    With the store `NotConfigured` or `AccessLost` every plan entry landed in `missing` and the
+    owner was told "N attachment files are missing" — which sends them looking for files when what
+    is missing is the folder. `exportSet` now resolves the store once, up front, and throws
+    `NoAttachmentFolder` carrying Settings' own wording ("Choose an attachment folder in Settings
+    first"). With zero managed rows nothing has to be opened, so the export proceeds exactly as
+    before and still writes both files.
+24. **`BackupSetSink.delete` returns a `Boolean`, and a failed export names what it could not take
+    back.** A provider is free to refuse a delete; when it did, a complete and importable data
+    archive stayed in the owner's folder while the snackbar said "Nothing was saved". The SAF
+    writer now reports `DocumentFile.delete()`'s own answer (false on an exception too), and the
+    export's cleanup appends "; could not remove &lt;file name&gt; — delete them yourself" — names,
+    because the owner has to find the file in a file manager, not a `content://` URI.
+25. **The Settings same-folder barrier applies only when there are attachment rows.** `repairing`
+    was `store is AccessLost` alone, so an install with no attachments and a dead grant — a card
+    that was removed, a cloud account signed out — could not choose *any* folder, because the only
+    folder it would accept was the one that no longer answers. It is now
+    `AccessLost && attachmentRows > 0`: with nothing to reach again, there is nothing to insist on.
+26. **The new persistable grant is taken before the old one is released.** The order was the other
+    way round, so a provider that refuses a lasting grant left the owner with the pref pointing at
+    a folder whose grant had just been given away. Now the take happens first; the release of a
+    *different* previous grant only follows a take that succeeded; and on failure the pref and the
+    old grant are both untouched and `store` is re-read so the screen shows what is true.
+
 **Design-time deviations from the older design docs (spec §11), now recorded in the docs
 themselves.** `formatVersion` keeps its name in the data manifest where D7 said
 `dataFormatVersion` (the artifacts manifest uses `dataFormatVersion` for the cross-reference); there
@@ -406,41 +472,39 @@ Phase 4 block now say all five.
 
 Nothing here blocks the phase; all of it is written down so the next phase does not rediscover it.
 
-**Minors the reviews parked for the final wave or for 4B.**
+**What the whole-branch review's one fix wave took, and what it left.** The wave `6412425` fixed
+C1 and I1–I5 (§6 rulings 22–26 and the commit note in §2) and folded in three of the review's
+numbered minors: **M3** the `jpeg`/`tif`/`htm` mime aliases, **M4** the document-picker's own "No
+app can pick files", and **M8** the `Restore failed:` lead-in on the restore side. By the same
+ruling **M1, M2, M5, M6, M7 and M9–M16 were deferred to 4B**, along with everything earlier reviews
+had parked. The review's numbering lives in its own report and not in this repo; the substance of
+what is outstanding is the list below, one line each.
 
-- **A `CancellationException` from `AddAttachment`'s cleanup is recorded as suppressed rather than
-  rethrown.** A narrow race inside the row-write failure path; nothing is dropped.
-- **`:core`'s store contract has no empty-payload case**, and `failOnUpsert` is written inline in
-  the fakes rather than through an `UpsertRig` (both brief-verbatim). The overwrite case the review
-  asked for *was* added — on the emulator, as
-  `SafTreeAttachmentStoreContractTest.puttingTwiceAtOneLocatorReplacesTheDocument`.
-- **Four `BackupCodec` test and shape minors:** the duplicate-locator test should also assert that
-  "duplicate id" fires; there is no test that a *failed* import sweeps nothing (rollback == 1,
-  deletes == 0, bytes still present); `eventIds` is recomputed instead of reusing what `uniqueIds`
-  returned; and `validateGraph` is around 225 lines and wants its own `BackupValidation.kt`.
-- **A `ZipException` from `zos.close()` on the artifacts writer's success path escapes raw**, and
-  `deleteBestEffort` guards `IOException` only.
-- **Three Room-side test minors:** `observeForOwner`'s test proves the query, not live emission (it
-  should collect, or be renamed); the unique-index test accepts any exception rather than the
-  constraint one; and `Migration1To4Test`'s name understates what it covers, as it has since 2B-2.
-- **`MimeTypes.mimeForExtension("jpeg")` falls back to `application/octet-stream`** — the alias map
-  (`jpeg`, `tif`, `htm`) is a small `:core` addition nobody has made yet.
-- **`SafTreeAttachmentStore.store()` and `viewUri()` each resolve the tree twice**, and `open()` can
-  still surface a raw `FileNotFoundException` rather than a `StoreIoException`.
-- **Four DOCUMENTS-section minors:** the picked-file mapping runs in a `rememberCoroutineScope` and
-  can drop a pick if the section leaves composition mid-flight; two writers share `storeState` (a
-  comment, not a race); the ViewModel does one provider round trip on the main thread at
-  construction; and the `messages` flow's `buffer = 1` can drop back-to-back refusals — which is
-  house-wide, not 4A's.
-- **`AccessLost` has no distinct copy in the DOCUMENTS section** (§6 ruling 17), and a camera
-  capture's temp file is orphaned on the `OwnerMissing` refusal path.
-- **Settings releases the old persisted grant before the new take is known to have succeeded** — the
-  wrong order if the new take fails — and `lastRestoredBackupSetId` is carried in the Backup
-  screen's state but never rendered.
-- **`wipedDir("set-<nanoTime>")` leaves one empty directory per run** of the writer test under the
-  app's external files directory. App-private; it goes with the app.
-- **Task 1's brief asked for no tests of a name ending in `file.` or of `extensionFor("")`.** The
-  code is correct by inspection; the cases are unwritten.
+**Minors deferred to 4B, one line each.**
+
+- A `CancellationException` from `AddAttachment`'s cleanup is recorded as suppressed rather than rethrown — a narrow race inside the row-write failure path; nothing is dropped.
+- `:core`'s store contract has no empty-payload case (brief-verbatim); the overwrite case *was* added on the emulator, and the failed-overwrite case in both suites, by the fix wave.
+- `failOnUpsert` is written inline in the fakes rather than through an `UpsertRig` (brief-verbatim).
+- `BackupCodec`'s duplicate-locator test should also assert that "duplicate id" fires.
+- There is no test that a *failed* import sweeps nothing (rollback == 1, deletes == 0, bytes still present).
+- `eventIds` is recomputed in the backup reader instead of reusing what `uniqueIds` already returned.
+- `validateGraph` is around 225 lines and wants its own `BackupValidation.kt`.
+- A `ZipException` from `zos.close()` on the artifacts writer's success path escapes raw.
+- `deleteBestEffort` guards `IOException` only.
+- `observeForOwner`'s test proves the query, not live emission — it should collect, or be renamed.
+- The attachment unique-index test accepts any exception rather than the constraint one.
+- `Migration1To4Test`'s name understates what it covers, as it has since 2B-2.
+- `SafAttachmentStorage.store()` and `viewUri()` each resolve the tree twice.
+- `SafTreeAttachmentStore.open()` can still surface a raw `FileNotFoundException` rather than a `StoreIoException`.
+- The DOCUMENTS section's picked-file mapping runs in a `rememberCoroutineScope` and can drop a pick if the section leaves composition mid-flight.
+- Two writers share the section ViewModel's `storeState` — a comment, not a race.
+- The section ViewModel does one provider round trip on the main thread at construction.
+- The `messages` flow's `buffer = 1` can drop back-to-back refusals — house-wide, not 4A's.
+- `AccessLost` has no distinct copy in the DOCUMENTS section (§6 ruling 17).
+- A camera capture's temp file is orphaned on the `OwnerMissing` refusal path.
+- `lastRestoredBackupSetId` is carried in the Backup screen's state but never rendered.
+- `wipedDir("set-<nanoTime>")` leaves one empty directory per run of the writer test under the app's external files directory — app-private, and it goes with the app.
+- Task 1's brief asked for no tests of a name ending in `file.` or of `extensionFor("")`; the code is correct by inspection and the cases are unwritten.
 
 **Out of scope by the spec (spec §2, "Not in 4A", 4B after 3R), verbatim.** REFERENCE-mode
 attachments (`SAF_DOCUMENT` pointers), changing the store folder once attachments exist (migration
@@ -471,7 +535,7 @@ minors no 4A task happened to touch.
    from.** A data-only restore is a first-class outcome: the rows come back reading "Not on this
    device" and the matching artifacts archive completes the set, refused by `backupSetId` if it is
    the wrong one. 3R can restore the database without waiting on hundreds of megabytes of bytes.
-5. **The store is behind a port with a real contract, asked twice.** `AttachmentStore`'s six claims
+5. **The store is behind a port with a real contract, asked twice.** `AttachmentStore`'s seven claims
    are tested against the in-memory fake in `:core` and against the real `DocumentFile` store on the
    emulator. 4B's second provider — a `SAF_DOCUMENT` reference store, or the store-location
    migration's copy loop — is a new implementation of an interface that already has its acceptance
@@ -495,6 +559,11 @@ minors no 4A task happened to touch.
 0 failures, 0 errors, 0 skipped**; **`:app` 210 tests, 0 failures, 0 errors, 0 skipped**
 (per-class breakdown in §3). Re-run with `clean` in front after the documentation was written — 62
 actionable tasks, same totals, byte-identical debug APK.
+
+Re-run after the final fix wave `6412425`, with `clean --no-build-cache --no-configuration-cache`
+so every task really compiled: **BUILD SUCCESSFUL**, 62 actionable tasks, 62 executed, **no `w:`
+and no `e:` line in the whole log**. Totals **`:core` 350 / `:app` 214**, 0 failures, 0 errors, 0
+skipped.
 
 Debug APK:
 
@@ -522,6 +591,12 @@ ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest
 Gradle as `Running tests on devices: emulator-5554 - 17` and by the results XML
 `app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 17.xml`, whose every
 suite carries `<property name="device" value="emulator-5554" />`.
+
+After the final fix wave, the three suites it touches were re-run one class per invocation with
+`-Pandroid.testInstrumentationRunnerArguments.class=<fqcn>` (a comma-separated list only runs the
+first): `attachments.SafTreeAttachmentStoreContractTest` **10 tests, 0 failures, 0 skipped**;
+`ui.AttachmentsDeviceProofTest` **12, 0, 0**; `ui.AppSmokeTest` **5, 0, 0**. Every run reported
+`Running tests on devices: emulator-5554 - 17`, which takes the suite total to **59**.
 
 Two devices were attached to `adb` throughout: the emulator and the owner's phone. Every Gradle
 invocation that can reach a device carried `ANDROID_SERIAL=emulator-5554`; every `adb` invocation
