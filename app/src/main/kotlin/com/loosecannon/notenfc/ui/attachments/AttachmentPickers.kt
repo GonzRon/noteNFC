@@ -41,6 +41,12 @@ fun rememberAttachmentPickers(
     onNoViewer: () -> Unit,
     /** Nothing on this device can take a picture. Same shape as [onNoViewer], different wording. */
     onNoCamera: () -> Unit = onNoViewer,
+    /**
+     * Nothing on this device can hand files over. A stripped ROM with no `ACTION_OPEN_DOCUMENT`
+     * handler is the case; "No app can open this file" would be the wrong sentence for it, because
+     * no file has been chosen yet.
+     */
+    onNoFilePicker: () -> Unit = onNoViewer,
 ): AttachmentPickers {
     val context = LocalContext.current
     val resolver = context.contentResolver
@@ -76,7 +82,7 @@ fun rememberAttachmentPickers(
     // Not remembered: three lambdas per composition are cheaper than the stale captures a
     // `remember` here would freeze in place.
     return AttachmentPickers(
-        addFiles = { runCatching { pickFiles.launch(arrayOf("*/*")) }.onFailure { onNoViewer() } },
+        addFiles = { runCatching { pickFiles.launch(arrayOf("*/*")) }.onFailure { onNoFilePicker() } },
         takePhoto = {
             val uri = graph.cameraCaptureUri()
             pendingCapture = uri.toString()

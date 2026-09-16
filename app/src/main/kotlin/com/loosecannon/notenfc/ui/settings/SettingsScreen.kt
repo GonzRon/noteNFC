@@ -105,7 +105,12 @@ fun SettingsScreen(
     //  - `NotConfigured`, which is what a data-only restore onto a new phone looks like: rows
     //    exist and no folder does, so there is nothing to move and choosing one is the whole
     //    point — the restore of the files archive cannot happen until it is chosen.
-    val repairing = store is StoreState.AccessLost
+    //
+    // The same-folder barrier is therefore only about *rows*: with no attachments at all there is
+    // nothing to reach again, and insisting on a folder whose grant is gone — a card that was
+    // removed, a cloud account that was signed out — would leave the owner unable to choose any
+    // folder at all.
+    val repairing = store is StoreState.AccessLost && attachmentRows > 0
     val folderFixed = attachmentRows > 0 && store is StoreState.Ready
 
     val chooseFolder = rememberLauncherForActivityResult(
@@ -120,17 +125,21 @@ fun SettingsScreen(
             else -> {
                 val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                // Grants accumulate otherwise (spike S5), and releasing one the system no longer
-                // holds throws — which must not stop us taking the new one.
-                stored?.takeIf { it != picked.toString() }?.let { old ->
-                    runCatching { resolver.releasePersistableUriPermission(old.toUri(), flags) }
-                }
-                // A provider that will not give a lasting grant (some cloud ones will not) throws
-                // here, inside an activity-result callback, where an escaping exception is a
-                // crash. The pref is only written once the grant is really ours.
+                // Take first, release second. A provider that will not give a lasting grant (some
+                // cloud ones will not) throws here, inside an activity-result callback, where an
+                // escaping exception is a crash — and if the new grant is not ours, letting the
+                // old one go would leave the owner with no folder at all. So on failure the pref
+                // and the old grant are both untouched, and `store` is re-read so the screen
+                // still shows what is actually true.
                 if (runCatching { resolver.takePersistableUriPermission(picked, flags) }.isFailure) {
+                    store = graph.attachmentStorage.state()
                     scope.launch { snackbars.showSnackbar("Could not keep access to that folder") }
                 } else {
+                    // Grants accumulate otherwise (spike S5), and releasing one the system no
+                    // longer holds throws — which must not undo the take that just succeeded.
+                    stored?.takeIf { it != picked.toString() }?.let { old ->
+                        runCatching { resolver.releasePersistableUriPermission(old.toUri(), flags) }
+                    }
                     prefs.attachmentTreeUri = picked.toString()
                     store = graph.attachmentStorage.state()
                 }

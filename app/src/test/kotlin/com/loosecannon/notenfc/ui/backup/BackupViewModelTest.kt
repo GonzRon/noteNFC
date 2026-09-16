@@ -82,8 +82,15 @@ class BackupViewModelTest {
         override suspend fun openStream(): InputStream = ByteArrayInputStream(bytes)
     }
 
-    /** A sink that keeps what it was handed, and can be told to fail on one of the two names. */
-    private class RecordingSink(private val failOnPrefix: String? = null) : BackupSetSink {
+    /**
+     * A sink that keeps what it was handed, and can be told to fail on one of the two names.
+     * [refuseDeleteOfPrefix] is the provider that will not take a file back: `delete` answers no
+     * and the file stays, which is the one case where "Nothing was saved" would be a lie.
+     */
+    private class RecordingSink(
+        private val failOnPrefix: String? = null,
+        private val refuseDeleteOfPrefix: String? = null,
+    ) : BackupSetSink {
         val files = LinkedHashMap<String, ByteArray>()
         val deleted = mutableListOf<String>()
 
@@ -97,9 +104,11 @@ class BackupViewModelTest {
             return name
         }
 
-        override suspend fun delete(handle: String) {
+        override suspend fun delete(handle: String): Boolean {
+            if (refuseDeleteOfPrefix != null && handle.startsWith(refuseDeleteOfPrefix)) return false
             deleted += handle
             files.remove(handle)
+            return true
         }
     }
 
@@ -126,9 +135,10 @@ class BackupViewModelTest {
             return name
         }
 
-        override suspend fun delete(handle: String) {
+        override suspend fun delete(handle: String): Boolean {
             deleted += handle
             files.remove(handle)
+            return true
         }
     }
 
@@ -171,12 +181,12 @@ class BackupViewModelTest {
             return name
         }
 
-        override suspend fun delete(handle: String) {
+        override suspend fun delete(handle: String): Boolean =
             withContext(Dispatchers.IO) {
                 deleted += handle
                 files.remove(handle)
+                true
             }
-        }
     }
 
     /** Takes [after] bytes and then fails, the way a disk that filled up does. */
@@ -419,6 +429,80 @@ class BackupViewModelTest {
         )
     }
 
+    /**
+     * I2: rows name bytes and there is no folder to read them from. Every entry would land in
+     * `missing` and the owner would be told "1 attachment file is missing" — sending them to look
+     * for a file when the thing that is missing is the folder. The refusal comes before the first
+     * write, so there is nothing to clean up either.
+     */
+    @Test fun exportingWithNoAttachmentFolderSaysSoAndWritesNothing() = runTest {
+        val pump = graph.createAsset.run("Pool pump", "Water")
+        addFile(pump.id)
+        graph.now = 7_000L
+        val vm = viewModel()
+        val sink = RecordingSink()
+        graph.attachmentStorage.state = StoreState.NotConfigured
+
+        val failure = vm.exportSet(sink).exceptionOrNull()
+
+        assertTrue("expected NoAttachmentFolder, got $failure", failure is NoAttachmentFolder)
+        assertEquals("Choose an attachment folder in Settings first", failure!!.message)
+        assertEquals(emptyList<String>(), sink.files.keys.toList())
+        assertEquals(emptyList<String>(), sink.deleted)
+        assertNull(graph.prefs.lastBackupAt)
+        assertNull(vm.state.value.lastBackupAt)
+
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+        vm.exportSetTo(RecordingSink())
+        assertEquals("Choose an attachment folder in Settings first", said.await())
+    }
+
+    /** The other side of that boundary: nothing to open, so nothing to refuse. */
+    @Test fun exportingWithNoRowsAndNoFolderStillWritesTheSet() = runTest {
+        graph.createAsset.run("Pool pump", "Water")
+        graph.now = 7_000L
+        val vm = viewModel()
+        val sink = RecordingSink()
+        graph.attachmentStorage.state = StoreState.NotConfigured
+
+        vm.exportSet(sink).getOrThrow()
+
+        val stamp = BackupSetNames.stamp(7_000L)
+        assertEquals(
+            listOf(BackupSetNames.data(stamp), BackupSetNames.artifacts(stamp)),
+            sink.files.keys.toList(),
+        )
+        assertEquals(7_000L, graph.prefs.lastBackupAt)
+    }
+
+    /**
+     * I3: the provider refuses to take the data file back. A complete, importable data archive is
+     * still in the folder, so "Nothing was saved" is false — the line names the file instead.
+     */
+    @Test fun aDataFileTheSinkWillNotTakeBackIsNamedInTheFailure() = runTest {
+        graph.createAsset.run("Pool pump", "Water")
+        graph.now = 7_000L
+        val vm = viewModel()
+        val sink = RecordingSink(
+            failOnPrefix = "noteNFC-artifacts",
+            refuseDeleteOfPrefix = "noteNFC-data",
+        )
+        val stamp = BackupSetNames.stamp(7_000L)
+
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+        vm.exportSetTo(sink)
+
+        assertEquals(
+            "Export failed: the files archive could not be written. Nothing was saved" +
+                "; could not remove ${BackupSetNames.data(stamp)} — delete them yourself",
+            said.await(),
+        )
+        assertEquals(listOf(BackupSetNames.data(stamp)), sink.files.keys.toList())
+        assertEquals(emptyList<String>(), sink.deleted)
+        assertNull(graph.prefs.lastBackupAt)
+        assertNull(vm.state.value.lastBackupAt)
+    }
+
     @Test fun midArtifactsWriteRemovesPartialArtifactsAndDataZip() = runTest {
         val pump = graph.createAsset.run("Pool pump", "Water")
         addFile(pump.id)
@@ -530,6 +614,32 @@ class BackupViewModelTest {
         vm.restoreFilesFrom(MemoryIO(sink.files.getValue(BackupSetNames.artifacts(stamp))))
 
         assertEquals("Restored 1 files, skipped 0", said.await())
+        assertArrayEquals(payload, graph.attachmentStorage.store.files.getValue(row.storageLocator))
+    }
+
+    /**
+     * C1, as the owner sees it: the same files archive restored twice. The second run finds every
+     * row's bytes already right, writes nothing over them, and says so instead of reporting a
+     * restore of nothing.
+     */
+    @Test fun restoringTheSameFilesArchiveTwiceKeepsTheBytesAndSaysTheyArePresent() = runTest {
+        val pump = graph.createAsset.run("Pool pump", "Water")
+        val row = addFile(pump.id)
+        graph.now = 7_000L
+        val vm = viewModel()
+        val sink = RecordingSink()
+        vm.exportSet(sink).getOrThrow()
+        val stamp = BackupSetNames.stamp(7_000L)
+        val artifacts = sink.files.getValue(BackupSetNames.artifacts(stamp))
+
+        graph.attachmentStorage.store.files.clear()
+        vm.restoreData(MemoryIO(sink.files.getValue(BackupSetNames.data(stamp)))).getOrThrow()
+        assertEquals(1, vm.restoreFiles(MemoryIO(artifacts)).getOrThrow().restored)
+
+        val said = async(Dispatchers.Main) { vm.messages.first() }
+        vm.restoreFilesFrom(MemoryIO(artifacts))
+
+        assertEquals("Restored 0 files, skipped 0; 1 already present", said.await())
         assertArrayEquals(payload, graph.attachmentStorage.store.files.getValue(row.storageLocator))
     }
 

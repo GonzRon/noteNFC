@@ -15,7 +15,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * The same six claims `AttachmentStoreContractTest` makes about the JVM fake, made about the real
+ * The same seven claims `AttachmentStoreContractTest` makes about the JVM fake, made about the real
  * `DocumentFile` store — over `DocumentFile.fromFile` on an app-external directory, because an
  * instrumented test cannot drive the SAF picker. The list is duplicated on purpose: JVM test
  * fixtures cannot be shared with an `androidTest` variant, so the two suites are written to read
@@ -122,6 +122,25 @@ class SafTreeAttachmentStoreContractTest {
         assertTrue(boom.isFailure)
         assertFalse(store.exists("assets/a1/att-1.pdf"))
         // Nothing at all, not even an empty document: the directory the copy created is empty.
+        assertEquals(emptyList<String>(), File(root, "assets/a1").list()!!.toList())
+    }
+
+    /**
+     * The `:core` contract's claim, made about the real provider: a put that fails over an
+     * existing document leaves the locator empty. `put` deletes the stale document before it
+     * creates the new one, so there is nothing left to fall back to — which is exactly why
+     * `RestoreArtifacts` checks the local digest before it writes anything.
+     */
+    @Test fun aPutThatFailsOverAnExistingDocumentLeavesTheLocatorEmpty() = runBlocking {
+        store.put("assets/a1/att-1.pdf", ByteSource { payload.inputStream() })
+
+        val boom = runCatching {
+            store.put("assets/a1/att-1.pdf", ByteSource { ThrowingStream(payload, after = 1024) })
+        }
+
+        assertTrue(boom.isFailure)
+        assertFalse(store.exists("assets/a1/att-1.pdf"))
+        assertNull(store.open("assets/a1/att-1.pdf"))
         assertEquals(emptyList<String>(), File(root, "assets/a1").list()!!.toList())
     }
 

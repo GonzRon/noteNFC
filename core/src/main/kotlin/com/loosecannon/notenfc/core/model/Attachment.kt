@@ -104,15 +104,34 @@ object MimeTypes {
     /** Derived from [EXTENSIONS], so the forward and inverse lookups cannot drift apart. */
     private val MIME_BY_EXTENSION = EXTENSIONS.entries.associate { (mime, ext) -> ext to mime }
 
+    /**
+     * Spellings [EXTENSIONS] does not carry, because [extensionFor] has to pick exactly one
+     * extension per type and these are the other ones people's files are actually called.
+     *
+     * `jpeg` is the same payload as the table's `jpg`; `tif` and `htm` name types the model needs no
+     * extension *for*, because nothing here ever writes one. A locator can still arrive spelled any
+     * of those ways — the person's own file was — and telling a document provider
+     * `application/octet-stream` for a file it could have shown is worse than telling it the truth.
+     *
+     * Consulted only after [MIME_BY_EXTENSION], so the table stays the one place a type is named
+     * and an alias can never contradict it.
+     */
+    private val ALIASES = mapOf(
+        "jpeg" to "image/jpeg",
+        "tif" to "image/tiff",
+        "htm" to "text/html",
+    )
+
     fun extensionFor(mimeType: String): String? = EXTENSIONS[normalise(mimeType)]
 
     /**
-     * The inverse of [extensionFor]: what to tell a document provider when a locator's extension
-     * is all that is on hand. An extension this model does not name is `application/octet-stream`,
-     * which is what an unknown payload is.
+     * The inverse of [extensionFor], widened by [ALIASES]: what to tell a document provider when a
+     * locator's extension is all that is on hand. An extension neither table names is
+     * `application/octet-stream`, which is what an unknown payload is.
      */
-    fun mimeForExtension(ext: String): String =
-        MIME_BY_EXTENSION[ext.lowercase()] ?: "application/octet-stream"
+    fun mimeForExtension(ext: String): String = ext.lowercase()
+        .let { key -> MIME_BY_EXTENSION[key] ?: ALIASES[key] }
+        ?: "application/octet-stream"
 
     fun isCompressed(mimeType: String): Boolean = normalise(mimeType) in COMPRESSED
 }

@@ -26,6 +26,11 @@ class InMemoryAttachmentStore : AttachmentStore {
 
     override suspend fun put(locator: String, source: ByteSource): StoredBytes {
         if (locator == failOnPut) throw StoreIoException("rigged put failure at $locator")
+        // Before the source is read, exactly as the real store does: `SafTreeAttachmentStore`
+        // deletes the stale document and then creates the new one, so a source that dies mid-read
+        // leaves the locator *empty*, not holding the old bytes. A fake that kept them would let a
+        // test pass here while the product lost data on the device.
+        files.remove(locator)
         val bytes = source.open().use { it.readBytes() }
         files[locator] = bytes
         return StoredBytes(sha256Hex(bytes), bytes.size.toLong())

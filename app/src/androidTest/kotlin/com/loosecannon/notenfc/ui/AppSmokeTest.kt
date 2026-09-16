@@ -98,9 +98,7 @@ internal fun exportedDataArchive(): ByteArray {
             return name
         }
 
-        override suspend fun delete(handle: String) {
-            files.remove(handle)
-        }
+        override suspend fun delete(handle: String): Boolean = files.remove(handle) != null
     }
     runBlocking { BackupViewModel(app.graph).exportSet(sink).getOrThrow() }
     return files.entries.single { it.key.startsWith("noteNFC-data-") }.value

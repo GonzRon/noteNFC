@@ -146,6 +146,7 @@ fun AttachmentsSection(
         onPicked = model::add,
         onNoViewer = { scope.launch { snackbars.showSnackbar("No app can open this file") } },
         onNoCamera = { scope.launch { snackbars.showSnackbar("No camera app on this device") } },
+        onNoFilePicker = { scope.launch { snackbars.showSnackbar("No app can pick files") } },
     )
 
     DocumentsSection(

@@ -94,4 +94,19 @@ class AttachmentRulesTest {
                 assertEquals(mime, MimeTypes.mimeForExtension(MimeTypes.extensionFor(mime)!!))
             }
     }
+
+    /**
+     * The other spellings the same files arrive with. `extensionFor` still emits exactly one
+     * extension per type, so these widen the lookup without widening what the model writes.
+     */
+    @Test fun theCommonAlternativeSpellingsAreNotUnknownPayloads() {
+        assertEquals("image/jpeg", MimeTypes.mimeForExtension("jpeg"))
+        assertEquals("image/jpeg", MimeTypes.mimeForExtension("JPEG"))
+        assertEquals("image/tiff", MimeTypes.mimeForExtension("tif"))
+        assertEquals("text/html", MimeTypes.mimeForExtension("htm"))
+        // and the aliases do not leak back the other way: one extension per type still
+        assertEquals("jpg", MimeTypes.extensionFor("image/jpeg"))
+        assertNull(MimeTypes.extensionFor("image/tiff"))
+        assertNull(MimeTypes.extensionFor("text/html"))
+    }
 }

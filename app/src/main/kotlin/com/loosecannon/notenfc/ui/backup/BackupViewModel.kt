@@ -21,6 +21,7 @@ import com.loosecannon.notenfc.di.AppGraph
 import com.loosecannon.notenfc.prefs.AppPrefs
 import java.io.OutputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,8 +37,32 @@ import kotlinx.coroutines.withContext
 interface BackupSetSink {
     /** Returns a handle the caller can pass to [delete] — in the app, the document's URI. */
     suspend fun write(name: String, body: suspend (OutputStream) -> Unit): String
-    suspend fun delete(handle: String)
+
+    /**
+     * Takes one written file back. **True only if it is really gone.**
+     *
+     * A provider is free to refuse a delete, and when it does, a failed export has left a
+     * complete, importable data archive in the owner's folder. Saying so is the difference
+     * between "Nothing was saved" and a file they can be told to remove by hand.
+     */
+    suspend fun delete(handle: String): Boolean
 }
+
+/**
+ * The export refused before it wrote anything, because rows name bytes and no folder is chosen.
+ * Its message is the one Settings' own wording, so the owner is told what to do rather than how
+ * many files the archive could not find.
+ */
+class NoAttachmentFolder : Exception("Choose an attachment folder in Settings first")
+
+/**
+ * A failed export the sink would not fully take back. [leftBehind] names the documents still in
+ * the folder — names, not URIs, because the owner has to find them in a file manager.
+ */
+class ExportLeftFilesBehind(
+    val leftBehind: List<String>,
+    override val cause: Throwable,
+) : Exception(cause.message, cause)
 
 /** When the last export landed, whether one is in flight, and which set was restored here. */
 data class BackupState(
@@ -93,58 +118,92 @@ class BackupViewModel(
      * Completeness rule (owner's ruling, spec §7.3): the set is a backup only if every managed
      * row's bytes landed in the artifacts archive with the planned size. A missing or drifted
      * file fails the whole export, both files are removed, and `lastBackupAt` does not move.
+     *
+     * One refusal comes *before* the first write: managed rows with no attachment folder to read
+     * them from is not a damaged backup, it is a phone that has not been set up, and calling it
+     * "N attachment files are missing" would send the owner looking for files instead of for the
+     * Settings screen. The store is resolved once here and reused for every entry, rather than
+     * being asked for per byte-source.
+     *
+     * Everything runs on [Dispatchers.IO]: `BackupCodec.encode` and the artifacts write are a zip
+     * and a hash over every attachment, which is not the main thread's work even for one tap.
      */
     suspend fun exportSet(sink: BackupSetSink): Result<String> = runCatching {
-        val set = exportBackupSet.run()
-        val stamp = BackupSetNames.stamp(set.plan.createdAt)
-        val dataHandle = sink.write(BackupSetNames.data(stamp)) { out -> out.write(set.data) }
-        var artifactsHandle: String? = null
-        try {
-            lateinit var written: ArtifactsWritten
-            artifactsHandle = sink.write(BackupSetNames.artifacts(stamp)) { out ->
-                // With zero attachments this is a manifest-only archive: a set is always two files.
-                written =
-                    ArtifactsCodec.write(out, set.plan) { locator -> storage.store()?.open(locator) }
+        withContext(Dispatchers.IO) {
+            val set = exportBackupSet.run()
+            val store = storage.store()
+            if (store == null && set.plan.entries.isNotEmpty()) throw NoAttachmentFolder()
+            val stamp = BackupSetNames.stamp(set.plan.createdAt)
+            val dataName = BackupSetNames.data(stamp)
+            val artifactsName = BackupSetNames.artifacts(stamp)
+            val dataHandle = sink.write(dataName) { out -> out.write(set.data) }
+            var artifactsHandle: String? = null
+            try {
+                lateinit var written: ArtifactsWritten
+                artifactsHandle = sink.write(artifactsName) { out ->
+                    // With zero attachments this is a manifest-only archive: a set is always two
+                    // files, and `store` is allowed to be null only because there is nothing to
+                    // open.
+                    written = ArtifactsCodec.write(out, set.plan) { locator -> store?.open(locator) }
+                }
+                if (!written.covers(set.plan)) {
+                    throw BackupSetIncomplete(written.missing, written.mismatched)
+                }
+            } catch (t: Throwable) {
+                // [NonCancellable] because the failure being handled is often a cancellation, and a
+                // sink's `delete` suspends: on an already-cancelled coroutine it would throw before
+                // doing anything and leave the data archive behind — the one thing the invariant
+                // forbids. Each delete stands alone, so one that fails cannot stop the other.
+                //
+                // The SAF sink already removed a partial artifacts document; deleting a handle it
+                // never returned cannot happen, and deleting one it did is harmless.
+                val leftBehind = mutableListOf<String>()
+                withContext(NonCancellable) {
+                    artifactsHandle?.let { handle ->
+                        if (!sink.deleted(handle)) leftBehind += artifactsName
+                    }
+                    if (!sink.deleted(dataHandle)) leftBehind += dataName
+                }
+                // Past the data write, the owner's news is the same whatever failed down here: the
+                // second half did not happen and the first half is gone again. The completeness
+                // ruling keeps its own wording, and a cancellation is not a failure at all.
+                val failure = when (t) {
+                    is BackupSetIncomplete, is CancellationException, is ArtifactsWriteFailed -> t
+                    else -> ArtifactsWriteFailed("the files archive could not be written", t)
+                }
+                // ...unless "the first half is gone again" is not true. A cancellation still
+                // travels as itself: nothing is reported for an operation nobody is waiting on.
+                throw if (leftBehind.isEmpty() || failure is CancellationException) {
+                    failure
+                } else {
+                    ExportLeftFilesBehind(leftBehind, failure)
+                }
             }
-            if (!written.covers(set.plan)) {
-                throw BackupSetIncomplete(written.missing, written.mismatched)
-            }
-        } catch (t: Throwable) {
-            // [NonCancellable] because the failure being handled is often a cancellation, and a
-            // sink's `delete` suspends: on an already-cancelled coroutine it would throw before
-            // doing anything and leave the data archive behind — the one thing the invariant
-            // forbids. Each delete stands alone, so one that fails cannot stop the other.
-            //
-            // The SAF sink already removed a partial artifacts document; deleting a handle it
-            // never returned cannot happen, and deleting one it did is harmless.
-            withContext(NonCancellable) {
-                artifactsHandle?.let { handle -> runCatching { sink.delete(handle) } }
-                runCatching { sink.delete(dataHandle) }
-            }
-            // Past the data write, the owner's news is the same whatever failed down here: the
-            // second half did not happen and the first half is gone again. The completeness
-            // ruling keeps its own wording, and a cancellation is not a failure at all.
-            when (t) {
-                is BackupSetIncomplete, is CancellationException, is ArtifactsWriteFailed -> throw t
-                else -> throw ArtifactsWriteFailed("the files archive could not be written", t)
-            }
+            prefs.markBackupExported(clock.nowMillis())
+            _state.update { it.copy(lastBackupAt = prefs.lastBackupAt) }
+            dataName + " + " + artifactsName
         }
-        prefs.markBackupExported(clock.nowMillis())
-        _state.update { it.copy(lastBackupAt = prefs.lastBackupAt) }
-        BackupSetNames.data(stamp) + " + " + BackupSetNames.artifacts(stamp)
     }.rethrowCancellation()
 
     /** Wipes and loads the data archive, and remembers the set id the files step must match. */
     suspend fun restoreData(io: BackupIO): Result<ImportReport> = runCatching {
-        val report = importBackupReplace.run(io.read())
-        prefs.lastRestoredBackupSetId = report.lastRestoredBackupSetId
-        _state.update { it.copy(lastRestoredBackupSetId = prefs.lastRestoredBackupSetId) }
-        report
+        withContext(Dispatchers.IO) {
+            val report = importBackupReplace.run(io.read())
+            prefs.lastRestoredBackupSetId = report.lastRestoredBackupSetId
+            _state.update { it.copy(lastRestoredBackupSetId = prefs.lastRestoredBackupSetId) }
+            report
+        }
     }.rethrowCancellation()
 
-    /** Adds the bytes the data archive only listed. It deletes nothing, so there is no dialog. */
+    /**
+     * Adds the bytes the data archive only listed. It deletes nothing, so there is no dialog —
+     * and, since `RestoreArtifacts` leaves bytes that already match where they are, running it
+     * twice is harmless.
+     */
     suspend fun restoreFiles(io: BackupIO): Result<ArtifactsReport> = runCatching {
-        io.openStream().use { restoreArtifacts.run(it, prefs.lastRestoredBackupSetId) }
+        withContext(Dispatchers.IO) {
+            io.openStream().use { restoreArtifacts.run(it, prefs.lastRestoredBackupSetId) }
+        }
     }.rethrowCancellation()
 
     /** What the screen calls once the owner has picked a folder. */
@@ -153,7 +212,7 @@ class BackupViewModel(
     }
 
     fun restoreDataFrom(io: BackupIO) = once {
-        restoreData(io).fold(::restoredLine, ::reason)
+        restoreData(io).fold(::restoredLine, ::restoreReason)
     }
 
     fun restoreFilesFrom(io: BackupIO) = once {
@@ -164,11 +223,18 @@ class BackupViewModel(
      * Runs [block] in `viewModelScope`, not in the composition's scope: a rotation halfway through
      * an export must not abandon a half-written document. The guard is set before the first
      * suspension, so two taps inside one frame start one operation, not two.
+     *
+     * On [Dispatchers.IO], because the work is zips and digests over every attachment — and
+     * `ZipInputStream.getNextEntry` inflates even the entries a restore decides to skip, which on
+     * a large archive is an ANR on the main thread. The three suspend entry points move themselves
+     * as well, so a direct caller (the debug harness, the instrumented suite) gets it too. State
+     * and message publication are thread-safe already: a `MutableStateFlow.update` and a
+     * `tryEmit`, both callable from anywhere.
      */
     private fun once(block: suspend () -> String) {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true) }
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val message = block()
             _state.update { it.copy(busy = false) }
             _messages.tryEmit(message)
@@ -190,13 +256,17 @@ class BackupViewModel(
             }
 
     /**
-     * Restored and skipped, and then the archive's own damage if it had any: entries the manifest
-     * promised and the file did not carry (those rows are still without bytes), and bytes the
-     * manifest never named. Reporting only the first two numbers would call a damaged archive a
-     * clean restore.
+     * Restored and skipped, then the rows whose bytes were already here and right — a second
+     * restore of the same set says that rather than claiming it did nothing — and then the
+     * archive's own damage if it had any: entries the manifest promised and the file did not carry
+     * (those rows are still without bytes), and bytes the manifest never named. Reporting only the
+     * first two numbers would call a damaged archive a clean restore.
      */
     private fun restoredFilesLine(report: ArtifactsReport): String = buildString {
         append("Restored ${report.restored} files, skipped ${report.skipped}")
+        if (report.alreadyPresent > 0) {
+            append("; ${report.alreadyPresent} already present")
+        }
         if (report.missingEntries.isNotEmpty()) {
             append("; ${report.missingEntries.size} listed files were not in the archive")
         }
@@ -206,6 +276,12 @@ class BackupViewModel(
     }
 
     private fun exportReason(error: Throwable): String = when (error) {
+        // The one case where "Nothing was saved" would be a lie: say what is still there, and
+        // say it by the name the owner will see in their file manager.
+        is ExportLeftFilesBehind ->
+            exportReason(error.cause).trimEnd('.') +
+                "; could not remove ${error.leftBehind.joinToString(", ")} — delete them yourself"
+        is NoAttachmentFolder -> reason(error)
         is BackupSetIncomplete -> "Backup not saved: " + error.wording()
         is ArtifactsWriteFailed ->
             "Export failed: the files archive could not be written. Nothing was saved."
@@ -217,8 +293,11 @@ class BackupViewModel(
             "Those files belong to backup set ${error.found.take(SHORT_ID)}, " +
                 "not ${error.expected.take(SHORT_ID)}"
         is StoreIoException -> "Choose an attachment folder in Settings first"
-        else -> reason(error)
+        else -> restoreReason(error)
     }
+
+    /** The export side's lead-in, on the restore side: a bare exception message is not news. */
+    private fun restoreReason(error: Throwable): String = "Restore failed: ${reason(error)}"
 
     private fun reason(error: Throwable): String = error.message ?: error.javaClass.simpleName
 
@@ -227,6 +306,10 @@ class BackupViewModel(
         const val SHORT_ID = 8
     }
 }
+
+/** `delete`, with a provider that throws counted exactly like one that answers no. */
+private suspend fun BackupSetSink.deleted(handle: String): Boolean =
+    runCatching { delete(handle) }.getOrDefault(false)
 
 /**
  * "1 attachment file is missing", "2 attachment files have changed since they were added".

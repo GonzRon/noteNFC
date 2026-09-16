@@ -44,13 +44,17 @@ class SafBackupSetWriter(
             document.uri.toString()
         }
 
-    override suspend fun delete(handle: String) {
+    /**
+     * True only when the document is really gone. A provider that refuses — or that throws, or
+     * that cannot even be resolved back to a document — answers false, because the export's
+     * cleanup has to be able to tell the owner which file is still sitting in their folder.
+     */
+    override suspend fun delete(handle: String): Boolean =
         withContext(Dispatchers.IO) {
             runCatching {
                 DocumentFile.fromSingleUri(context.applicationContext, handle.toUri())?.delete()
-            }
+            }.getOrNull() == true
         }
-    }
 }
 
 /** `noteNFC-data-<stamp>.zip` and `noteNFC-artifacts-<stamp>.zip`, stamp = local `yyyyMMdd-HHmmss`. */

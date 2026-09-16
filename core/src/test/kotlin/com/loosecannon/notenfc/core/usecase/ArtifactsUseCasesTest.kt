@@ -201,6 +201,47 @@ class ArtifactsUseCasesTest {
         assertTrue(store.files.isEmpty())
     }
 
+    /**
+     * The idempotence claim: a second restore of the same archive over an install whose bytes are
+     * already right writes nothing, deletes nothing, and says so.
+     */
+    @Test fun aRowWhoseBytesAlreadyMatchIsCountedPresentAndNotWrittenAgain() = runTest {
+        val row = seed()
+        val archive = writeArchive()
+        val deletesBefore = store.deletes
+
+        val report = restore.run(ByteArrayInputStream(archive), expectedSetId = "set-1")
+
+        assertEquals(0, report.restored)
+        assertEquals(0, report.skipped)
+        assertEquals(1, report.alreadyPresent)
+        assertEquals(deletesBefore, store.deletes)
+        assertContentEquals(payload, store.open(row.storageLocator)!!.use { it.readBytes() })
+    }
+
+    /**
+     * C1: a damaged entry over good local bytes. The old code put the entry's bytes down first —
+     * and a put replaces the document — so the digest check that followed deleted the damage *and*
+     * the only good copy, leaving the row with no bytes anywhere. The local digest is checked
+     * first now, so the good bytes are never opened for writing at all.
+     */
+    @Test fun aDamagedEntryOverGoodLocalBytesLeavesTheGoodBytesAlone() = runTest {
+        val row = seed()
+        val archive = writeArchive()
+        val entries = unzip(archive)
+        // bit rot in the archive only: the manifest still promises the row's own digest
+        entries[ArtifactsCodec.ENTRY_PREFIX + "att-1.pdf"] = "rotted".toByteArray()
+        val deletesBefore = store.deletes
+
+        val report = restore.run(ByteArrayInputStream(rezip(entries)), expectedSetId = "set-1")
+
+        assertEquals(0, report.restored)
+        assertEquals(1, report.alreadyPresent)
+        assertEquals(deletesBefore, store.deletes)
+        assertTrue(store.exists(row.storageLocator))
+        assertContentEquals(payload, store.open(row.storageLocator)!!.use { it.readBytes() })
+    }
+
     @Test fun aPutThatDiesMidCopyLeavesNoBytesBehindAndStillFailsTheRestore() = runTest {
         val row = seed()
         val archive = writeArchive()

@@ -3,6 +3,7 @@ package com.loosecannon.notenfc.core.usecase
 import com.loosecannon.notenfc.core.ports.AttachmentStorage
 import com.loosecannon.notenfc.core.ports.AttachmentStore
 import java.io.IOException
+import java.security.MessageDigest
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -30,4 +31,27 @@ internal suspend fun AttachmentStorage.sweepBytes(locators: List<String>) {
     if (locators.isEmpty()) return
     val store = store() ?: return
     locators.forEach { locator -> store.deleteBestEffort(locator) }
+}
+
+/**
+ * The digest of what is *already* at [locator], or null when nothing is there.
+ *
+ * `put` is the only place an attachment's sha256 is computed on the way *in* (spec §11.10); this is
+ * the way back out, for the one caller that has to know whether bytes it is about to overwrite are
+ * the bytes the row claims. The stream is hashed in place — an attachment can be hundreds of
+ * megabytes, so it is never materialised — and `open` returning null is the whole absence answer,
+ * which is why `exists` is not asked first.
+ */
+internal suspend fun AttachmentStore.sha256Of(locator: String): String? {
+    val source = open(locator) ?: return null
+    val digest = MessageDigest.getInstance("SHA-256")
+    source.use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { b -> "%02x".format(b) }
 }
