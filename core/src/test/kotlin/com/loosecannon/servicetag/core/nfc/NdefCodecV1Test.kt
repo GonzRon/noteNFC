@@ -46,6 +46,10 @@ class NdefCodecV1Test {
         assertEquals(2, msg.size)
         assertEquals(codec.v1Record(id), msg[0])
         assertEquals(assertNotNull(codec.applicationRecord()), msg[1])
+        // and the AAR's own bytes, pinned against the platform's format rather than the encoder
+        assertEquals(0x04, msg[1].tnf)
+        assertContentEquals("android.com:pkg".toByteArray(Charsets.US_ASCII), msg[1].type)
+        assertContentEquals(identity.aarPackage!!.toByteArray(Charsets.US_ASCII), msg[1].payload)
     }
 
     @Test fun roundTrips() {

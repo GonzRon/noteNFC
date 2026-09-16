@@ -13,19 +13,25 @@ val keystoreProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// This app's identity, typed once. The namespace, the applicationId, the NFC Forum external-type
+// domain and the Application Record all read it, so no two of them can be edited apart.
+val appId = "com.loosecannon.servicetag"
+
 // The single source of truth for this app's tag identity (C9, target §4.8). It produces the
 // manifest filter path AND the BuildConfig fields the app builds its TagIdentity from, so the
-// two cannot drift. android:path stays an EXACT match, never pathPrefix.
-val tagExternalDomain = "com.loosecannon.servicetag"   // NFC Forum external-type domain
+// two cannot drift. android:path stays an EXACT match, never pathPrefix. The domain and the AAR
+// package stay separate vals even though both read [appId]: one is an NFC Forum domain, the other
+// an Android package name (C9).
+val tagExternalDomain = appId   // NFC Forum external-type domain
 val tagTypeName = "tag"
-val tagAarPackage: String? = "com.loosecannon.servicetag"  // null would mean "no AAR" (O13/P21)
+val tagAarPackage: String? = appId  // null would mean "no AAR" (O13/P21)
 
 android {
-    namespace = "com.loosecannon.servicetag"
+    namespace = appId
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.loosecannon.servicetag"
+        applicationId = appId
         minSdk = 26
         targetSdk = 36
         versionCode = 7
