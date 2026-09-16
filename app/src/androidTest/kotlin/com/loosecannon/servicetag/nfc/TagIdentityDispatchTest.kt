@@ -22,7 +22,7 @@ import org.junit.runner.RunWith
 class TagIdentityDispatchTest {
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()
-    private val graph get() = (context.applicationContext as com.loosecannon.servicetag.NoteNfcApp).graph
+    private val graph get() = (context.applicationContext as com.loosecannon.servicetag.ServiceTagApp).graph
 
     @Test fun theAarPackageIsThisApplicationId() {
         assertEquals(context.packageName, graph.tagIdentity.aarPackage)

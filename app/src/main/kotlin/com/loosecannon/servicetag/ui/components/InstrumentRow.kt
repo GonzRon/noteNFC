@@ -36,7 +36,7 @@ import com.loosecannon.servicetag.ui.journal.stateLabel
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MeasurementEntryText
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * One line of the field test sheet of D12 §9: name and reference interval on the left, the value
@@ -102,7 +102,7 @@ fun InstrumentRow(
             if (state != null) {
                 StatusBadge(
                     label = stateLabel(state),
-                    colors = stateColors(state, NoteNfcTheme.semanticColors),
+                    colors = stateColors(state, ServiceTagTheme.semanticColors),
                     icon = stateIcon(state),
                 )
             }
@@ -169,7 +169,7 @@ fun InstrumentEntryRow(
 ) {
     val definition = row.definition
     val live = row.liveState
-    val rail = live?.let { stateColors(it, NoteNfcTheme.semanticColors).foreground }
+    val rail = live?.let { stateColors(it, ServiceTagTheme.semanticColors).foreground }
     val keyboard = KeyboardActions(onNext = { onNext() }, onDone = { onNext() })
     val tag = Modifier.testTag("value-${definition.key}")
 
@@ -189,7 +189,7 @@ fun InstrumentEntryRow(
                 when {
                     live != null -> StatusBadge(
                         label = stateLabel(live),
-                        colors = stateColors(live, NoteNfcTheme.semanticColors),
+                        colors = stateColors(live, ServiceTagTheme.semanticColors),
                         icon = stateIcon(live),
                         modifier = Modifier.padding(top = 3.dp),
                     )
@@ -257,7 +257,7 @@ fun InstrumentEntryRow(
             Text(
                 text = problemText(problem),
                 style = MaterialTheme.typography.bodySmall,
-                color = NoteNfcTheme.semanticColors.due.foreground,
+                color = ServiceTagTheme.semanticColors.due.foreground,
                 modifier = Modifier.padding(top = 4.dp),
             )
         }

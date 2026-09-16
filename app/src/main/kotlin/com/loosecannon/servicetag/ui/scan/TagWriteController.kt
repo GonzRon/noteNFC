@@ -289,8 +289,8 @@ class TagWriteController(
         val InitialState = WriteState.Idle("Hold a blank or reusable tag to the back of the phone.")
 
         fun describe(p: TagPayload): String = when (p) {
-            is TagPayload.V1 -> "noteNFC tag ${p.tagId.value}"
-            is TagPayload.NewerVersion -> "a newer noteNFC format (${p.version})"
+            is TagPayload.V1 -> "ServiceTag tag ${p.tagId.value}"
+            is TagPayload.NewerVersion -> "a newer ServiceTag format (${p.version})"
             is TagPayload.Foreign -> "foreign content (${p.description})"
             is TagPayload.Malformed -> "unreadable content (${p.reason})"
             TagPayload.Empty -> "nothing"

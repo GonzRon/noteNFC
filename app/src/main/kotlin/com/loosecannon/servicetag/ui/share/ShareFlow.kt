@@ -22,10 +22,10 @@ import com.loosecannon.servicetag.ui.scan.WriteTagScreen
 import com.loosecannon.servicetag.ui.theme.SheetSentence
 
 /**
- * "Share a note link to noteNFC" (D12 §9). The whole flow lives in `ShareActivity`'s own task: the
+ * "Share a note link to ServiceTag" (D12 §9). The whole flow lives in `ShareActivity`'s own task: the
  * URI is extracted and checked, the card offers the two things worth doing with it, and both of
  * them save. Writing a tag pushes the ordinary write screen inside this task, so Done here means
- * "back to Joplin" and never "into noteNFC's back stack".
+ * "back to Joplin" and never "into ServiceTag's back stack".
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,7 +55,7 @@ fun ShareFlow(graph: AppGraph, sharedText: CharSequence?, onFinished: () -> Unit
                     onCancel = onFinished,
                 )
 
-                is ShareState.Saved -> Closing("Saved to noteNFC.", onFinished)
+                is ShareState.Saved -> Closing("Saved to ServiceTag.", onFinished)
                 is ShareState.Nothing -> Closing(current.message, onFinished)
 
                 // Handled above; the write screen replaces this one entirely.

@@ -46,11 +46,11 @@ import com.loosecannon.servicetag.core.model.AttachmentLocator
 import com.loosecannon.servicetag.core.model.AttachmentOwner
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBlock
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -92,16 +92,16 @@ fun DocumentsSection(
     // for the bytes to go, and a greyed button invites a tap that can only fail (spec §8.1).
     if (state.store is StoreState.Ready) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            ActionButton("Add file", NoteNfcIcons.AttachFile, onAddFiles)
-            ActionButton("Take photo", NoteNfcIcons.Photo, onTakePhoto)
+            ActionButton("Add file", ServiceTagIcons.AttachFile, onAddFiles)
+            ActionButton("Take photo", ServiceTagIcons.Photo, onTakePhoto)
         }
     } else {
         StatusBlock(
-            kind = NoteNfcTheme.semanticColors.seasonInactive,
+            kind = ServiceTagTheme.semanticColors.seasonInactive,
             headline = "Attachment storage",
             title = "Attachment storage not set up",
             detail = "Choose a folder in Settings",
-            icon = NoteNfcIcons.CloudOff,
+            icon = ServiceTagIcons.CloudOff,
             leftRule = false,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -276,11 +276,11 @@ internal fun AttachmentKind.label(): String = when (this) {
 /** Broad glyphs only, as the category icons are (D12 §12): a picture, a page, or a paperclip. */
 @Composable
 private fun AttachmentKind.glyph(): ImageVector = when (this) {
-    AttachmentKind.PHOTO, AttachmentKind.LABEL_PHOTO -> NoteNfcIcons.Photo
+    AttachmentKind.PHOTO, AttachmentKind.LABEL_PHOTO -> ServiceTagIcons.Photo
     AttachmentKind.RECEIPT, AttachmentKind.MANUAL,
     AttachmentKind.WARRANTY, AttachmentKind.DOCUMENT,
-    -> NoteNfcIcons.Description
-    AttachmentKind.OTHER -> NoteNfcIcons.AttachFile
+    -> ServiceTagIcons.Description
+    AttachmentKind.OTHER -> ServiceTagIcons.AttachFile
 }
 
 /**

@@ -37,11 +37,11 @@ import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.nfc.NfcReaderModeSession
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.theme.ControlShape
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.theme.PlateShape
 
 /**
@@ -146,29 +146,29 @@ private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Uni
     when (state) {
         is WriteState.Idle -> NfcSheet(
             eyebrow = "Write nfc tag",
-            glyph = NoteNfcIcons.NfcTag,
+            glyph = ServiceTagIcons.NfcTag,
             sentence = state.message,
         )
 
         is WriteState.Confirm -> NfcSheet(
             eyebrow = "Overwrite this tag?",
-            accent = NoteNfcTheme.semanticColors.dueSoon.foreground,
-            border = NoteNfcTheme.semanticColors.dueSoon.foreground,
-            glyph = NoteNfcIcons.NfcTag,
+            accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
+            border = ServiceTagTheme.semanticColors.dueSoon.foreground,
+            glyph = ServiceTagIcons.NfcTag,
             sentence = "Hold the tag to the phone while you answer.",
         )
 
         is WriteState.Verifying -> NfcSheet(
             eyebrow = "Verifying",
             accent = MaterialTheme.colorScheme.tertiary,
-            glyph = NoteNfcIcons.NfcTag,
+            glyph = ServiceTagIcons.NfcTag,
             sentence = state.message,
         )
 
         is WriteState.Written -> NfcSheet(
             eyebrow = "Tag written",
-            accent = NoteNfcTheme.semanticColors.maintenanceOkay.foreground,
-            glyph = NoteNfcIcons.NfcTag,
+            accent = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
+            glyph = ServiceTagIcons.NfcTag,
             sentence = targetName,
             identifier = "${state.tagId.take(8)} · v1 · ${if (state.locked) "locked" else "rewritable"}",
             actions = { FilledAction("Done", onDone) },
@@ -179,9 +179,9 @@ private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Uni
 
         is WriteState.Error -> NfcSheet(
             eyebrow = "Not written",
-            accent = NoteNfcTheme.semanticColors.destructiveAction.foreground,
-            border = NoteNfcTheme.semanticColors.destructiveAction.foreground,
-            glyph = NoteNfcIcons.NfcTag,
+            accent = ServiceTagTheme.semanticColors.destructiveAction.foreground,
+            border = ServiceTagTheme.semanticColors.destructiveAction.foreground,
+            glyph = ServiceTagIcons.NfcTag,
             sentence = state.message,
         )
     }
@@ -191,8 +191,8 @@ private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Uni
 @Composable
 private fun VerifiedLine() {
     Surface(
-        color = NoteNfcTheme.semanticColors.maintenanceOkay.container,
-        contentColor = NoteNfcTheme.semanticColors.maintenanceOkay.foreground,
+        color = ServiceTagTheme.semanticColors.maintenanceOkay.container,
+        contentColor = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
         shape = PlateShape,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -227,8 +227,8 @@ private fun OverwriteSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Surface(
-                color = NoteNfcTheme.semanticColors.dueSoon.container,
-                contentColor = NoteNfcTheme.semanticColors.dueSoon.foreground,
+                color = ServiceTagTheme.semanticColors.dueSoon.container,
+                contentColor = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 shape = PlateShape,
                 modifier = Modifier.fillMaxWidth(),
             ) {

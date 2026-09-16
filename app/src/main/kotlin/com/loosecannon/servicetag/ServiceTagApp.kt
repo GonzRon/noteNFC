@@ -3,7 +3,7 @@ package com.loosecannon.servicetag
 import android.app.Application
 import com.loosecannon.servicetag.di.AppGraph
 
-class NoteNfcApp : Application() {
+class ServiceTagApp : Application() {
     lateinit var graph: AppGraph
         private set
 

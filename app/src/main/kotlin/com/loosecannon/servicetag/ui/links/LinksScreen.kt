@@ -55,7 +55,7 @@ fun LinksScreen(
         },
     ) { padding ->
         if (links.isEmpty()) {
-            QuietLine("No links yet · Share a note to noteNFC to save one", Modifier.padding(padding).padding(16.dp))
+            QuietLine("No links yet · Share a note to ServiceTag to save one", Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
         LazyColumn(modifier = Modifier.padding(padding).padding(horizontal = 16.dp)) {

@@ -7,7 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /** Roles from D12 §6. Character comes from hierarchy, spacing and mono numerals, not a display face. */
-val NoteNfcTypography = Typography(
+val ServiceTagTypography = Typography(
     headlineSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 24.sp, lineHeight = 30.sp),              // asset name / screen title
     titleLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 21.sp, lineHeight = 26.sp),                 // plate model
     titleMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 22.sp),                // manufacturer/model, event title

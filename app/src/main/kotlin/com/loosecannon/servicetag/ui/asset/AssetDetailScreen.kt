@@ -74,7 +74,7 @@ import com.loosecannon.servicetag.ui.components.InstrumentRow
 import com.loosecannon.servicetag.ui.components.LabelValue
 import com.loosecannon.servicetag.ui.components.LedgerEntry
 import com.loosecannon.servicetag.ui.components.LedgerList
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.PlateValue
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
@@ -87,7 +87,7 @@ import com.loosecannon.servicetag.ui.journal.quickActionLabel
 import com.loosecannon.servicetag.ui.journal.stateColors
 import com.loosecannon.servicetag.ui.journal.stateIcon
 import com.loosecannon.servicetag.ui.journal.stateLabel
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -260,10 +260,10 @@ private fun detailActions(
     onBackup: () -> Unit,
     onSetUp: () -> Unit,
 ): List<ActionSpec> {
-    val ledger = NoteNfcIcons.History
-    val nfc = NoteNfcIcons.NfcTag
-    val documents = NoteNfcIcons.Description
-    val backup = NoteNfcIcons.Backup
+    val ledger = ServiceTagIcons.History
+    val nfc = ServiceTagIcons.NfcTag
+    val documents = ServiceTagIcons.Description
+    val backup = ServiceTagIcons.Backup
     return buildList {
         profiles.forEach { profile ->
             add(
@@ -275,7 +275,7 @@ private fun detailActions(
         add(ActionSpec("Write tag", nfc, outlined = true) { onWriteTag(assetId) })
         add(ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) })
         // What this asset measures and what can be logged against it, both editable (spec §9).
-        add(ActionSpec("Readings & actions", NoteNfcIcons.Speed, outlined = true) { onSetup(assetId) })
+        add(ActionSpec("Readings & actions", ServiceTagIcons.Speed, outlined = true) { onSetup(assetId) })
         add(ActionSpec("Links", documents, outlined = false, onClick = onOpenLinks))
         add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
         if (bare) add(ActionSpec("Set up from template", Icons.Outlined.Add, outlined = true, onClick = onSetUp))
@@ -359,7 +359,7 @@ private fun ServiceRecordSection(
                 {
                     StatusBadge(
                         label = stateLabel(state),
-                        colors = stateColors(state, NoteNfcTheme.semanticColors),
+                        colors = stateColors(state, ServiceTagTheme.semanticColors),
                         icon = stateIcon(state),
                     )
                 }
@@ -419,7 +419,7 @@ private fun DetailOverflow(
         )
         DropdownMenuItem(
             text = {
-                Text("Delete", color = NoteNfcTheme.semanticColors.destructiveAction.foreground)
+                Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
             },
             onClick = { open = false; onDelete() },
         )
@@ -574,9 +574,9 @@ private fun modelLine(asset: Asset): String =
 private fun plateBadges(asset: Asset, outOfSeason: Boolean): (@Composable FlowRowScope.() -> Unit)? {
     val archived = statusLabel(asset.status)
     if (!asset.isRetired && archived == null && !outOfSeason) return null
-    val semantic = NoteNfcTheme.semanticColors
-    val retiredIcon = NoteNfcIcons.PauseCircle
-    val seasonIcon = NoteNfcIcons.CalendarMonth
+    val semantic = ServiceTagTheme.semanticColors
+    val retiredIcon = ServiceTagIcons.PauseCircle
+    val seasonIcon = ServiceTagIcons.CalendarMonth
     return {
         if (asset.isRetired) {
             StatusBadge(label = RETIRED, colors = semantic.paused, icon = retiredIcon)
@@ -707,7 +707,7 @@ private fun TagsSection(tags: List<TagBinding>) {
                 {
                     StatusBadge(
                         label = tag.status.name.lowercase().replaceFirstChar { it.uppercase() },
-                        colors = NoteNfcTheme.semanticColors.seasonInactive,
+                        colors = ServiceTagTheme.semanticColors.seasonInactive,
                     )
                 }
             } else {
@@ -768,8 +768,8 @@ private fun categoryIcon(category: String): ImageVector {
     fun any(vararg words: String) = words.any { it in text }
     return when {
         any("tool", "equip", "mower", "machine", "engine", "pump", "hvac") -> Icons.Outlined.Build
-        any("power", "battery", "electric", "ups", "meter", "gauge") -> NoteNfcIcons.Speed
-        any("computer", "network", "server", "nfc", "tag") -> NoteNfcIcons.NfcTag
+        any("power", "battery", "electric", "ups", "meter", "gauge") -> ServiceTagIcons.Speed
+        any("computer", "network", "server", "nfc", "tag") -> ServiceTagIcons.NfcTag
         any("home", "house", "water", "pool", "tub", "yard", "garden", "outdoor") -> Icons.Outlined.Home
         else -> Icons.Outlined.Info
     }

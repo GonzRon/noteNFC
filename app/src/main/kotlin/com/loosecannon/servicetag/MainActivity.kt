@@ -11,9 +11,9 @@ import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppearanceMode
-import com.loosecannon.servicetag.ui.nav.NoteNfcApp
+import com.loosecannon.servicetag.ui.nav.ServiceTagRoot
 import com.loosecannon.servicetag.ui.nav.Route
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 /**
@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  */
 class MainActivity : ComponentActivity() {
 
-    private val graph: AppGraph get() = (application as NoteNfcApp).graph
+    private val graph: AppGraph get() = (application as ServiceTagApp).graph
 
     /**
      * `replay = 1`: `onCreate` emits before the first composition subscribes, and a shared flow
@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
                 AppearanceMode.LIGHT -> false
                 AppearanceMode.DARK -> true
             }
-            NoteNfcTheme(darkTheme = dark) { NoteNfcApp(graph, deepLinks, messages) }
+            ServiceTagTheme(darkTheme = dark) { ServiceTagRoot(graph, deepLinks, messages) }
         }
         // A restored instance already has its back stack; re-pushing the launch intent would
         // duplicate the destination the user is looking at.

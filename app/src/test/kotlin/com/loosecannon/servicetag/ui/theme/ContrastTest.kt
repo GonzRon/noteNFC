@@ -29,7 +29,7 @@ class ContrastTest {
         assertAtLeast(4.5, s.onSurface, s.surfaceContainerLow, "$name surfaceContainerLow")
         assertAtLeast(3.0, s.outline, s.surface, "$name outline (graphic)")
     }
-    private fun checkSemantic(name: String, c: NoteNfcSemanticColors) {
+    private fun checkSemantic(name: String, c: ServiceTagSemanticColors) {
         listOf(
             "ok" to c.maintenanceOkay, "dueSoon" to c.dueSoon, "due" to c.due, "overdue" to c.overdue,
             "seasonInactive" to c.seasonInactive, "paused" to c.paused, "low" to c.measurementLow,
@@ -41,14 +41,14 @@ class ContrastTest {
 
     @Test fun lightSchemePairsMeetAA() { checkScheme("light", LightColorScheme) }
     @Test fun darkSchemePairsMeetAA() { checkScheme("dark", DarkColorScheme) }
-    @Test fun lightSemanticPairsMeetAA() { checkSemantic("light", NoteNfcLightSemanticColors) }
-    @Test fun darkSemanticPairsMeetAA() { checkSemantic("dark", NoteNfcDarkSemanticColors) }
+    @Test fun lightSemanticPairsMeetAA() { checkSemantic("light", ServiceTagLightSemanticColors) }
+    @Test fun darkSemanticPairsMeetAA() { checkSemantic("dark", ServiceTagDarkSemanticColors) }
     @Test fun darkMetadataRecedesFromBodyText() {
         // G1 correction h: onSurfaceVariant must be visibly darker than onSurface in dark mode
         assertTrue(luminance(DarkColorScheme.onSurfaceVariant) < luminance(DarkColorScheme.onSurface) * 0.75)
     }
     @Test fun okIsNotGreen() {
-        val ok = NoteNfcLightSemanticColors.maintenanceOkay.foreground
+        val ok = ServiceTagLightSemanticColors.maintenanceOkay.foreground
         assertTrue("OK foreground must be a cool blue, not green", ok.blue > ok.green && ok.green > ok.red)
     }
 }

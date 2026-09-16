@@ -9,7 +9,7 @@ import com.loosecannon.servicetag.R
  * The glyphs D12 §5/§8 asks for that `material-icons-core` does not ship. Screens name the icon,
  * never the drawable id; the tint stays the caller's decision.
  */
-object NoteNfcIcons {
+object ServiceTagIcons {
     val Contactless: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_contactless)
     val NfcTag: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_nfc_tag)
     val History: ImageVector @Composable get() = ImageVector.vectorResource(R.drawable.ic_history)

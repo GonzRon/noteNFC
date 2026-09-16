@@ -57,7 +57,7 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * One reading of an asset, new ([definitionId] null) or edited (spec §9). Outlined fields on the
@@ -372,7 +372,7 @@ private fun Problem(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
-        color = NoteNfcTheme.semanticColors.due.foreground,
+        color = ServiceTagTheme.semanticColors.due.foreground,
     )
 }
 

@@ -53,7 +53,7 @@ import com.loosecannon.servicetag.core.model.ValueType
 import com.loosecannon.servicetag.core.usecase.DefinitionReferenced
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.LedgerList
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.components.StatusBadge
@@ -61,7 +61,7 @@ import com.loosecannon.servicetag.ui.journal.formatTarget
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * What one asset measures and what can be logged against it (spec §9): two hairline-ruled lists
@@ -242,7 +242,7 @@ private fun DefinitionRow(
             ) {
                 if (definition.kind == DefinitionKind.DERIVED) {
                     Icon(
-                        imageVector = NoteNfcIcons.Equal,
+                        imageVector = ServiceTagIcons.Equal,
                         contentDescription = "Derived",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),
@@ -255,7 +255,7 @@ private fun DefinitionRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (definition.archivedAt != null) {
-                    StatusBadge(label = "Archived", colors = NoteNfcTheme.semanticColors.seasonInactive)
+                    StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
                 }
             }
             definition.derived?.let { spec ->
@@ -310,7 +310,7 @@ private fun ProfileRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (profile.archivedAt != null) {
-                    StatusBadge(label = "Archived", colors = NoteNfcTheme.semanticColors.seasonInactive)
+                    StatusBadge(label = "Archived", colors = ServiceTagTheme.semanticColors.seasonInactive)
                 }
             }
             Text(
@@ -428,7 +428,7 @@ internal fun ConfirmDialog(title: String, body: String, onDismiss: () -> Unit, o
         text = { Text(body) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete", color = NoteNfcTheme.semanticColors.destructiveAction.foreground)
+                Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

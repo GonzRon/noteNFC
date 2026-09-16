@@ -32,11 +32,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * The asset list: one line per asset, active rows first and archived ones only when asked for
@@ -157,19 +157,19 @@ private fun AssetListRow(row: AssetRow, onClick: () -> Unit) {
         if (asset.isRetired) {
             StatusBadge(
                 label = RETIRED,
-                colors = NoteNfcTheme.semanticColors.paused,
-                icon = NoteNfcIcons.PauseCircle,
+                colors = ServiceTagTheme.semanticColors.paused,
+                icon = ServiceTagIcons.PauseCircle,
             )
         }
         if (row.outOfSeason) {
             StatusBadge(
                 label = OUT_OF_SEASON,
-                colors = NoteNfcTheme.semanticColors.seasonInactive,
-                icon = NoteNfcIcons.CalendarMonth,
+                colors = ServiceTagTheme.semanticColors.seasonInactive,
+                icon = ServiceTagIcons.CalendarMonth,
             )
         }
         statusLabel(asset.status)?.let { label ->
-            StatusBadge(label = label, colors = NoteNfcTheme.semanticColors.seasonInactive)
+            StatusBadge(label = label, colors = ServiceTagTheme.semanticColors.seasonInactive)
         }
     }
 }

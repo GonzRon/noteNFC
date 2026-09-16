@@ -22,7 +22,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.loosecannon.servicetag.MainActivity
-import com.loosecannon.servicetag.NoteNfcApp
+import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.ShareActivity
 import com.loosecannon.servicetag.ui.backup.BackupSetSink
 import com.loosecannon.servicetag.ui.backup.BackupViewModel
@@ -40,7 +40,7 @@ private const val TIMEOUT_MS = 10_000L
 /** The `SharedPreferences` file `SharedPrefsStore` owns; cleared before every test. */
 private const val PREFS_NAME = "notenfc"
 
-internal val app: NoteNfcApp get() = ApplicationProvider.getApplicationContext()
+internal val app: ServiceTagApp get() = ApplicationProvider.getApplicationContext()
 
 /**
  * Puts the install back to "nothing has happened yet": no preferences, no rows.
@@ -280,7 +280,7 @@ class DeepLinkSmokeTest {
 
         ActivityScenario.launch<MainActivity>(intent).use {
             rule.awaitText("That link doesn't point at anything here.")
-            rule.onNode(hasText("noteNFC") and hasNoClickAction()).assertIsDisplayed()
+            rule.onNode(hasText("ServiceTag") and hasNoClickAction()).assertIsDisplayed()
         }
     }
 }

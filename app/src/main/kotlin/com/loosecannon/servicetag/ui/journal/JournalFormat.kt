@@ -14,8 +14,8 @@ import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.model.Measurement
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ValueType
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
-import com.loosecannon.servicetag.ui.theme.NoteNfcSemanticColors
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
+import com.loosecannon.servicetag.ui.theme.ServiceTagSemanticColors
 import com.loosecannon.servicetag.ui.theme.StatusColor
 import java.util.Locale
 
@@ -79,7 +79,7 @@ fun stateLabel(state: RangeState): String = when (state) {
     RangeState.NO_TARGET -> "NO TARGET SET"
 }
 
-fun stateColors(state: RangeState, colors: NoteNfcSemanticColors): StatusColor = when (state) {
+fun stateColors(state: RangeState, colors: ServiceTagSemanticColors): StatusColor = when (state) {
     RangeState.LOW -> colors.measurementLow
     RangeState.IN_RANGE -> colors.measurementInRange
     RangeState.HIGH -> colors.measurementHigh
@@ -88,13 +88,13 @@ fun stateColors(state: RangeState, colors: NoteNfcSemanticColors): StatusColor =
 
 /**
  * Colour is never the only carrier (D12 §5): every state has a word and a glyph too. Composable
- * because [NoteNfcIcons] resolves its vectors out of resources.
+ * because [ServiceTagIcons] resolves its vectors out of resources.
  */
 @Composable
 fun stateIcon(state: RangeState): ImageVector = when (state) {
-    RangeState.LOW -> NoteNfcIcons.ArrowDownward
+    RangeState.LOW -> ServiceTagIcons.ArrowDownward
     RangeState.IN_RANGE -> Icons.Outlined.Check
-    RangeState.HIGH -> NoteNfcIcons.ArrowUpward
+    RangeState.HIGH -> ServiceTagIcons.ArrowUpward
     RangeState.NO_TARGET -> Icons.Outlined.Info
 }
 

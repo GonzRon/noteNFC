@@ -7,8 +7,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import com.loosecannon.servicetag.ui.theme.NoteNfcLightSemanticColors
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagLightSemanticColors
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import org.junit.Rule
 import org.junit.Test
 
@@ -19,7 +19,7 @@ class ComponentsSmokeTest {
 
     @Test fun identityPlateShowsDashForBlankValues() {
         rule.setContent {
-            NoteNfcTheme {
+            ServiceTagTheme {
                 IdentityPlate(
                     category = "Battery / power",
                     model = "Rack UPS",
@@ -38,8 +38,8 @@ class ComponentsSmokeTest {
 
     @Test fun statusBadgeExposesItsLabelToAccessibility() {
         rule.setContent {
-            NoteNfcTheme {
-                StatusBadge(label = "Overdue", colors = NoteNfcLightSemanticColors.overdue, icon = Icons.Outlined.Warning)
+            ServiceTagTheme {
+                StatusBadge(label = "Overdue", colors = ServiceTagLightSemanticColors.overdue, icon = Icons.Outlined.Warning)
             }
         }
         rule.onNodeWithContentDescription("Overdue").assertExists()
@@ -47,7 +47,7 @@ class ComponentsSmokeTest {
 
     @Test fun ledgerEntryShowsItsDateAndTitle() {
         rule.setContent {
-            NoteNfcTheme {
+            ServiceTagTheme {
                 LedgerEntry(
                     day = "10",
                     month = "Jun",
@@ -64,7 +64,7 @@ class ComponentsSmokeTest {
 
     @Test fun sectionHeaderShowsItsTitle() {
         rule.setContent {
-            NoteNfcTheme { SectionHeader(title = "Service record") }
+            ServiceTagTheme { SectionHeader(title = "Service record") }
         }
         rule.onNodeWithText("Service record", ignoreCase = true, useUnmergedTree = true).assertIsDisplayed()
     }

@@ -49,7 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.journal.CategorySuggestions
 import com.loosecannon.servicetag.core.journal.SeedTemplates
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.BadgeShape
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -417,7 +417,7 @@ internal fun DateField(
         mono = true,
         trailingIcon = {
             IconButton(onClick = { picking = true }) {
-                Icon(NoteNfcIcons.CalendarMonth, contentDescription = "Pick $label")
+                Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick $label")
             }
         },
     )
@@ -450,7 +450,7 @@ private fun MonthDayField(
         modifier = modifier,
         trailingIcon = {
             IconButton(onClick = { picking = true }) {
-                Icon(NoteNfcIcons.CalendarMonth, contentDescription = "Pick $label")
+                Icon(ServiceTagIcons.CalendarMonth, contentDescription = "Pick $label")
             }
         },
     )

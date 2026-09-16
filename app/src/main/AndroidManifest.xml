@@ -33,7 +33,7 @@
     </queries>
 
     <application
-        android:name="com.loosecannon.servicetag.NoteNfcApp"
+        android:name="com.loosecannon.servicetag.ServiceTagApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
 
@@ -43,7 +43,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.NoteNfc">
+            android:theme="@style/Theme.ServiceTag">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -65,7 +65,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.NoteNfc">
+            android:theme="@style/Theme.ServiceTag">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

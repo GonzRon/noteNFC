@@ -7,7 +7,7 @@ import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.widget.Toast
 import com.loosecannon.servicetag.MainActivity
-import com.loosecannon.servicetag.NoteNfcApp
+import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.nfc.TagRoute
@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 class NfcDispatchActivity : Activity() {
 
     private val scope = MainScope()
-    private val graph: AppGraph get() = (application as NoteNfcApp).graph
+    private val graph: AppGraph get() = (application as ServiceTagApp).graph
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

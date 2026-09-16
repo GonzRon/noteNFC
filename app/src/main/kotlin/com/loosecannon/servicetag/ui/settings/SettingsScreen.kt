@@ -54,14 +54,14 @@ import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.prefs.AppearanceMode
 import com.loosecannon.servicetag.ui.components.LabelValue
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import kotlinx.coroutines.launch
 
 /** Where the app's source lives. The only outbound link the app ships with. */
-private const val PROJECT_URL = "https://github.com/GonzRon/noteNFC"
+private const val PROJECT_URL = "https://github.com/GonzRon/ServiceTag"
 
 /**
  * The few device-local preferences: appearance first.
@@ -230,7 +230,7 @@ fun SettingsScreen(
 
             SectionHeader(title = "Utilities")
             UtilityRow(
-                icon = NoteNfcIcons.Contactless,
+                icon = ServiceTagIcons.Contactless,
                 label = "Read / inspect tag",
                 onClick = onReadTag,
             )

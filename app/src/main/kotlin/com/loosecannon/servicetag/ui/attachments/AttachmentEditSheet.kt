@@ -28,7 +28,7 @@ import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.ui.asset.DateField
 import com.loosecannon.servicetag.ui.components.SectionHeader
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * Rename, re-kind, captured-on, notes, and Delete, in a [ModalBottomSheet] (spec §8.1). Delete is
@@ -92,7 +92,7 @@ fun AttachmentEditSheet(
                 TextButton(onClick = { confirming = true }) {
                     Text(
                         text = "Delete",
-                        color = NoteNfcTheme.semanticColors.destructiveAction.foreground,
+                        color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -128,7 +128,7 @@ fun AttachmentEditSheet(
                 TextButton(onClick = { confirming = false; onDelete() }) {
                     Text(
                         text = "Delete",
-                        color = NoteNfcTheme.semanticColors.destructiveAction.foreground,
+                        color = ServiceTagTheme.semanticColors.destructiveAction.foreground,
                     )
                 }
             },

@@ -46,13 +46,13 @@ import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.links.host
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.MonoText
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.theme.SheetShape
 import com.loosecannon.servicetag.ui.theme.SheetSentence
 
@@ -104,8 +104,8 @@ fun TagResultSheet(
                 LaunchedEffect(result) { onOpenAsset(result.asset.id.value) }
                 NfcSheet(
                     eyebrow = "Tag detected",
-                    accent = NoteNfcTheme.semanticColors.maintenanceOkay.foreground,
-                    glyph = NoteNfcIcons.NfcTag,
+                    accent = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
+                    glyph = ServiceTagIcons.NfcTag,
                     sentence = result.asset.name,
                     identifier = result.tag.identityLine(),
                 ) {
@@ -123,8 +123,8 @@ fun TagResultSheet(
 
             is TagResult.Unregistered -> NfcSheet(
                 eyebrow = "Unregistered tag",
-                accent = NoteNfcTheme.semanticColors.dueSoon.foreground,
-                border = NoteNfcTheme.semanticColors.dueSoon.foreground,
+                accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
+                border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
                 sentence = "This tag is not assigned to anything yet.",
                 identifier = result.tag.identityLine(),
@@ -137,8 +137,8 @@ fun TagResultSheet(
 
             is TagResult.Revoked -> NfcSheet(
                 eyebrow = if (result.tag.status == TagStatus.LOST) "Tag marked lost" else "Tag retired",
-                accent = NoteNfcTheme.semanticColors.dueSoon.foreground,
-                border = NoteNfcTheme.semanticColors.dueSoon.foreground,
+                accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
+                border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
                 sentence = "This tag was taken out of service. Binding it again puts it back to work.",
                 identifier = result.tag.identityLine(),
@@ -151,10 +151,10 @@ fun TagResultSheet(
 
             is TagResult.NotInRecords -> NfcSheet(
                 eyebrow = "Unregistered tag",
-                accent = NoteNfcTheme.semanticColors.dueSoon.foreground,
-                border = NoteNfcTheme.semanticColors.dueSoon.foreground,
+                accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
+                border = ServiceTagTheme.semanticColors.dueSoon.foreground,
                 glyph = Icons.Outlined.Info,
-                sentence = "This noteNFC tag is not in this phone's records.",
+                sentence = "This ServiceTag tag is not in this phone's records.",
                 identifier = identityLine(result.tagId),
                 problem = problem,
                 actions = {
@@ -165,7 +165,7 @@ fun TagResultSheet(
             )
 
             is TagResult.NotOurs -> NfcSheet(
-                eyebrow = "Not a noteNFC tag",
+                eyebrow = "Not a ServiceTag tag",
                 accent = MaterialTheme.colorScheme.onSurfaceVariant,
                 glyph = Icons.Outlined.Info,
                 sentence = "This tag holds something else.",

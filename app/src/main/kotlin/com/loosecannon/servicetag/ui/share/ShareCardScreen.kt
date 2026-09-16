@@ -34,7 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Everything "share a note link to noteNFC" can be (D12 §9). One state at a time, no dialogs. */
+/** Everything "share a note link to ServiceTag" can be (D12 §9). One state at a time, no dialogs. */
 sealed interface ShareState {
     /** The shared text held no `scheme://…` token, or the policy will not launch the one it held. */
     data class Nothing(val message: String) : ShareState
@@ -77,7 +77,7 @@ class ShareViewModel(
         return when (val check = LinkLaunchPolicy.check(found)) {
             is LinkCheck.Accepted -> ShareState.Card(check.uri, check.kind.label(), label)
             is LinkCheck.NeedsConfirmation -> ShareState.NeedsConfirmation(check.scheme, check.uri)
-            is LinkCheck.Rejected -> ShareState.Nothing("noteNFC won't save that link: ${check.reason}.")
+            is LinkCheck.Rejected -> ShareState.Nothing("ServiceTag won't save that link: ${check.reason}.")
         }
     }
 
@@ -166,8 +166,8 @@ fun ShareConfirmation(
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(text = "noteNFC has not seen '${state.scheme}' before.", style = SheetSentence)
-        QuietLine("Saving it means noteNFC may hand this URI to whichever app claims that scheme.")
+        Text(text = "ServiceTag has not seen '${state.scheme}' before.", style = SheetSentence)
+        QuietLine("Saving it means ServiceTag may hand this URI to whichever app claims that scheme.")
         Text(text = state.uri, style = MonoText, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = onConfirm, shape = ControlShape, modifier = Modifier.fillMaxWidth()) {
             Text("Save it anyway")

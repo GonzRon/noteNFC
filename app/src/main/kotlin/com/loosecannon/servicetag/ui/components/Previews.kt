@@ -20,8 +20,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.core.journal.RangeState
-import com.loosecannon.servicetag.ui.theme.NoteNfcSemanticColors
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagSemanticColors
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.theme.StatusColor
 
 private const val UI_MODE_NIGHT = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL
@@ -40,7 +40,7 @@ private val rackUpsCells = listOf(
 
 @Composable
 private fun PreviewFrame(content: @Composable () -> Unit) {
-    NoteNfcTheme {
+    ServiceTagTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
         }
@@ -49,7 +49,7 @@ private fun PreviewFrame(content: @Composable () -> Unit) {
 
 @LightDarkPreview
 @Composable
-private fun NoteNfcThemePreview() {
+private fun ServiceTagThemePreview() {
     PreviewFrame {
         Text("Apollo Service Binder", style = MaterialTheme.typography.titleMedium)
     }
@@ -64,11 +64,11 @@ private fun IdentityPlatePreview() {
             model = "CyberPower OR2200LCDRT2U",
             name = "Server Rack",
             cells = rackUpsCells,
-            icon = NoteNfcIcons.NfcTag,
+            icon = ServiceTagIcons.NfcTag,
             modifier = Modifier.fillMaxWidth(),
         )
         StatusBlock(
-            kind = NoteNfcTheme.semanticColors.overdue,
+            kind = ServiceTagTheme.semanticColors.overdue,
             headline = "Overdue",
             title = "Load test",
             detail = "12 days overdue · originally due 2 Sep 2026",
@@ -79,31 +79,31 @@ private fun IdentityPlatePreview() {
     }
 }
 
-private data class BadgeSample(val label: String, val pick: (NoteNfcSemanticColors) -> StatusColor, val icon: ImageVector?)
+private data class BadgeSample(val label: String, val pick: (ServiceTagSemanticColors) -> StatusColor, val icon: ImageVector?)
 
 @Composable
 private fun badgeSamples(): List<BadgeSample> = listOf(
     BadgeSample("OK", { it.maintenanceOkay }, Icons.Outlined.CheckCircle),
-    BadgeSample("Due soon", { it.dueSoon }, NoteNfcIcons.Schedule),
-    BadgeSample("Due", { it.due }, NoteNfcIcons.Event),
+    BadgeSample("Due soon", { it.dueSoon }, ServiceTagIcons.Schedule),
+    BadgeSample("Due", { it.due }, ServiceTagIcons.Event),
     BadgeSample("Overdue", { it.overdue }, Icons.Outlined.Warning),
-    BadgeSample("Out of season", { it.seasonInactive }, NoteNfcIcons.CalendarMonth),
-    BadgeSample("Paused", { it.paused }, NoteNfcIcons.PauseCircle),
-    BadgeSample("Low", { it.measurementLow }, NoteNfcIcons.ArrowDownward),
+    BadgeSample("Out of season", { it.seasonInactive }, ServiceTagIcons.CalendarMonth),
+    BadgeSample("Paused", { it.paused }, ServiceTagIcons.PauseCircle),
+    BadgeSample("Low", { it.measurementLow }, ServiceTagIcons.ArrowDownward),
     BadgeSample("In range", { it.measurementInRange }, Icons.Outlined.Check),
-    BadgeSample("High", { it.measurementHigh }, NoteNfcIcons.ArrowUpward),
+    BadgeSample("High", { it.measurementHigh }, ServiceTagIcons.ArrowUpward),
     BadgeSample("No target set", { it.measurementNoTarget }, null),
-    BadgeSample("Active", { it.reminderHealthy }, NoteNfcIcons.NotificationsActive),
-    BadgeSample("Reminder failed", { it.reminderFailure }, NoteNfcIcons.NotificationsOff),
-    BadgeSample("Sync issue", { it.syncProblem }, NoteNfcIcons.CloudOff),
-    BadgeSample("Delete", { it.destructiveAction }, NoteNfcIcons.DeleteForever),
+    BadgeSample("Active", { it.reminderHealthy }, ServiceTagIcons.NotificationsActive),
+    BadgeSample("Reminder failed", { it.reminderFailure }, ServiceTagIcons.NotificationsOff),
+    BadgeSample("Sync issue", { it.syncProblem }, ServiceTagIcons.CloudOff),
+    BadgeSample("Delete", { it.destructiveAction }, ServiceTagIcons.DeleteForever),
 )
 
 @LightDarkPreview
 @Composable
 private fun StatusBadgeRowPreview() {
     PreviewFrame {
-        val semantic = NoteNfcTheme.semanticColors
+        val semantic = ServiceTagTheme.semanticColors
         SectionHeader(title = "Operational states")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             badgeSamples().forEach { sample ->
@@ -132,7 +132,7 @@ private fun LedgerPreview() {
                 title = body.first,
                 detail = body.second,
                 badge = if (index == 1) {
-                    { StatusBadge(label = "Pass", colors = NoteNfcTheme.semanticColors.measurementInRange, icon = Icons.Outlined.Check) }
+                    { StatusBadge(label = "Pass", colors = ServiceTagTheme.semanticColors.measurementInRange, icon = Icons.Outlined.Check) }
                 } else {
                     null
                 },
@@ -150,9 +150,9 @@ private fun ActionGridPreview() {
         ActionGrid(
             actions = listOf(
                 ActionSpec("Log maintenance", Icons.Outlined.Build, outlined = true, onClick = {}),
-                ActionSpec("Record reading", NoteNfcIcons.Speed, outlined = true, onClick = {}),
-                ActionSpec("History", NoteNfcIcons.History, outlined = false, onClick = {}),
-                ActionSpec("Documents", NoteNfcIcons.Description, outlined = false, onClick = {}),
+                ActionSpec("Record reading", ServiceTagIcons.Speed, outlined = true, onClick = {}),
+                ActionSpec("History", ServiceTagIcons.History, outlined = false, onClick = {}),
+                ActionSpec("Documents", ServiceTagIcons.Description, outlined = false, onClick = {}),
             ),
             modifier = Modifier.fillMaxWidth(),
         )

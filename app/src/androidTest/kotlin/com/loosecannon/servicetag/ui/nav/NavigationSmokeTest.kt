@@ -27,7 +27,7 @@ class NavigationSmokeTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
     @Test fun dashboardIsTheStartDestination() {
-        rule.onNode(hasText("noteNFC") and hasNoClickAction()).assertIsDisplayed()
+        rule.onNode(hasText("ServiceTag") and hasNoClickAction()).assertIsDisplayed()
     }
 
     @Test fun bottomBarHasTwoItems() {

@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 
 /** Operational meaning lives here, never in Material roles and never in raw colours at call sites (D12 §5, §15). */
 @Immutable
-data class NoteNfcSemanticColors(
+data class ServiceTagSemanticColors(
     val maintenanceOkay: StatusColor, val dueSoon: StatusColor, val due: StatusColor, val overdue: StatusColor,
     val seasonInactive: StatusColor, val paused: StatusColor,
     val measurementLow: StatusColor, val measurementInRange: StatusColor, val measurementHigh: StatusColor,
@@ -17,7 +17,7 @@ data class NoteNfcSemanticColors(
     val syncProblem: StatusColor, val destructiveAction: StatusColor,
 )
 
-val NoteNfcLightSemanticColors = NoteNfcSemanticColors(
+val ServiceTagLightSemanticColors = ServiceTagSemanticColors(
     maintenanceOkay = StatusColor(Color(0xFF245B78), Color(0xFFDCEBF3)),
     dueSoon = StatusColor(Color(0xFF7A4B0A), Color(0xFFF6E5C3)),
     // G1 correction b; container nudged 0xF3C89A -> 0xF3CA9D (4% toward WarmIvory) to clear 4.5:1 (4.49 -> 4.56)
@@ -35,7 +35,7 @@ val NoteNfcLightSemanticColors = NoteNfcSemanticColors(
     destructiveAction = StatusColor(Color(0xFFA43D36), Color(0xFFF8DAD6)),
 )
 
-val NoteNfcDarkSemanticColors = NoteNfcSemanticColors(
+val ServiceTagDarkSemanticColors = ServiceTagSemanticColors(
     maintenanceOkay = StatusColor(Color(0xFF91BED6), Color(0xFF17384B)),
     dueSoon = StatusColor(Color(0xFFE4B45F), Color(0xFF4A320D)),
     due = StatusColor(Color(0xFFF0A15D), Color(0xFF573015)),
@@ -52,4 +52,4 @@ val NoteNfcDarkSemanticColors = NoteNfcSemanticColors(
     destructiveAction = StatusColor(Color(0xFFF2B8B5), Color(0xFF4E1C1A)),
 )
 
-val LocalNoteNfcSemanticColors = staticCompositionLocalOf { NoteNfcLightSemanticColors }
+val LocalServiceTagSemanticColors = staticCompositionLocalOf { ServiceTagLightSemanticColors }

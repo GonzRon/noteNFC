@@ -8,7 +8,7 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.documentfile.provider.DocumentFile
-import com.loosecannon.servicetag.NoteNfcApp
+import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.R
 import com.loosecannon.servicetag.backup.SafBackupIO
 import com.loosecannon.servicetag.backup.SafBackupSetWriter
@@ -41,7 +41,7 @@ class DebugBackupActivity : Activity() {
     private lateinit var counts: TextView
 
     private val graph: AppGraph
-        get() = (application as NoteNfcApp).graph
+        get() = (application as ServiceTagApp).graph
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

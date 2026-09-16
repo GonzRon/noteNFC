@@ -52,7 +52,7 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -290,7 +290,7 @@ private fun DeleteDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         text = { Text("Its readings go with it.") },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete", color = NoteNfcTheme.semanticColors.destructiveAction.foreground)
+                Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

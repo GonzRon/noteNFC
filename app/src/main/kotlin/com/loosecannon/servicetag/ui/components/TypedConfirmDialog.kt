@@ -16,7 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.loosecannon.servicetag.ui.theme.ControlShape
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * A destructive confirmation that will not fire on a stray tap: the confirm button stays
@@ -54,7 +54,7 @@ fun TypedConfirmDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm, enabled = typed == expected) {
-                Text(confirmLabel, color = NoteNfcTheme.semanticColors.destructiveAction.foreground)
+                Text(confirmLabel, color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

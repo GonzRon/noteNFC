@@ -11,9 +11,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.platform.LocalContext
 
-object NoteNfcTheme {
-    val semanticColors: NoteNfcSemanticColors
-        @Composable @ReadOnlyComposable get() = LocalNoteNfcSemanticColors.current
+object ServiceTagTheme {
+    val semanticColors: ServiceTagSemanticColors
+        @Composable @ReadOnlyComposable get() = LocalServiceTagSemanticColors.current
 }
 
 /**
@@ -23,20 +23,20 @@ object NoteNfcTheme {
  * rule is enforced from the first screen.
  */
 @Composable
-fun NoteNfcTheme(
+fun ServiceTagTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val materialColors = resolveNoteNfcColorScheme(darkTheme, dynamicColor)
-    val semanticColors = if (darkTheme) NoteNfcDarkSemanticColors else NoteNfcLightSemanticColors
-    CompositionLocalProvider(LocalNoteNfcSemanticColors provides semanticColors) {
-        MaterialTheme(colorScheme = materialColors, typography = NoteNfcTypography, shapes = NoteNfcShapes, content = content)
+    val materialColors = resolveServiceTagColorScheme(darkTheme, dynamicColor)
+    val semanticColors = if (darkTheme) ServiceTagDarkSemanticColors else ServiceTagLightSemanticColors
+    CompositionLocalProvider(LocalServiceTagSemanticColors provides semanticColors) {
+        MaterialTheme(colorScheme = materialColors, typography = ServiceTagTypography, shapes = ServiceTagShapes, content = content)
     }
 }
 
 @Composable
-private fun resolveNoteNfcColorScheme(darkTheme: Boolean, dynamicColor: Boolean): ColorScheme {
+private fun resolveServiceTagColorScheme(darkTheme: Boolean, dynamicColor: Boolean): ColorScheme {
     if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val context = LocalContext.current
         return if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

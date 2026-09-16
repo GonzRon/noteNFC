@@ -42,7 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.nfc.NfcReaderModeSession
-import com.loosecannon.servicetag.ui.components.NoteNfcIcons
+import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.theme.PlateShape
@@ -171,7 +171,7 @@ private fun Halo() {
             content = {},
         )
         Icon(
-            imageVector = NoteNfcIcons.Contactless,
+            imageVector = ServiceTagIcons.Contactless,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.size(64.dp),

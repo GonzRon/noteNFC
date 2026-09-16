@@ -303,7 +303,7 @@ class AssetModelDeviceProofTest {
      */
     @Test fun theBottomBarHasTwoTabsAndTheTagReaderLivesUnderSettings() {
         openApp().use {
-            rule.awaitText("noteNFC")
+            rule.awaitText("ServiceTag")
             rule.onAllNodes(hasClickAction() and (hasText("Dashboard") or hasText("Assets")))
                 .assertCountEquals(2)
             rule.onAllNodes(hasClickAction() and hasText("Scan")).assertCountEquals(0)

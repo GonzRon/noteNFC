@@ -35,7 +35,7 @@ import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.components.SectionHeader
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.theme.ControlShape
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * One saved link: where it points and what may launch it. Delete is a hard delete here — a link is
@@ -121,7 +121,7 @@ fun LinkDetailScreen(
                 onClick = { refusal = null; confirming = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Delete link", color = NoteNfcTheme.semanticColors.destructiveAction.foreground)
+                Text("Delete link", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
             }
         }
     }
@@ -130,10 +130,10 @@ fun LinkDetailScreen(
         AlertDialog(
             onDismissRequest = { confirming = false },
             title = { Text("Delete this link?") },
-            text = { Text("The link is removed from noteNFC. Whatever it points at is left alone.") },
+            text = { Text("The link is removed from ServiceTag. Whatever it points at is left alone.") },
             confirmButton = {
                 TextButton(onClick = { confirming = false; model.delete() }) {
-                    Text("Delete", color = NoteNfcTheme.semanticColors.destructiveAction.foreground)
+                    Text("Delete", color = ServiceTagTheme.semanticColors.destructiveAction.foreground)
                 }
             },
             dismissButton = { TextButton(onClick = { confirming = false }) { Text("Keep it") } },

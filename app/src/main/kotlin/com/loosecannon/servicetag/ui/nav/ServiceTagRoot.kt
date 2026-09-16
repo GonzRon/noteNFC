@@ -39,7 +39,7 @@ import kotlinx.coroutines.flow.SharedFlow
  * navigation lives here, so no screen ever has to know what an `Intent` is.
  */
 @Composable
-fun NoteNfcApp(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedFlow<String>) {
+fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedFlow<String>) {
     val backStack = rememberNavBackStack(Route.Dashboard)
     val snackbarHost = remember { SnackbarHostState() }
 

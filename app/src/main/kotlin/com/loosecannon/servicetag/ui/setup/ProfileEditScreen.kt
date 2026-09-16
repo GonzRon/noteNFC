@@ -62,7 +62,7 @@ import com.loosecannon.servicetag.ui.components.StatusBadge
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.Eyebrow
 import com.loosecannon.servicetag.ui.theme.MonoText
-import com.loosecannon.servicetag.ui.theme.NoteNfcTheme
+import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 
 /**
  * One quick action of an asset, new ([profileId] null) or edited (spec §9). The name, the kind of
@@ -331,7 +331,7 @@ private fun FieldRow(
                 if (pick.definition.archivedAt != null) {
                     StatusBadge(
                         label = "Archived",
-                        colors = NoteNfcTheme.semanticColors.seasonInactive,
+                        colors = ServiceTagTheme.semanticColors.seasonInactive,
                     )
                 }
             }
@@ -505,7 +505,7 @@ private fun Problem(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
-        color = NoteNfcTheme.semanticColors.due.foreground,
+        color = ServiceTagTheme.semanticColors.due.foreground,
     )
 }
 

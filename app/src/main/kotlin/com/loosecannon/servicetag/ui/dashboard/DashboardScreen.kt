@@ -76,7 +76,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("noteNFC") },
+                title = { Text("ServiceTag") },
                 actions = {
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Outlined.Settings, contentDescription = "Settings")

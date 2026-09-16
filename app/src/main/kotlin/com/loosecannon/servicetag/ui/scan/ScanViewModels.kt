@@ -52,16 +52,16 @@ internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
     is Resolution.Revoked -> Route.TagResult(tag.payloadFormat.name, tag.payloadKey)
     is Resolution.UnknownV1 -> Route.TagResult(PayloadFormat.V1.name, tagId.value)
     is Resolution.NeedsNewerApp ->
-        Route.TagResult(FORMAT_NONE, "written by a newer noteNFC (payload format $version)")
+        Route.TagResult(FORMAT_NONE, "written by a newer ServiceTag (payload format $version)")
     is Resolution.NotOurs -> Route.TagResult(FORMAT_NONE, describe(payload))
     is Resolution.LaunchLink -> error("a link tag launches its note; it has no sheet (R-7)")
 }
 
 private fun describe(p: TagPayload): String = when (p) {
     TagPayload.Empty -> "empty tag"
-    is TagPayload.Foreign -> "not a noteNFC tag: ${p.description}"
-    is TagPayload.Malformed -> "unreadable noteNFC record: ${p.reason}"
-    else -> "not a noteNFC tag"
+    is TagPayload.Foreign -> "not a ServiceTag tag: ${p.description}"
+    is TagPayload.Malformed -> "unreadable ServiceTag record: ${p.reason}"
+    else -> "not a ServiceTag tag"
 }
 
 /** The scanner is either waiting, reading a tag it has just felt, or explaining a read that failed. */
@@ -211,7 +211,7 @@ class TagResultViewModel(
             is Resolution.Revoked -> TagResult.Revoked(resolution.tag)
             is Resolution.UnknownV1 -> TagResult.NotInRecords(resolution.tagId.value)
             is Resolution.NeedsNewerApp ->
-                TagResult.NotOurs("written by a newer noteNFC (payload format ${resolution.version})")
+                TagResult.NotOurs("written by a newer ServiceTag (payload format ${resolution.version})")
             is Resolution.NotOurs -> TagResult.NotOurs(describe(resolution.payload))
             null -> TagResult.NotOurs("this tag could not be resolved")
         }
