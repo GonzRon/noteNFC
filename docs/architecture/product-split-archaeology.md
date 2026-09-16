@@ -20,7 +20,7 @@ The repository currently carries **three products in one tree**. The split exist
 | Product | One sentence |
 |---|---|
 | **noteNFC** | The narrow share→write→tap utility: receive a shared note link, write an identifier to an NFC tag, and on a later tap open that note or web page — nothing else. |
-| **ServiceTag** | The physical-asset service/maintenance product that grew out of noteNFC between 2026-09-14 and 2026-09-16 (Phases 0 → 4A): assets, journal, measurement definitions and profiles, schedules, attachments, backup/restore. |
+| **ServiceTag** | The physical-asset service/maintenance product that grew out of noteNFC between 2026-09-14 and 2026-09-16 (Phases 0 → 4A): assets, journal, measurement definitions and profiles, attachments, backup/restore — plus schedules and reminders, which are designed but **not yet implemented** (Phase 3, future). |
 | **nfc-tag-core** | The shared, product-neutral NFC mechanism both products need: NDEF envelope codec, reader-mode session, safe writer (read-before-write / capacity / read-back / lock-last), and the Android↔bytes bridge — with identity supplied as a parameter. |
 
 **Conventions used throughout.** Evidence is cited as a repo-relative path, a commit SHA, or a
@@ -55,8 +55,8 @@ Master's history was rewritten with `git filter-repo` on 2026-09-14; every SHA b
 
 | Era | Commits | Span | Package / identity | What the product was |
 |---|---|---|---|---|
-| **E0 — Evernote prototype** | `5fb6aed` … `2f75edc` (7) | 2023-08-05 → 2023-08-07 | `com.looseCannon.evernotenfc` | Share an Evernote note → write a random UUID-8 key to a tag as external record `com.loosecannon.evernotenfc:uuid8_link`; tap → look the key up in `SharedPreferences("EvernoteURLs")` → `ACTION_VIEW` the `evernote://` URL. A `GetUIDActivity` harvested Evernote user/shard ids. |
-| **E1 — Evernote, MD5 keying** | `d88b84d` … `88e400a` (5, incl. `f03d833` "renaming project") | 2023-08-07 → 2023-08-09 | renamed to `com.looseCannon.noteNFC` at `f03d833` | `d88b84d` replaces the random UUID with MD5-of-link, first 8 lowercase hex ("to avoid duplicate UUID's pointing to the same evernote link"); record type becomes `md5_short`. `f2c32aa` fixes the stale-GUID-in-mutable-`PendingIntent` defect. |
+| **E0 — Evernote prototype** | `5fb6aed` … `0652023` (5) | 2023-08-05 → 2023-08-07 | `com.looseCannon.evernotenfc` | Share an Evernote note → write a random UUID-8 key to a tag as external record `com.loosecannon.evernotenfc:uuid8_link`; tap → look the key up in `SharedPreferences("EvernoteURLs")` → `ACTION_VIEW` the `evernote://` URL. |
+| **E1 — Evernote, MD5 keying** | `d88b84d` … `88e400a` (7, incl. `f03d833` "renaming project") | 2023-08-07 → 2023-08-09 | renamed to `com.looseCannon.noteNFC` at `f03d833` | `d88b84d` replaces the random UUID with MD5-of-link, first 8 lowercase hex ("to avoid duplicate UUID's pointing to the same evernote link"); record type becomes `md5_short`. `f2c32aa` adds a `GetUIDActivity` that harvested Evernote user/shard ids, and fixes the stale-GUID-in-mutable-`PendingIntent` defect (re-verified: `GetUIDActivity` first appears in `f2c32aa`, dated 2023-08-08, inside E1 — not E0 as an earlier draft of this table had it). |
 | **E2 — the narrow noteNFC product (Joplin)** | `abaa193`, `ef83179`, `3a3c69a` (3) | 2024-10-27 | `com.looseCannon.noteNFC` | `abaa193` "Removed Evernote NFC Note Linking support / Added Joplin Note Linking Support": deletes `GetUIDActivity`, swaps the link gate to "shared text contains `joplin`", adds the `nfc_tech_filter.xml` TECH catch-all. **This is the product being reconstructed.** `ef83179`/`3a3c69a` are README-only. |
 | **E3 — Phase 0: modernise in place, behaviour frozen** | `7291615` … `c84b881` (15) | 2026-09-14 | still `com.looseCannon.noteNFC` | The redesign *programme* starts (`7291615` lands the design package) but for 15 commits `app/src/main` still expresses only the narrow product. The work is toolchain + hygiene + extraction: buildable-from-clone (`47fbe6f`), `:core` JVM module holding the legacy key/codec/link-policy pinned by tests (`76b751a`), activities routed through `:core` with no behaviour change (`52a1ff5`), GitHub Actions CI (`d5dcb6c`), green at `c84b881`. |
 | **E4 — ServiceTag redesign proper** | `63635be` … `ac523d7` (145) | 2026-09-14 → 2026-09-16 | **`com.loosecannon.notenfc`**, v2.0 → 2.4 | `63635be` renames the package and adds Room 3 / KSP / serialization. `970c739` is the first commit where an asset/maintenance concept enters *source* (Room schema v1: `asset`, `nfc_tag`, `external_link`). Then backup format, tag payload v1, reader-mode writer, Compose/Nav3 shell, journal, editors, asset model, attachments. `26ec9d0` deletes the 2024 legacy activities and the TECH catch-all. |
@@ -83,7 +83,7 @@ Three boundaries were defensible; all three are on the first-parent line with a 
 | Position | last commit before the redesign programme began | 7th commit of Phase 0 | 15th and last commit of Phase 0; its child renames the package |
 | Ancestry size | 15 | 22 | **30** (re-verified: `git rev-list --count c84b881` = 30) |
 | `applicationId` / `namespace` | `com.looseCannon.noteNFC` | same | same **[code]** |
-| Activities in manifest | `MainActivity` (LAUNCHER + `ACTION_SEND text/plain`), `NFCHandlerActivity` (no filter, exported by omission), `LaunchNoteNFCLinkActivity` (`NDEF_DISCOVERED` ext filter + `TECH_DISCOVERED` catch-all) | same, plus `exported="false"` on the handler and the legacy `package=` attribute removed | same as B |
+| Activities in manifest | `MainActivity` (LAUNCHER + `ACTION_SEND text/plain`), `NFCHandlerActivity` (**no filter, not exported** — with no intent filter the platform default is `exported=false`; re-verified in the source at `3a3c69a`, which declares neither a filter nor `android:exported` on it), `LaunchNoteNFCLinkActivity` (`NDEF_DISCOVERED` ext filter + `TECH_DISCOVERED` catch-all) | same, plus `47fbe6f` makes the already-true default explicit with `exported="false"` on the handler, and the legacy `package=` attribute removed | same as B |
 | NFC intent filters | `vnd.android.nfc://ext/com.loosecannon.notenfc:md5_short` + TECH catch-all (`NfcA`, `Ndef`) | same | same |
 | Persistence | `SharedPreferences("noteNFCURLs")`, key → link | same | same **[code]** |
 | MD5 key derivation | inline in `mainActivity.getShortHash` | `core…nfc.LegacyKey.compute` | same as B |
@@ -93,7 +93,7 @@ Three boundaries were defensible; all three are on the first-parent line with a 
 | Toolchain | AGP 8.7.1, Kotlin 1.8.0, compileSdk 34 / target 33 / min 26, jvmTarget 1.8 | AGP 9.4.0, Kotlin 2.4.20, compileSdk 37 / target 36 / min 26, JDK 17, version catalog, foojay resolver | same as B **[code]** |
 | Tests | **none** | 3 JUnit 5 classes in `:core` | same, with `assert()` → `assertTrue` fixup (`0f5f6ad`) |
 | CI | none | none | `.github/workflows/ci.yml`, **verified green** |
-| Tracked build artefacts | debug **and** release APK (5 790 476 B + 4 740 933 B, re-verified) | release APK only | release APK only (4 740 933 B) |
+| Tracked build artefacts | debug **and** release APK (5 790 476 B + 4 740 933 B, re-verified) | release APK only | release APK only (4 740 933 B) — **the same git blob as at `3a3c69a`** (re-verified: identical blob hash), i.e. the 2024 shipped artifact carried forward unchanged |
 | versionCode / versionName | 1 / 1.0 | 2 / 1.1 | 2 / 1.1 **[code]** |
 
 **Why not A.** The tree is not a coherent buildable project: `settings.gradle.kts` and
@@ -168,6 +168,14 @@ Those documents describe the other product. Deleting them going forward does not
 history; if the reconstructed repository is public and must not publish ServiceTag's design, the
 alternative is to squash or scrub, at the cost of the clean ancestry.
 
+**A second caveat is CI, not Git.** History was rewritten with `git filter-repo` on 2026-09-14
+(§2.2), which changes every commit's hash. No CI run is recorded against `c84b881`'s *current* SHA —
+only its pre-rewrite twin `ccdb9d3` (same subject, "evidence: record the green ci run", and the same
+timestamp as `c84b881`) and that commit's parent's twin `12e2c09` ("ci: don't ask sdkmanager for the
+dead 'tools' package") carry a recorded green run, and both hashes are gone from the current history.
+**A repository branched from `c84b881` inherits no CI proof for that commit under its current
+identity; CI must run again there before it can be trusted.**
+
 ### 2.8 The four files in the `c84b881` tree carrying personal data
 
 The tree is 116 files, 46 outside `docs/` (re-verified). `git grep -E '/home/|/Users/|\.config/'`
@@ -185,8 +193,14 @@ described, not reproduced.
 |---|---|---|
 | `docs/design/issues/applied.md` | 37 lines containing the owner's GitHub handle and issue URLs on their personal repository. Disclosure of a public identity, not a secret. | yes — 37 handle occurrences |
 | `docs/superpowers/plans/2026-09-14-phase-0-foundation.md` | 5 lines with the same handle / repo URLs. Planning doc for the other product. | yes — 5 occurrences |
-| `docs/design/phase-0-evidence.md` | 4 lines recording the **SHA-256 / SHA-1 / MD5 certificate digests of the shipped release APK's signer**, plus the debug signer's digest. Public-key fingerprints, not the private key; the repo contains no keystore. They identify the legacy signing identity and are of no use to a public reader. | yes — 16 digest-shaped lines in the file, of which the signer block is the concern |
+| `docs/design/phase-0-evidence.md` | 4 lines recording the **SHA-256 / SHA-1 / MD5 certificate digests of the shipped release APK's signer**, plus the debug signer's digest. Public-key fingerprints, not the private key; the repo contains no keystore. They identify the legacy signing identity and are of no use to a public reader. | yes — re-verified: 16 lines in the file mention a digest algorithm by name, of which 2 are the actual colon-separated digest values (the signer block is the concern, not every algorithm mention) |
 | `app/release/app-release.apk` | 4 740 933 B, tracked, signed with the owner's personal key. Hygiene, not leakage. | yes |
+
+**A fifth carrier, not a file.** All 30 preserved commits' author name and author email (§2.7) are
+personal data too, carried in commit metadata rather than in a tracked file — visible via `git log`,
+invisible to a file-content grep. This is already public in this repository today; preserving the
+exact ancestry (§2.7) necessarily preserves it unchanged, and only a further history rewrite would
+change it, at the cost of the clean ancestry the reconstruction exists to keep.
 
 **Checked and cleared as false positives:** `gradle/gradle-daemon-jvm.properties` (foojay
 toolchain-id hashes), `gradlew` (an upstream Gradle commit SHA),
@@ -248,7 +262,7 @@ total — see §9, discrepancy D1).
 |---|---|---|---|
 | **0 — foundation** | `c84b881` (no merge commit; the phase is `7291615`…`c84b881`) | 2026-09-14 | Buildable-from-clone (`47fbe6f`: tracked wrapper + `settings.gradle.kts`, version catalog, AGP 9.4, JDK 17 targets, tracked debug APK dropped); `:core` pure-JVM module with the legacy key/codec/link-policy pinned by JUnit 5 tests (`76b751a`); activities routed through `:core` with no behaviour change (`52a1ff5`); GitHub Actions CI (`d5dcb6c`, fixed by `10984ee`); the design package (`7291615`) and issue restructuring (`f5cc089`, `a2580f9`); the legacy-compat/package-id policy ruling D13 (`b9f7e51`); spike S1 toolchain report (`dfb8356`). **Behaviour frozen at 2024.** |
 | **1A — durable identity** | `63635be` … `30525c7` (no merge commit) | 2026-09-14 | New identity `com.loosecannon.notenfc`, v2.0, Room 3 / KSP / kotlinx-serialization plugins, release signing from `~/.config` (`63635be`); Room schema v1 — `asset`, `nfc_tag`, `external_link` + domain models, repositories, app graph (`970c739`); backup format v1 as a ZIP of manifest+data with export and replace-import use cases (`13a7d54`); SAF backup I/O, debug backup screen, restore proof test (`d2d2f03`); graph validation moved to decode (`12f7c5a`); single-read-transaction export (`30525c7`); `sqlite-bundled` dropped (`88061ac`). |
-| **1B — NFC identity** | merge `19af5ae` | 2026-09-14 | Tag payload format **v1**, the typed `TagPayload`, `OverwritePolicy`, the AAR (`f92a391`); `LinkLaunchPolicy` + `TagRoute` (`8a94872`); the safe Android adapter — `NdefBridge`, `NfcReaderModeSession`, `TagWriter` (`dc1bb1c`); throw contracts documented (`bdcc475`); the write sequence (`18534bd`); `NfcDispatchActivity` + manifest `<queries>` (`25026d7`); hostile-extras hardening (`54f9aea`); `DeepLinkRoute` (`a8204d4`); reader-mode NDEF-check and lock-last fixes (`e2cf1d0`); stale-handle consent (`0e1975f`); the 2024 legacy activities, `LegacyKey` and the TECH catch-all deleted (`26ec9d0`). |
+| **1B — NFC identity** | merge `19af5ae` | 2026-09-14 | The 2024 legacy activities, `LegacyKey` and the TECH catch-all deleted first (`26ec9d0`, re-verified as the phase's second commit, right after the plan); then tag payload format **v1**, the typed `TagPayload`, `OverwritePolicy`, the AAR (`f92a391`); `LinkLaunchPolicy` + `TagRoute` (`8a94872`); the safe Android adapter — `NdefBridge`, `NfcReaderModeSession`, `TagWriter` (`dc1bb1c`); throw contracts documented (`bdcc475`); the write sequence (`18534bd`); `NfcDispatchActivity` + manifest `<queries>` (`25026d7`); hostile-extras hardening (`54f9aea`); `DeepLinkRoute` (`a8204d4`); reader-mode NDEF-check and lock-last fixes (`e2cf1d0`); stale-handle consent (`0e1975f`). |
 | **1C — Compose shell** | merge `a8d0094` | 2026-09-15 | Single-activity nav3 shell, Apollo Service Binder theme, asset/link/scan/backup screens, share host, UI-less dispatch trampoline, interim screens gone (`19042da`); write rules lifted behind the `TagIo` seam (`c808b49`); scan tab retired (`838d6a3`, `53f9cac`); G1 visual gate and D12 corrections (`4b6218b`, `17d6297`). |
 | **2A — maintenance journal** | merge `7fe7079` | 2026-09-15 | Asset event journal with structured measurements and consumable usage; event profiles; the roadmap ruling that the product split is a pre-deployment convergence op (`f1b4e5e`). |
 | **2B-1 — editors** | merge `8b8b721` | 2026-09-15 | Measurement-definition and profile editors; derived readings with prospective derived-graph checks on definition edits. |
@@ -290,8 +304,10 @@ templates, no CODEOWNERS, no dependabot config.
 - **No instrumented/androidTest step** (correctly excluded — those need a device).
 - **No `secrets.*` interpolation anywhere.** Release signing is entirely local, read from `~/.config/notenfc/keystore.properties`, and never touches CI.
 
-Master's tip is green. The one failure in the last three runs is an older commit two pushes back,
-already followed up (`4f497c5` / `1b1bd3c` gate the progress test).
+Master's tip is green at `73fc463`/`ac523d7`. **Two** of the last runs failed, not one: the phase-4a
+merge `19213dd` and its own follow-up merge `1b1bd3c` both failed — the checkpoint commit's own
+subject, "evidence: the two ci follow-ups", names both — fixed respectively by `4f497c5` (gate the
+progress test on a latch) and `ee8231e` (guard the documents scan, landed via the `73fc463` merge).
 
 ### 4.3 Hosting token capabilities
 
@@ -344,6 +360,27 @@ Android-free and has no Room or Compose reach.**
 `gradle.properties`: `org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8`, `org.gradle.caching=true`,
 `org.gradle.configuration-cache=true`, `android.useAndroidX=true`, `kotlin.code.style=official`.
 
+`gradle/gradle-daemon-jvm.properties` pins the **Gradle daemon's own JVM** to `toolchainVendor=JETBRAINS`,
+`toolchainVersion=25` (re-verified) — a different, newer JVM than the 17 the app/core modules compile
+and test against; the daemon JVM and the module JVM toolchain are independent settings, and neither
+constrains the other.
+
+**What an extracted library changes for the build.** `.github/workflows/ci.yml`'s
+`actions/checkout@v4` step declares no `submodules:` key (re-verified) — a `nfc-tag-core` dependency
+wired in as a git submodule needs that key added before CI can even see the submodule's content. A
+Gradle composite build (`includeBuild`) does not automatically share the including build's
+`gradle/libs.versions.toml` version catalog or its `org.gradle.toolchains.foojay-resolver-convention`
+settings plugin (`settings.gradle.kts:9`, above) — each included build resolves its own catalog and
+toolchain unless the design deliberately wires them together, and `:core`'s own `build.gradle.kts`
+already depends on the root catalog via `alias(libs.plugins.kotlin.jvm)` (re-verified), so a library
+extracted to its own build needs an answer for where its plugin versions come from. Configuration
+cache is already on (above) and stays a constraint on whatever wiring is chosen. Separately, at the
+source level the extractable NFC subset is dependency-clean: `NdefCodec.kt` imports only `TagId` (the
+app's own model), `java.nio.ByteBuffer` and `java.util.UUID` (re-verified) — no coroutines, no
+serialization — even though `:core`'s `build.gradle.kts` declares coroutines-core and
+kotlinx-serialization-json for the rest of the module. A `nfc-tag-core` JVM module built from just
+that subset needs none of them.
+
 ### 4.5 Android module configuration (`:app`)
 
 | Field | Value |
@@ -383,6 +420,9 @@ count). It is the namespace of the entire codebase — 233 Kotlin files plus bot
 | `NdefCodec.V1_TYPE_NAME` | `NdefCodec.kt:39` | `"tag"` |
 | `NdefCodec.PACKAGE_NAME` | `NdefCodec.kt:46` | `"com.loosecannon.notenfc"` — the Android **applicationId** embedded in the AAR payload; doc comment says *"must equal the app's applicationId (D13 §4)"*, enforced by nothing but that comment |
 | **Manifest path literals, unlinked** | `app/src/main/AndroidManifest.xml:87, :92` | `android:path="/com.loosecannon.notenfc:tag"` and `.../com.loosecannon.notenfc:md5_short`. **There is no build-time link between these strings and the Kotlin constants** — they are independent literals that must match byte for byte. |
+| **Manifest `android:name` literals, fully qualified** | `app/src/main/AndroidManifest.xml` (4: the `<application>` element plus `MainActivity`, `ShareActivity`, `NfcDispatchActivity`) and `app/src/debug/AndroidManifest.xml` (1: `DebugBackupActivity`) — 5 total, re-verified | Every component name is spelled out in full (e.g. `com.loosecannon.notenfc.MainActivity`), never as a `namespace`-relative `.MainActivity` shorthand. None of the 5 is derived from `namespace`; a rename must edit all 5 literals by hand. |
+| `rootProject.name` | `settings.gradle.kts:20` | `"noteNFC"` — a literal Gradle project name, independent of `applicationId`/`namespace`; not identity-linked and safe to rename separately |
+| Launcher icon | `app/src/main/res/mipmap-*/ic_launcher*.webp`, `mipmap-anydpi/ic_launcher*.xml` (adaptive icon), `drawable/ic_launcher_{background,foreground}.xml` | A custom adaptive icon (not the stock Android robot); carries no textual identity, but is a **visual** identity carrier — see §8.1 Q1 on distinct launcher icons for coexistence. |
 | **FileProvider authority** | manifest `:99` + `app/.../di/AppGraph.kt:140` | `android:authorities="${applicationId}.files"` / `"${BuildConfig.APPLICATION_ID}.files"` → `com.loosecannon.notenfc.files`. Both already derive from the applicationId, so this follows a rename automatically. `AppGraph.kt:140` is the **only** live use of `BuildConfig.APPLICATION_ID`. |
 | **`notenfc://` scheme literal in source — 8 files** (re-verified) | `core/.../core/nfc/TagRoute.kt`, `core/.../core/links/DeepLinkRoute.kt`, and 6 `androidTest` files (`AppSmokeTest`, `AssetModelDeviceProofTest`, `AttachmentsDeviceProofTest`, `EditorsDeviceProofTest`, `JournalDeviceProofTest`, `JournalSmokeTest`) | plus the manifest's structured `<data android:scheme="notenfc" android:host="asset|link|tag" />` at `:56-58` |
 | **`app_name`** | `app/src/main/res/values/strings.xml:2` | `<string name="app_name">noteNFC</string>` — the launcher label. One of only two user-facing "noteNFC" texts repo-wide; the other is `android:label="noteNFC Backup (debug)"` in `app/src/debug/AndroidManifest.xml`. |
@@ -394,8 +434,10 @@ count). It is the namespace of the entire codebase — 233 Kotlin files plus bot
 | **The `"V1"` literal** | `app/.../MainActivity.kt:84` | `Route.TagResult("V1", payload.tagId.value)` — hard-codes the string rather than `PayloadFormat.V1.name`; the trampoline↔renderer wire vocabulary (`"V1"`, `"NONE"`, `"LEGACY_MD5"`) is string-typed |
 | `shared_prefs` file name | `app/.../AppPrefs.kt:13` | `"notenfc"` → `shared_prefs/notenfc.xml`; package-scoped by Android regardless of the literal |
 | `BackupManifest.appVersion` | `core/.../backup/BackupFormat.kt`, wired from `BuildConfig.VERSION_NAME` at `AppGraph.kt:151` | `"2.4"` — a bare semver string, **carries no package identity** |
+| `BuildConfig.VERSION_NAME`, second use | `app/.../ui/settings/SettingsScreen.kt:241` (re-verified) | Displayed to the user as the "Version" row in Settings → About; same bare semver, no package identity — the only other live use of `BuildConfig.VERSION_NAME` besides `AppGraph.kt:151` |
+| Signer identity in docs | `README.md:121-125` (re-verified) | Carries the release signer's DN (`CN=noteNFC, O=GonzRon`) and the full colon-separated SHA-256 certificate fingerprint, quoted rather than merely referenced (contrast `docs/design/phase-0-evidence.md`, §2.8) |
 | Notification channels | — | **none exist yet**; no `NotificationChannel`/`CHANNEL_ID` anywhere. Issue #21's local-reminder feature is unimplemented, so there is no channel id to migrate. |
-| `app/src/debug` source set | one file, `DebugBackupActivity.kt` under `com.loosecannon.notenfc.debug` | debug-only exported launcher activity |
+| `app/src/debug` source set | **3 files** (re-verified) — `AndroidManifest.xml`, `res/layout/activity_debug_backup.xml`, `kotlin/.../debug/DebugBackupActivity.kt` under `com.loosecannon.notenfc.debug` | debug-only exported launcher activity |
 | androidTest package id | `app/src/androidTest/kotlin/com/loosecannon/notenfc/...` (9 test files) | no `applicationIdSuffix`, so the test APK is `com.loosecannon.notenfc.test` by AGP default, declared nowhere in source |
 
 ### 4.7 Issue backlog classification
@@ -404,15 +446,23 @@ count). It is the namespace of the entire codebase — 233 Kotlin files plus bot
 reading each title and, for the eleven ambiguous ones, the full body — not by keyword-matching
 "noteNFC" in titles, because most ServiceTag issues still say "noteNFC" as the current app name.
 
-**Counts: ServiceTag 26 · noteNFC 2 · shared-NFC-or-infra 7 · historical-closed 1. Total 36.**
+**Counts: ServiceTag 27 · noteNFC 2 · shared-NFC-or-infra 6 · historical-closed 1. Total 36.**
+(Corrected from an earlier 26/2/7/36 split: **#20** belongs to ServiceTag, not the shared bucket —
+see below.)
 
 | Bucket | Issues |
 |---|---|
 | **noteNFC (2)** | **#6** "[MVP] Generalize external note/deep-link support beyond Joplin" — body: *"Preserve noteNFC's original purpose while making external-link handling generic"*. **#36** "[FUTURE noteNFC] First-class deep-link support for Joplin, Obsidian, Logseq, Evernote, Notion, OneNote and Todoist" — body is the explicit ownership statement: *"This issue belongs to the future standalone noteNFC product, not ServiceTag. The current repository is temporarily carrying both lineages… move/transfer this issue to the standalone noteNFC repository."* This is also the primary-source confirmation that the maintenance tracker's product name is **ServiceTag**. |
 | **shared-NFC, genuinely dual-purpose (4)** | **#1** "[EPIC] Evolve noteNFC into an NFC-first maintenance tracker" (umbrella); **#30** "Bind, rebind, revoke, and unknown-tag flows" (body covers binding a tag "to an asset **or link**"); **#31** "noteNFC tag payload format v1 and legacy md5_short resolver" (the payload format both lineages read); **#35** "Untrusted input policy: tag payloads, deep links, stored URIs" (spans both). |
-| **shared, but generic build/test/design infra rather than NFC (3)** | **#20** "Phase 1C: Compose design system foundation (Apollo Service Binder)"; **#23** "Phase 0: clone-buildable repo, AGP 9 toolchain, :core module, CI"; **#32** "Testing pyramid and CI gates". |
-| **ServiceTag (26)** | #2–#5, #7–#18, #19, #21, #22, #24–#28, #33, #34 — Room persistence, event journal, scheduling engine, dashboard, attachments, backup/export/import, Todoist integration and auth, notification quick actions, measurement/event profiles, seasonal windows, consumables, asset templates, calendar-date semantics, local reminder provider, meter model, platform permissions, provider selection, reminder fatigue, reminder health, `ReminderProvider` port. |
+| **shared, but generic build/test/design infra rather than NFC (2)** | **#23** "Phase 0: clone-buildable repo, AGP 9 toolchain, :core module, CI"; **#32** "Testing pyramid and CI gates". |
+| **ServiceTag (27)** | #2–#5, #7–#18, #19, #20, #21, #22, #24–#28, #33, #34 — Room persistence, event journal, scheduling engine, dashboard, attachments, backup/export/import, Todoist integration and auth, notification quick actions, measurement/event profiles, seasonal windows, consumables, asset templates, calendar-date semantics, local reminder provider, meter model, platform permissions, provider selection, reminder fatigue, reminder health, `ReminderProvider` port. **#20** "Phase 1C: Compose design system foundation (Apollo Service Binder)" moves here — the Apollo Service Binder theme is ServiceTag's own Compose shell (§3, Phase 1C), not shared infra. |
 | **closed (1)** | **#29** "[MVP] Investigate the installed APK's signing certificate and upgrade path" — the historical record of the unavailable legacy key. |
+
+**"Shared" does not mean "belongs in `nfc-tag-core`".** Even the four genuinely dual-purpose issues
+above are mixed policy/mechanism — #30's rebind flow and #31's payload-format-plus-legacy-resolver
+both reach into ServiceTag-only concepts (§6.1). A shared issue is split between the two products'
+trackers or stays in ServiceTag as history; being "shared" is a classification of the *issue*, not a
+routing instruction to the library.
 
 Two judgment calls worth carrying into the design:
 
@@ -432,11 +482,12 @@ neither edited nor reinterpreted here. Shape only: `docs/design/` holds `README.
 design documents D1–D13 (`01-current-state-archaeology.md` through
 `13-compatibility-policy.md` — the last being "Compatibility policy change and package identity", the
 direct precedent for a rename/split), eight per-phase evidence files
-(`phase-{0,1a,1b,1c,2a,2b1,2b2,4a}-evidence.md`), a `g1/` visual-gate pair, two `spikes/` reports
-(S1 toolchain, S5 SAF tree providers), and an `issues/` package (`applied.md`, 17 new-issue drafts,
-16 verbatim originals, 16 rewritten bodies). `docs/superpowers/` holds 8 per-phase plans and 4 design
-specs. The repo-root `README.md` already describes the **merged** noteNFC+ServiceTag scope, not a
-split state.
+(`phase-{0,1a,1b,1c,2a,2b1,2b2,4a}-evidence.md`), a `g1/` visual-gate pair — including
+`g1/00-source-data-inventory.md`, the census of the owner's eight physical legacy tags (§7.5) — two
+`spikes/` reports (S1 toolchain, S5 SAF tree providers), and an `issues/` package (`applied.md`,
+**19** new-issue drafts (re-verified; corrected from 17), 16 verbatim originals, 16 rewritten bodies).
+`docs/superpowers/` holds 8 per-phase plans and 4 design specs. The repo-root `README.md` already
+describes the **merged** noteNFC+ServiceTag scope, not a split state.
 
 ---
 
@@ -830,10 +881,10 @@ is policy.
 | `TagPayload.Foreign` / `.Malformed` / `.Empty` / `.NewerVersion` | `NdefCodec.kt:21-26` | "what is on this tag, classified" for content the app does not own | **mechanism** | clean | The library's return vocabulary. |
 | `TagPayload.V1` / `.LegacyMd5` | `NdefCodec.kt:16-19` | Product-specific recognised payloads | **policy** (V1: both; `LegacyMd5`: noteNFC) | `TagId` | Library returns `Recognised(payloadBytes)`; each app parses its own body. |
 | `OverwritePolicy` / `OverwriteDecision` | `core/.../core/nfc/OverwritePolicy.kt` | Read-before-write rule: write silently only over `Empty` or the same identity; everything else needs one confirmation | **mechanism**, after a signature change | `TagId`; the reason strings say "noteNFC" | Extract as `decide(existing, isSameIdentity): Decision` returning a **reason token** (`SameProduct`, `Legacy`, `NewerVersion`, `Foreign`, `Unreadable`, `Empty`), with the sentence built in each app. The *rule* is the valuable part and is identical for both. |
-| `TagRoute` | `core/.../core/nfc/TagRoute.kt` | Parses `notenfc://tag/<uuid>` into a `TagPayload` | **policy (each app)** | the `notenfc` scheme is identity | The library must not own a scheme. The canonical-UUID regex is the only mechanism inside, and it is duplicated in three places. |
+| `TagRoute` | `core/.../core/nfc/TagRoute.kt` | Parses `notenfc://tag/<uuid>` into a `TagPayload` | **policy (each app)** | `TagId` (re-verified import); plus the `notenfc` scheme is identity | The library must not own a scheme. The canonical-UUID regex is the only mechanism inside, and it is duplicated in three places. |
 | `DeepLinkRoute` / `DeepLink` | `core/.../core/links/DeepLinkRoute.kt` | Parses `notenfc://asset|link|tag` | **policy (ServiceTag)**, with a `tag`-only variant in noteNFC | `AssetId`, `LinkId` | `asset` has no meaning in noteNFC. Looks similar to `TagRoute` but **delegates** to it. |
 | `LinkLaunchPolicy` / `LinkCheck` | `core/.../core/links/LinkLaunchPolicy.kt` | Outbound-URI gate: scheme allow/blocklist, URI extraction, kind classification | **both-as-policy** | `LinkKind` | The allowlist is a **product decision**, not a mechanism. Duplicate; do not share. Nothing to do with NFC. |
-| `ResolveTag` / `Resolution` | `core/.../core/usecase/ResolveTag.kt` | payload → row → asset/link, stamping `lastScannedAt` in a transaction | **policy (ServiceTag)**; noteNFC needs a narrower version | `TagRepository`, `AssetRepository`, `LinkRepository`, `UnitOfWork`, `Clock`, `TagBinding`, `PayloadFormat`, `TagStatus`, `TagTarget` | **The clearest boundary in the codebase: everything below is mechanism, this and above is policy.** noteNFC's version resolves to a link only, with no `OpenAsset`/`Revoked`. |
+| `ResolveTag` / `Resolution` | `core/.../core/usecase/ResolveTag.kt` | payload → row → asset/link, stamping `lastScannedAt` in a transaction | **policy (ServiceTag)**; noteNFC needs a narrower version | `TagRepository`, `AssetRepository`, `LinkRepository`, `UnitOfWork`, `Clock`, `TagBinding`, `PayloadFormat`, `TagStatus`, `TagTarget`, `Asset`, `ExternalLink` (re-verified against the file's imports; the domain model classes were missing from an earlier draft of this cell) | **The clearest boundary in the codebase: everything below is mechanism, this and above is policy.** noteNFC's version resolves to a link only, with no `OpenAsset`/`Revoked`. |
 | `BindTag` | `core/.../core/usecase/BindTag.kt` | Binds a `(format, key)` to an asset or link, creating or retargeting a row | **policy (ServiceTag)**; noteNFC needs a link-only variant | Room-backed ports, `TagBinding`, `TagTarget`; calls `NdefCodec.requireCanonicalUuid` | The one place policy reaches *down* into the codec — and only for the UUID-shape check, which the library will still export. |
 | `ProvisionTag` | `core/.../core/usecase/ProvisionTag.kt` | `begin` mints identity before the write, `complete` records the verified write, `abandon` cleans up | **policy (both apps, separately)** | Room-backed ports, `TagBinding`, `PayloadFormat` | The *protocol* (mint → write → verify → complete, else abandon) is mechanism-shaped and worth documenting in the library README; the rows are not. |
 | `requireTargetExists` / `UnknownTarget` | `core/.../core/usecase/TagTargets.kt` | A binding may only point at a row that exists | **policy (ServiceTag)** | `AssetRepository`, `LinkRepository` | — |
@@ -1136,6 +1187,21 @@ preserved set is a faithful, complete snapshot.**
 - **`nfc_tag = 0`.** The owner's real data currently has **no tag bindings at all** (tags were tested earlier on a wiped install). So the migration has no NFC-tag rewrite or rebind concern *for this dataset* — although the schema, DTO and codec must still carry the table correctly for whenever tags exist. It also means ServiceTag has no legacy bindings to lose by dropping `md5_short`.
 - **One unowned external link.** `external_link` holds a single row, kind `JOPLIN`, `assetId = NULL` — an unowned link, not attached to any asset. It is the one row in the live data that must survive the split with its `id` and `kind` intact even though nothing else references it.
 
+**Separately — not a database row, and not to be conflated with `nfc_tag = 0` above — eight physical
+legacy tags exist in the field.** `docs/design/g1/00-source-data-inventory.md` records that the
+owner read "eight notes in one notebook, each the target of a legacy noteNFC tag" (re-verified); one
+of the eight is explicitly a standalone-link target, not an asset (item 4: *"this tag must stay a
+standalone link to the note"*). These are physical `md5_short` tags written by the 2024 app; the live
+`nfc_tag` table's zero rows describe the ServiceTag-era database only and say nothing about these —
+the two facts are independent. **Verified fact (2026-09-16, read-only `pm list packages` on the
+phone):** the 2024 mixed-case app `com.looseCannon.noteNFC` is **not** installed; only
+`com.loosecannon.notenfc` is. Because each Android package's `SharedPreferences` is private to it,
+the modern lowercase package never held the 2024 app's `noteNFCURLs` map (confirmed independently by
+§7.5's own prefs listing below: only `notenfc.xml` and `storage_spike.xml` are present, no
+`noteNFCURLs.xml`), and the app that owned that map is not even installed — so the eight tags'
+key→link lookup map is gone, and the eight tags are unresolvable by any app installed on the phone
+today.
+
 **Prefs on the phone** (both under the app's private prefs dir):
 
 - `shared_prefs/notenfc.xml` — `attachment_tree_uri` (a persisted SAF tree URI; summarised as "set", never quoted, since it embeds the owner's chosen folder) and `last_backup_at` (a long timestamp). **Not present**: `last_restored_backup_set_id` (no import has ever run against this install) and `appearance_mode` (never explicitly set, so it falls back to its `SYSTEM` default and is never written).
@@ -1154,7 +1220,7 @@ has exactly **one** such key, `last_backup_at`. There is no `last_backup_count` 
 | **External links** | `data.json.externalLinks[]` | Compare `id`, `kind`, `uri`, `assetId` (nullable) | none |
 | **Measurement definitions** (incl. DERIVED formula/sources) | `data.json.measurementDefinitions[]` | Compare `id`, `assetId`, `kind`, and for DERIVED rows `formula`/`sourceAId`/`sourceBId` | none |
 | **Event profiles + fields/consumables** | `data.json.eventProfiles[].fields[]` / `.consumables[]` | Compare profile `id` and nested field/consumable `id`s and `definitionId`/values | none |
-| **Journal events + measurements + consumable usages** | `data.json.assetEvents[].measurements[]` / `.consumables[]` | Compare event `id`, `assetId`, `profileId`; nested measurement `id`→`definitionId`, consumable `id` | none |
+| **Journal events + measurements + consumable usages** | `data.json.assetEvents[].measurements[]` / `.consumables[]` | Compare event `id`, `assetId`, `profileId`, and **per-field equality** on `kind`, `title`, `occurredOn`, `occurredTime`, `tzId`, `notes`, `source`/`sourceRef` (the unique `(source, source_ref)` pairing, §7.1) and `createdAt`/`updatedAt` (re-verified against `AssetEventDto`); nested measurement `id`→`definitionId`, consumable `id` | none |
 | **Attachment rows** (ids, owners, metadata, hashes, locators) | `data.json.attachments[]` | Compare `id`, owner (`assetId` xor `eventId`), `sha256`, `sizeBytes`, `storageLocator`, `mode` | none |
 | **Attachment bytes** | artifacts `artifacts/<id>.<ext>` | SHA-256 of the restored file at its locator == `AttachmentDto.sha256` — exactly what `RestoreArtifacts` already checks twice | none |
 | **`backupSetId` linkage** | both manifests | Run the artifacts restore with `expectedSetId` = the data restore's `lastRestoredBackupSetId`; `RestoreArtifacts` throws `ArtifactsSetMismatch` if they disagree | the set id is minted fresh per export — a pairing token, not a stable identity to preserve *across* exports |
@@ -1182,7 +1248,7 @@ Consolidated from all four reports. None of these is settled by the archaeology.
 
 | # | Question | What is known | What must be observed |
 |---|---|---|---|
-| **Q1** | **Chooser vs AAR with both apps installed.** | **[platform-doc]** C1: *"If more than one application can handle the intent, the Activity Chooser is presented."* **[platform-doc]** C2: with an AAR, the platform tries the intent filter first, and starts the AAR's app *"if the Activity that filters for the intent does not match the AAR, if multiple Activities can handle the intent, or if no Activity handles the intent."* D13 already anticipated a chooser for the old/new coexistence window: *"Both apps match `md5_short`; Android shows a chooser until the old app is removed."* With distinct domains the question should not arise; with a shared `md5_short` filter it will. | (a) both installed, distinct domains, tap each product's tag; (b) both installed and both declaring `md5_short`, tap a legacy tag; (c) tap a tag whose AAR names an **uninstalled** app — does the Play page for a non-existent listing appear? |
+| **Q1** | **Chooser vs AAR with both apps installed.** | **[platform-doc]** C1: *"If more than one application can handle the intent, the Activity Chooser is presented."* **[platform-doc]** C2: with an AAR, the platform tries the intent filter first, and starts the AAR's app *"if the Activity that filters for the intent does not match the AAR, if multiple Activities can handle the intent, or if no Activity handles the intent."* D13 already anticipated a chooser for the old/new coexistence window: *"Both apps match `md5_short`; Android shows a chooser until the old app is removed."* With distinct domains the question should not arise; with a shared `md5_short` filter it will. **Whenever a chooser (or any side-by-side listing, e.g. Settings → Apps) can show both products, a distinct launcher icon and a distinct label are a coexistence requirement, not a cosmetic choice** — today's single app has one icon (§4.6) and one `app_name`; two installed products need visibly different ones so the owner can tell them apart at the moment of choosing. | (a) both installed, distinct domains, tap each product's tag; (b) both installed and both declaring `md5_short`, tap a legacy tag; (c) tap a tag whose AAR names an **uninstalled** app — does the Play page for a non-existent listing appear? |
 | **Q2** | **Stopped-state dispatch (the contradiction).** | **[platform-doc]** C8 says a force-stopped app gets no NFC dispatch. **[device-observed]** 1C row 16 says a force-stopped + data-cleared package **was** dispatched; only the never-launched fresh install was silent. All at `targetSdk 36`. | Re-observe **per app** after the split, and again at `targetSdk 37` with `DISPATCH_NFC_MESSAGE` declared. If the doc is right for the never-launched case only, a freshly installed second product will look broken until its first launch — which needs a health-screen sentence in both apps. |
 | **Q3** | **Android 16+ per-app NFC allowlist.** | **[platform-doc]** C9: from Android 16 the user is notified on an app's first NFC intent and can disallow further scanning; apps can check `NfcAdapter.isTagIntentAllowed()`; the list lives under Settings → Apps → Special app access → Launch via NFC. **Neither `isTagIntentAllowed()` nor `ACTION_CHANGE_TAG_INTENT_PREFERENCE` is used anywhere in this codebase** (verified by grep), so a denial is currently invisible to the user inside the app. | Does the first-scan notification appear once per app? Can a denial for one silently break the other's tags (they share the NFC service, not the allowlist entry)? Two installed apps means two allowlist entries. |
 | **Q4** | **Reader-mode interception across products.** | **[platform-doc]** C6: reader mode overrides AARs and the intent dispatch system. Expected: yes, each app's write/inspect screen sees the sibling's tag. | Observe in both directions with both installed. It determines whether the *"this is the other product's tag"* wording is reachable at all. |
@@ -1192,15 +1258,16 @@ Consolidated from all four reports. None of these is settled by the archaeology.
 
 | # | Question | The trade-off as the evidence frames it |
 |---|---|---|
-| **Q6** | **Keep or scrub the inherited design package in the new noteNFC repo.** | Branching `c84b881` inherits 70 ServiceTag design files. **Keep** → clean, verifiable ancestry (the provenance the reconstruction exists for), but ServiceTag's design becomes public if the new repo is public. **Scrub** → loses the clean ancestry (squash or rewrite). The four personal-data files in §2.8 must go either way. The history report's own recommendation is "keep the ancestry, delete forward". |
-| **Q7** | **A one-time importer for the on-device prefs key→link map.** | Legacy physical tags resolve only through `SharedPreferences("noteNFCURLs")` on the original handset, which currently holds real migrated Joplin data. Does the reconstruction need a one-time importer, and if so does it read the prefs XML out of a device backup or must the map be exported from the phone first? Note that the modern line has **no** importer and D6 §3 (automatic prefs migration) was explicitly dropped. Note also that the phone currently runs the *modern* app, so its `noteNFCURLs` map is whatever the 2024 install left behind — verifying that is itself an observation nobody has made. |
-| **Q8** | **The `contains("joplin")` gate.** | Keep it as the compatibility path (so re-sharing an old note reproduces the same MD5 key and the same tag resolves) while adding a proper scheme allowlist alongside it, or replace it outright and accept that re-sharing an old note may hash differently? The 2024 gate hashes the **whole shared text**; the modern `LinkLaunchPolicy.extractUri` stores **only the first URI token**, which is a different string and therefore a different key. |
+| **Q6** | **Keep or scrub the inherited design package in the new noteNFC repo.** | Branching `c84b881` inherits 70 ServiceTag design files. **Keep** → clean, verifiable ancestry (the provenance the reconstruction exists for), but ServiceTag's design becomes public if the new repo is public. **Scrub** → loses the clean ancestry (squash or rewrite). The four personal-data files in §2.8 must go either way. The history report's own recommendation is "keep the ancestry, delete forward". **Clarification (independent review):** "delete forward" means removing the design package and the four personal-data files at the new branch tip going forward — it explicitly does **not** scrub them from history. That material is a public handle and cert fingerprints (§2.8), not secrets, so leaving it recoverable in history is not a privacy problem, and no second history rewrite is planned. |
+| **Q7** | **A one-time importer for the on-device prefs key→link map — the premise needs correcting.** | The modern lowercase package never inherited the 2024 mixed-case app's `noteNFCURLs` map — Android's per-package-private `SharedPreferences` means it structurally could not have, and the preserved snapshot proves it (§7.5): only `notenfc.xml` and `storage_spike.xml` exist, no `noteNFCURLs.xml`. The map belonged solely to the 2024 app, `com.looseCannon.noteNFC`, which is confirmed **not installed** on the phone (§7.5, 2026-09-16). So there is no surviving key→link map anywhere on the device for a one-time importer to read, from a device backup or otherwise; the eight physical legacy tags (§7.5) are unresolvable by any means already on the phone. The modern line has **no** importer and D6 §3 (automatic prefs migration) was explicitly dropped — consistent with there being nothing left to import. |
+| **Q8** | **The `contains("joplin")` gate.** | Keep it as the compatibility path (so re-sharing an old note reproduces the same MD5 key and the same tag resolves) while adding a proper scheme allowlist alongside it, or replace it outright and accept that re-sharing an old note may hash differently? The 2024 gate hashes the **whole shared text**; the modern `LinkLaunchPolicy.extractUri` stores **only the first URI token**, which is a different string and therefore a different key. The eight physical tags this gate produced (§7.5) are already unresolvable today regardless of this choice (Q7), which weakens the case for keeping the gate purely for tag-resolution compatibility. |
 | **Q9** | **The `noteNFC-*` export prefix and the `notenfc.db` name.** | Both are cosmetic and safe either way: the importer never reads a file name, and a renamed package gets a fresh empty database. Keeping them is harmless but confusing post-rename; changing them means touching the exporter and the test fixtures that hard-code the prefix, and — if the prefix changes — the importer must continue to accept both (it does today, because it checks nothing). |
-| **Q10** | **Whether the debug source set and the `storage_spike` prefs residue matter.** | `app/src/debug` is one file (`DebugBackupActivity.kt`, an exported debug-only launcher activity) whose manifest label is one of only two user-facing "noteNFC" strings. `shared_prefs/storage_spike.xml` holds one `tree_uri` key outside the `AppPrefs` contract — device-local residue from spike S5. Neither is load-bearing; the decision is whether each product carries a debug backup activity forward, and whether the residue is worth clearing on the phone during the transition. |
+| **Q10** | **Whether the debug source set and the `storage_spike` prefs residue matter.** | `app/src/debug` is **3 files** (`AndroidManifest.xml`, a layout, `DebugBackupActivity.kt`; re-verified, corrected from an earlier "one file") whose manifest label is one of only two user-facing "noteNFC" strings. `shared_prefs/storage_spike.xml` holds one `tree_uri` key outside the `AppPrefs` contract — device-local residue from spike S5. Neither is load-bearing; the decision is whether each product carries a debug backup activity forward, and whether the residue is worth clearing on the phone during the transition. |
 | **Q11** | **Scope of `nfc-tag-core`.** | Should the library also own the link-launch policy and the `notenfc://tag` deep-link route (both ServiceTag-side today, from `8a94872`), or does each app keep its own launch policy while the library stays strictly NDEF? The mechanism/policy table argues for strictly-NDEF: the scheme allowlist is a product decision and the deep-link scheme is product identity. |
 | **Q12** | **Where the new repository lives.** | A fresh repo for the reconstruction, or does `noteNFC` keep the existing remote while ServiceTag moves? This determines whether the 2023 draft release and the `pre-split-checkpoint` tag travel with noteNFC or with ServiceTag — and note the active token **cannot delete a repository**, so any plan must be rename/create/transfer-only. |
 | **Q13** | **The `NdefFormatable` capacity gap.** | A too-small *unformatted* tag surfaces as a generic `Failed`, not as `TooSmall`, because capacity is unknown until the tag is formatted. Small, real, and shared by both products — so it is a library-level decision whether to fix it (e.g. by reporting capacity after the format on the second tap) or to document it. |
-| **Q14** | **The manifest ↔ constant link.** | `android:path="/com.loosecannon.notenfc:tag"` and `NdefCodec.V1_TYPE` are two independent literals today. Any parameterised `TagIdentity` must decide how the manifest string is kept in step — a manifest placeholder from the Gradle script, a generated resource, or a test that asserts the two agree. |
+| **Q14** | **The manifest ↔ constant link.** | `android:path="/com.loosecannon.notenfc:tag"` and `NdefCodec.V1_TYPE` are two independent literals today. Any parameterised `TagIdentity` must decide how the manifest string is kept in step — a manifest placeholder from the Gradle script, a generated resource, or a test that asserts the two agree. **This is a design deliverable, not only a question**: the split's design must bind the manifest filter path and the app-side `TagIdentity` to one Gradle-owned identity value, or add a build/test assertion that the two agree; external domain and AAR package stay separate parameters even when their values happen to be equal. |
+| **Q15** | **`applicationId` collision with the live install.** | If the reconstructed narrow product took `com.loosecannon.notenfc` — the identity documented throughout §4 as today's live, installed app — it would collide with the running install: the same `versionCode` ratchet (an older `versionCode` cannot install over a newer one), the same signing-identity requirement (a mismatched key refuses to update in place), the same per-package SAF grant slot (§7.4: a persisted grant is scoped to the calling application and does not transfer), the same `shared_prefs` file, the same FileProvider authority, and overlapping NDEF manifest filters. None of this is settled by the archaeology; it only surfaces the collision. **Resolved outside this document by the owner's ruling O1** (recorded in §10): the narrow product is now **NoteTag**, `com.loosecannon.notetag`; nothing reuses `com.loosecannon.notenfc` once the modern app is uninstalled. |
 
 ---
 
@@ -1237,7 +1304,40 @@ standing session note rather than another report: **"legacy tags recoverable via
 key" is true of the protocol but not of the modern implementation** — `LegacyKey.compute` was deleted
 in `26ec9d0` and there is no MD5 anywhere at `ac523d7`. See §6.4.
 
+**This verification log was itself not exhaustive.** An independent review (§10) found two further
+miscounts this document had inherited or introduced: the `docs/design/issues/` new-issue-draft count
+(this document said 17; re-verified at 19, §4.9) and the per-phase evidence-file count carried in an
+underlying report (stated there as 7; re-verified at 8, matching what §4.9 already said). Neither
+changes a conclusion; both are corrected in place rather than added as a fifth discrepancy row, since
+they are miscounts in this document's own numbers rather than disagreements between two source
+reports.
+
 Finally, two scoping notes on what this document does *not* claim:
 
 - **Nothing here was observed on a device for this document.** No `adb` was run; a physical phone holding the owner's real data is attached, and every device claim above is sourced from a `docs/design/phase-*-evidence.md` row recorded in an earlier phase and tagged **[device-observed]**.
 - `archaeology-data.md` notes that its per-package-SAF-grant statement was written from stable public API documentation rather than a byte-for-byte fetch in that session. It is tagged **[platform-doc]** above; a spec that needs a verbatim citation should fetch one.
+
+---
+
+## 10. Review record
+
+**Gate result: PASS with corrections (independent reviewer, §34 #2 of the split ledger), 2026-09-16.**
+
+Corrections applied to this document by number, from the reviewer's "Corrections to apply" list
+(1–19), the "Additions the design needs" (1, 3, 4, 5, 6, 8), and the owner's corrections under the
+Archaeology gate (C1, C2, C6, C7 — C1/C2 duplicate corrections 1/2; C3–C5, C8, C9 are design-document
+corrections out of this document's scope):
+
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19; additions 1, 3, 4, 5, 6, 8; C1, C2,
+C6, C7.
+
+**A note on scope.** This document's own findings (§§1–9) stop at `ac523d7`, 2026-09-16, and are
+deliberately not revised in light of what came after. The owner's rulings **O1–O14** — the NoteTag
+rename and greenfield NFC compatibility, the hybrid tag format, no default AAR, and a conservative
+`nfc-tag-core` scope, among others — were made *after* this archaeology, in response to it and to the
+target/migration design drafts, and are recorded in the design documents
+(`docs/architecture/product-split-target.md`, `product-split-migration.md`), not here. Where a
+correction above notes that a §8 open question is "resolved by" an owner ruling (Q7, Q15), that
+resolution is recorded as a pointer forward, not as a rewrite of the question: **§8's open questions
+stand as the historical question record** — what was unknown at the archaeology gate — and the design
+documents are where the answers now live.
