@@ -180,7 +180,17 @@ class AttachmentsSectionViewModelTest {
         val said = mutableListOf<String>()
         backgroundScope.launch(Dispatchers.Main) { vm.messages.collect { said += it } }
 
-        vm.add(listOf(picked("First.pdf"), broken("Middle.pdf"), picked("Last.pdf")))
+        // The first file's bytes are handed over only once the test has seen the first progress
+        // line: on a fast IO thread all three adds would otherwise finish before the collector
+        // ever observes a non-null progress (the conflated state flow keeps only the latest).
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val first = PickedFile("First.pdf", "application/pdf", 1L) {
+            gate.await()
+            "x".toByteArray().inputStream()
+        }
+        vm.add(listOf(first, broken("Middle.pdf"), picked("Last.pdf")))
+        vm.state.first { it.progress == "Adding 1 of 3…" }
+        gate.countDown()
 
         val state = vm.state.first { it.rows.size == 2 && it.progress == null }
         assertEquals(listOf("First.pdf", "Last.pdf"), state.rows.map { it.displayName })
@@ -190,7 +200,7 @@ class AttachmentsSectionViewModelTest {
         assertEquals(2, graph.attachmentStorage.store.files.size)
 
         val progressLines = seen.mapNotNull { it.progress }.distinct()
-        assertTrue("no progress was ever reported", progressLines.isNotEmpty())
+        assertTrue("the gated first file's progress line was observed", "Adding 1 of 3…" in progressLines)
         assertEquals(
             emptyList<String>(),
             progressLines - setOf("Adding 1 of 3…", "Adding 2 of 3…", "Adding 3 of 3…"),
