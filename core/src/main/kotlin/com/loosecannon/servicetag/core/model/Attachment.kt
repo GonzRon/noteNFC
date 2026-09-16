@@ -1,0 +1,147 @@
+package com.loosecannon.servicetag.core.model
+
+/** Bigger than this is a mistaken pick, not a product limit (spec §11.11): 256 MiB. */
+const val MAX_ATTACHMENT_BYTES: Long = 268_435_456L
+
+enum class AttachmentKind { PHOTO, LABEL_PHOTO, RECEIPT, MANUAL, WARRANTY, DOCUMENT, OTHER }
+
+/** REFERENCE is 4B's `SAF_DOCUMENT` pointer; 4A writes MANAGED rows only. */
+enum class AttachmentMode { MANAGED, REFERENCE }
+
+/** No LOCAL member by the owner's ruling (spec §11.8): absent, not reserved. */
+enum class StorageProvider { SAF_TREE, SAF_DOCUMENT }
+
+sealed interface AttachmentOwner {
+    data class OfAsset(val assetId: AssetId) : AttachmentOwner
+    data class OfEvent(val eventId: EventId) : AttachmentOwner
+}
+
+data class Attachment(
+    val id: AttachmentId,
+    val owner: AttachmentOwner,
+    val kind: AttachmentKind,
+    val mode: AttachmentMode = AttachmentMode.MANAGED,
+    val displayName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val sha256: String,                 // lowercase hex, 64 chars
+    val storageProvider: StorageProvider = StorageProvider.SAF_TREE,
+    val storageLocator: String,         // provider-relative, see AttachmentLocator
+    val capturedOn: String?,            // ISO date, user-editable
+    val notes: String = "",
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/** The only question the thumbnail path asks. */
+val Attachment.isImage: Boolean get() = mimeType.startsWith("image/")
+
+/** One thing wrong with an attachment command. The list is closed (spec §4). */
+sealed interface AttachmentProblem {
+    data object BlankName : AttachmentProblem
+    data object NoStore : AttachmentProblem
+    data object StoreUnavailable : AttachmentProblem
+    data class TooLarge(val limit: Long) : AttachmentProblem
+    /** The thing you named is not there: the owner row, or the attachment row itself. */
+    data object OwnerMissing : AttachmentProblem
+    data object Unchanged : AttachmentProblem
+}
+
+/**
+ * Where an attachment's bytes live, relative to the store's root. The display name is never in
+ * the path: a rename must not move bytes, and a file listing must not read as a private label.
+ */
+object AttachmentLocator {
+    private val EXTENSION = Regex("^[a-z0-9]{1,8}$")
+
+    /** `assets/<asset-id>` or `events/<event-id>` — the per-owner directory. */
+    fun dirFor(owner: AttachmentOwner): String = when (owner) {
+        is AttachmentOwner.OfAsset -> "assets/${owner.assetId.value}"
+        is AttachmentOwner.OfEvent -> "events/${owner.eventId.value}"
+    }
+
+    fun forOwner(
+        owner: AttachmentOwner,
+        id: AttachmentId,
+        displayName: String,
+        mimeType: String,
+    ): String = "${dirFor(owner)}/${id.value}.${extension(displayName, mimeType)}"
+
+    /** The name's own extension wins; then what [MimeTypes] knows; then `bin`. */
+    fun extension(displayName: String, mimeType: String): String {
+        val fromName = displayName.substringAfterLast('.', "").lowercase()
+        if (fromName.isNotEmpty() && EXTENSION.matches(fromName)) return fromName
+        return MimeTypes.extensionFor(mimeType) ?: "bin"
+    }
+
+    /** What the backup reader checks: this locator could only have been built for this row. */
+    fun matchesShape(locator: String, owner: AttachmentOwner, id: AttachmentId): Boolean =
+        Regex("^${Regex.escape(dirFor(owner))}/${Regex.escape(id.value)}\\.[a-z0-9]{1,8}$")
+            .matches(locator)
+}
+
+object MimeTypes {
+    private const val DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    private const val XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    private val EXTENSIONS = mapOf(
+        "image/jpeg" to "jpg",
+        "image/png" to "png",
+        "application/pdf" to "pdf",
+        "application/zip" to "zip",
+        "text/plain" to "txt",
+        DOCX to "docx",
+        XLSX to "xlsx",
+    )
+
+    /** Already-compressed payloads, which the artifacts archive STOREs rather than deflating. */
+    private val COMPRESSED = setOf("image/jpeg", "image/png", "application/pdf", "application/zip")
+
+    /** Lowercased and stripped of parameters: `image/jpeg; charset=x` is `image/jpeg`. */
+    fun normalise(mimeType: String): String =
+        mimeType.substringBefore(';').trim().lowercase().ifEmpty { "application/octet-stream" }
+
+    /** Derived from [EXTENSIONS], so the forward and inverse lookups cannot drift apart. */
+    private val MIME_BY_EXTENSION = EXTENSIONS.entries.associate { (mime, ext) -> ext to mime }
+
+    /**
+     * Spellings [EXTENSIONS] does not carry, because [extensionFor] has to pick exactly one
+     * extension per type and these are the other ones people's files are actually called.
+     *
+     * `jpeg` is the same payload as the table's `jpg`; `tif` and `htm` name types the model needs no
+     * extension *for*, because nothing here ever writes one. A locator can still arrive spelled any
+     * of those ways — the person's own file was — and telling a document provider
+     * `application/octet-stream` for a file it could have shown is worse than telling it the truth.
+     *
+     * Consulted only after [MIME_BY_EXTENSION], so the table stays the one place a type is named
+     * and an alias can never contradict it.
+     */
+    private val ALIASES = mapOf(
+        "jpeg" to "image/jpeg",
+        "tif" to "image/tiff",
+        "htm" to "text/html",
+    )
+
+    fun extensionFor(mimeType: String): String? = EXTENSIONS[normalise(mimeType)]
+
+    /**
+     * The inverse of [extensionFor], widened by [ALIASES]: what to tell a document provider when a
+     * locator's extension is all that is on hand. An extension neither table names is
+     * `application/octet-stream`, which is what an unknown payload is.
+     */
+    fun mimeForExtension(ext: String): String = ext.lowercase()
+        .let { key -> MIME_BY_EXTENSION[key] ?: ALIASES[key] }
+        ?: "application/octet-stream"
+
+    fun isCompressed(mimeType: String): Boolean = normalise(mimeType) in COMPRESSED
+}
+
+/** A default the person may override; never a constraint (spec §4). */
+object AttachmentKinds {
+    fun inferFrom(mimeType: String, fromCamera: Boolean): AttachmentKind = when {
+        fromCamera -> AttachmentKind.PHOTO
+        MimeTypes.normalise(mimeType).startsWith("image/") -> AttachmentKind.PHOTO
+        MimeTypes.normalise(mimeType) == "application/pdf" -> AttachmentKind.DOCUMENT
+        else -> AttachmentKind.OTHER
+    }
+}
