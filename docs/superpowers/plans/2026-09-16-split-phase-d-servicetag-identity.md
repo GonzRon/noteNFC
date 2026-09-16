@@ -2102,7 +2102,7 @@ adb devices
 
 Expected: exactly one `emulator-5554  device` line **and no physical device**. If a phone is listed, stop and unplug it: the suite wipes app data and the phone holds the owner's real journal.
 
-Run: `./gradlew :app:connectedDebugAndroidTest --console=plain`
+Run: `ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain`
 Expected: PASS — `AppSmokeTest`, `DeepLinkSmokeTest`, `NavigationSmokeTest`, `JournalSmokeTest`, `ComponentsSmokeTest`, `EditorsDeviceProofTest`, `JournalDeviceProofTest`, `AssetModelDeviceProofTest`, `AttachmentsDeviceProofTest`, `SafTreeAttachmentStoreContractTest`, and the new `TagIdentityDispatchTest`. The deep-link tests now drive `servicetag://`, and the label assertions now read `ServiceTag`.
 
 - [ ] **Step 5: A fresh install, looked at**
@@ -2147,7 +2147,7 @@ git commit --allow-empty -m "phase d verification: no notenfc left in app or cor
 **Files:**
 - Create: `app/src/androidTest/kotlin/com/loosecannon/servicetag/ui/NfcIdentityDeviceProofTest.kt`
 - Create: `docs/architecture/product-split-evidence.md`
-- Modify: `~/Documents/Projects/AndroidStudioProjects/noteNFC/.superpowers/split/ledger.md` (one line — **not** in this repository, and not committed here; `.superpowers/` is git-ignored)
+- (Controller's split ledger is NOT touched by the implementer: report the one-line Phase D summary in your report file and the controller records it.)
 
 **Interfaces:**
 - Consumes: Tasks 1–16.
@@ -2281,7 +2281,7 @@ The sheet wordings above are `TagResultSheet`'s after Task 8's prose pass; if a 
 ```bash
 export ANDROID_SERIAL=emulator-5554
 adb devices     # one emulator, no phone
-./gradlew :app:connectedDebugAndroidTest --tests '*NfcIdentityDeviceProofTest' --console=plain
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --tests '*NfcIdentityDeviceProofTest' --console=plain
 ```
 
 Expected: PASS, four tests. A failure in `ourTagOpensTheAssetItIsBoundTo` is worth reading carefully: it is the whole ambient path — filter → trampoline → codec → `ResolveTag` → `MainActivity` — and it is the row §21 calls "ambient NFC as the normal read path".
@@ -2291,7 +2291,7 @@ Expected: PASS, four tests. A failure in `ourTagOpensTheAssetItIsBoundTo` is wor
 ```bash
 ./gradlew clean :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --console=plain
 export ANDROID_SERIAL=emulator-5554
-./gradlew :app:connectedDebugAndroidTest --console=plain
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain
 ```
 
 Expected: everything green, both APKs built, the instrumented suite green including the two new NFC suites. Write down the test counts — the evidence file quotes them.
@@ -2380,7 +2380,7 @@ unfilled placeholder in an evidence file is a defect, not a formatting detail.
 
 - [ ] **Step 5: Add the ledger line**
 
-Append one line to `~/Documents/Projects/AndroidStudioProjects/noteNFC/.superpowers/split/ledger.md`, in the style of the Phase A and B entries: Phase D complete, the first and last commit SHAs, the fifteen tasks, the §A.1.1 pass, gate 5 ready for review, mutation of anything **remote** still on hold. That file lives in the other checkout and is git-ignored; it is not committed from here.
+Do not write to the controller's split ledger. Put the one-line Phase D summary (commit range, gate results, the measured facts) at the top of your report file; the controller appends it to the ledger.
 
 - [ ] **Step 6: Commit**
 
