@@ -364,16 +364,26 @@ class NfcReaderModeSession(activity: Activity, onTag: (Tag) -> Unit) {
     fun start(); fun stop()
 }
 
+/**
+ * What `inspect` read from the tag (whole-branch review C1/I8, 2026-09-17). A consumer's `when` over
+ * this cannot mistake an unreadable tag for an empty one — the earlier `existingRecords` +
+ * `unreadable: String?` pair let the natural mapping flatten unparseable NDEF to `Empty` → `Proceed`.
+ */
+sealed interface TagRead {
+    /** The tag's NDEF parsed; [records] may be empty for a formatted, blank tag. */
+    data class Readable(val records: List<NdefRecordData>) : TagRead
+    /** The NDEF could not be parsed; still overwritable; the consumer classifies it `ExistingContent.Unreadable`. [cause] is the platform's exception, kept for the consumer's log. */
+    data class Unreadable(val reason: String, val cause: Throwable?) : TagRead
+}
+
 class TagInspection(
     val uid: String?,
-    val existingRecords: List<NdefRecordData>,
+    val read: TagRead,
     /** `Ndef.maxSize`, or -1 for a tag that still needs formatting: capacity unknown until then. */
     val maxSize: Int,
     val writable: Boolean,
     val needsFormat: Boolean,
     val canLock: Boolean,
-    /** Set when the tag's NDEF could not be parsed; the tag is still overwritable. */
-    val unreadable: String? = null,
 )
 
 sealed interface WriteResult {
@@ -386,7 +396,13 @@ sealed interface WriteResult {
     data object Unsupported : WriteResult
     data class VerifyMismatch(val readBack: List<NdefRecordData>) : WriteResult
     /** [reason] is diagnostic prose; [cause] is the exception that was folded, kept so a consumer can log it (F-1, 2026-09-17). The library neither logs it nor stringifies it. */
-    data class Failed(val reason: String, val cause: Throwable? = null) : WriteResult
+    /**
+     * [attempted] = false means the library refused before any tag I/O, so nothing on the tag can have
+     * changed (a formatable-only tag handed to `write`; an already-formatted tag handed to `format`);
+     * true means the operation reached the radio and its effect is indeterminate (whole-branch review
+     * I1, 2026-09-17) — the distinction both consumers' retain/remove rules turn on.
+     */
+    data class Failed(val reason: String, val cause: Throwable? = null, val attempted: Boolean = true) : WriteResult
 }
 
 /**
@@ -418,8 +434,12 @@ object TagWriter {
      */
     fun format(tag: Tag): WriteResult
 
-    /** Permanent. Call only after a verified read-back; the returned value is the proof it took. */
-    fun lock(tag: Tag): Boolean
+    /**
+     * Permanent, and never blind (invariant 9, enforced by code since the whole-branch review I2,
+     * 2026-09-17): reads the tag fresh, compares structurally with [expected], and locks ONLY on a
+     * match; any mismatch or I/O failure returns false. The returned value is the proof it took.
+     */
+    fun lock(tag: Tag, expected: List<NdefRecordData>): Boolean
 }
 
 /** The seam that keeps `android.nfc.Tag` — unconstructible in a JVM test — out of decision logic. */
@@ -430,7 +450,7 @@ interface TagIo {
     /** `NdefFormatable.format(null)` → [WriteResult.Formatted]; never writes a payload (H3). */
     fun format(tag: TagHandle): WriteResult
     fun write(tag: TagHandle, records: List<NdefRecordData>, lock: Boolean): WriteResult
-    fun lock(tag: TagHandle): Boolean
+    fun lock(tag: TagHandle, expected: List<NdefRecordData>): Boolean
 }
 object RealTagIo : TagIo   // the only place a Tag comes back out of a handle; format delegates to TagWriter.format
 
@@ -461,7 +481,10 @@ fun WriteRoute.Writable.fit(needed: Int): CapacityVerdict   // needed = the exac
 
 ### 4.3 Invariants
 
-Invariants 1–9 and 13 are the library's, and it tests them. Invariants 10–12 are **protocol**
+Invariants 1–5, 7–9 and 13 are the library's, each proven by a test, by code, by the scan or by a
+physical row in the runbook's §D (the README says which); invariant 6 is stated here but is the
+**consumer's** to prove — the library has neither an `applicationId` nor a manifest filter (§4.8's
+binding test lives in each app). Invariants 10–12 are **protocol**
 invariants each consumer implements today; they become the library's only if `TagWriteSession` is
 promoted (§4.7).
 
@@ -470,8 +493,10 @@ promoted (§4.7).
    `Recognised`. This matters even with different payload schemes, because **both products' bodies
    may be valid UUID payloads**, so any path that read a payload without checking the type first
    could present a ServiceTag tag as a plausible NoteTag target. `Recognised` therefore carries only
-   the body, never the whole record: there is no API shape in which a caller can reach a payload it
-   did not type-check.
+   the body, never the whole record, so the **shortest path is the gated one**. (Amended 2026-09-17:
+   the earlier claim that "no API shape" reaches an unchecked payload was too strong — `TagRead.Readable`
+   must hand the caller the raw records for `decode` to gate, and `Recognised` is constructible from
+   a consumer module. The invariant is that the library's own path gates, and its tests prove it.)
 2. **The AAR, when present, is never first**, and is **absent by default** (O13). Put an AAR first
    and the tag stops matching the `NDEF_DISCOVERED` filter, because the platform reads the *first*
    record to decide the tag's type (**[platform-doc]**, arch §5.3; order **[JVM-proven]** today).
@@ -567,16 +592,26 @@ governs the exceptions: *"Inspect false positives from comments/history, do not 
 ```bash
 # nfc-tag-core/tools/forbidden-scan.sh  — NEW; a CI gate, run BEFORE the build
 set -euo pipefail
-WORDS='[Jj]oplin|[Oo]bsidian|[Ll]ogseq|[Ee]vernote|[Nn]otion|OneNote|[Tt]odoist|note[ _-]?id|noteNFC|notenfc|NoteTag|notetag|ServiceTag|servicetag|Asset|AssetEvent|Measurement|Profile|Schedule|Reminder|Attachment|Room|room3|androidx\.room|Compose|compose|[Bb]ackup|[Jj]ournal|[Nn]avigation|deep[ _-]?link|md5|MD5'
+WORDS='[Jj]oplin|[Oo]bsidian|[Ll]ogseq|[Ee]vernote|[Nn]otion|OneNote|[Tt]odoist|note[ _-]?id|noteNFC|notenfc|NoteTag|notetag|ServiceTag|servicetag|Asset|AssetEvent|Measurement|Profile|Schedule|Reminder|Attachment|Room|room3|androidx\.room|Compose|compose|[Bb]ackup|[Jj]ournal|[Nn]avigation|deep[ _-]?link|md5|MD5|FLAG_READER_SKIP_NDEF_CHECK'
+# The paths cover the two source trees, the settings file, the three build scripts and the catalog
+# (amended 2026-09-17: a product-only alias or default in a build script is exactly what the scan is
+# for). Allow entries are `path:fragment`: a hit `p:n:content` is suppressed iff p == path exactly
+# and content contains fragment as a fixed substring; comment and blank lines are not patterns.
 HITS=$(grep -RInE "$WORDS" \
         --include='*.kt' --include='*.kts' --include='*.xml' --include='*.toml' --include='*.md' \
         nfc-core/src nfc-android/src settings.gradle.kts \
-        | grep -vFf tools/forbidden-scan.allow || true)
+        build.gradle.kts nfc-core/build.gradle.kts nfc-android/build.gradle.kts gradle/libs.versions.toml \
+        | suppress_allowed || true)          # see tools/forbidden-scan.sh for suppress_allowed
 if [ -n "$HITS" ]; then echo "$HITS"; echo "forbidden knowledge in the library"; exit 1; fi
 ```
 
+`FLAG_READER_SKIP_NDEF_CHECK` is on the list because invariant 4 is exactly "this string must not
+appear in the library" (review P4): the scan is its standing gate.
+
 **False positives go in an allow file, never into a weakened pattern.**
-`tools/forbidden-scan.allow` holds one exact `path:fragment` per accepted hit with a one-line reason.
+`tools/forbidden-scan.allow` holds one exact `path:fragment` per accepted hit with a one-line reason
+(matched as: the path exactly, the fragment as a fixed substring of that line's content — never a
+whole `path:line:content` line, which would pin a line number; review I5, 2026-09-17).
 Expected entries, and how each was inspected rather than accepted:
 
 | Expected hit | Verdict |
@@ -656,7 +691,7 @@ the ServiceTag repository** — the renamed continuation of this one, which is w
 | `nfc-core/…/NdefSize.kt` | **NoteTag** `core/…/notetag/core/nfc/NdefSize.kt` (whole file, Phase E) | NoteTag `b0ec89c` (in the NoteTag repository) | package line; an empty list refused (F-2) |
 | `nfc-android/…/NdefBridge.kt` | `app/…/nfc/NdefBridge.kt` (whole file) | `dc1bb1c` "nfc adapter: ndef bridge, reader-mode session, tag writer with read-back" | wholesale; imports only `android.*` and `NdefRecordData`, so nothing to strip. `Intent.nfcTag()` is dead code in the app today (arch §6.2) and becomes live API. `serialisedSize()` is **NEW**, lifting `message.toByteArray().size` out of `TagWriter.write` so a consumer can ask before a tap |
 | `nfc-android/…/NfcReaderModeSession.kt` | `app/…/nfc/NfcReaderModeSession.kt` (whole file, 39 lines) | `dc1bb1c`; **corrected at `e2cf1d0`** | verbatim. **The doc comment is half the value — carry it across** (arch §6.2), including why the platform NDEF check stays on and the `onTag` threading contract |
-| `nfc-android/…/TagWriter.kt` (+ `TagInspection`, `WriteResult`) | `app/…/nfc/TagWriter.kt` (whole file, 126 lines) | `dc1bb1c`; throw contracts at `bdcc475`; lock-after-read-back and the unlocked format path at `e2cf1d0` | the single `NdefCodec.decode` call — used only to classify what was read — is removed, so the library carries no product type string; `TagInspection.existing: TagPayload` becomes `unreadable: String?` and the caller classifies. Adds the formatted-size capacity rule (invariant 7) |
+| `nfc-android/…/TagWriter.kt` (+ `TagInspection`, `WriteResult`) | `app/…/nfc/TagWriter.kt` (whole file, 126 lines) | `dc1bb1c`; throw contracts at `bdcc475`; lock-after-read-back and the unlocked format path at `e2cf1d0` | the single `NdefCodec.decode` call — used only to classify what was read — is removed, so the library carries no product type string; `TagInspection.existing: TagPayload` becomes `read: TagRead` (`Readable(records)` | `Unreadable(reason, cause)`) and the caller classifies. Adds the formatted-size capacity rule (invariant 7) |
 | `nfc-android/…/TagIo.kt` (+ `TagHandle`, `NfcTagHandle`, `RealTagIo`) | `app/…/ui/scan/TagWriteController.kt:32-65` | `c808b49` "scan, tag result sheets, write flow with the 1b rules, share card, links" | moved out of a UI file, where it does not belong (arch §6.2); `format` joins the seam |
 | `nfc-android/…/WriteRoute.kt` | the routing both controllers do inline (`TagWriteController`; NoteTag `NoteTagWriteController`) | `c808b49`; NoteTag `840e6ba` | **NEW** (F-3): two-stage — `route()` without a message size, then `fit(needed)` on a `Writable(maxSize)` |
 | `nfc-core/src/test/…/NdefEnvelopeTest.kt` | `core/src/test/…/NdefCodecTest.kt` | `76b751a`; legacy cases trimmed at `26ec9d0` | the legacy-key cases do not come along (O2); `evernoteEraTypeIsForeign` becomes the parameterised sibling-isolation case |
