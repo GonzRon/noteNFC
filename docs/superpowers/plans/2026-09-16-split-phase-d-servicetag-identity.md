@@ -151,7 +151,7 @@ Expected: BUILD SUCCESSFUL. `app/build/outputs/apk/debug/app-debug.apk` exists.
 - [ ] **Step 3: Read the identity back out of the APK, not out of the source**
 
 ```bash
-AAPT2="$HOME/Android/Sdk/build-tools/35.0.0/aapt2"   # any build-tools >= 34 will do
+AAPT2="$HOME/Android/Sdk/build-tools/36.0.0/aapt2"   # any build-tools >= 34 will do
 "$AAPT2" dump badging app/build/outputs/apk/debug/app-debug.apk | grep -E "^package:|application-label:"
 ```
 
@@ -1298,7 +1298,7 @@ Expected: PASS, both APKs built. If Kotlin complains about an unresolved `Theme.
 - [ ] **Step 5: Read the label back out of the APK**
 
 ```bash
-AAPT2="$HOME/Android/Sdk/build-tools/35.0.0/aapt2"
+AAPT2="$HOME/Android/Sdk/build-tools/36.0.0/aapt2"
 "$AAPT2" dump badging app/build/outputs/apk/debug/app-debug.apk | grep -E "^package:|application-label:|launchable-activity:"
 ```
 
@@ -1381,7 +1381,7 @@ rmdir app/src/main/res/mipmap-anydpi 2>/dev/null || true
 
 ```bash
 ./gradlew :app:assembleDebug --console=plain
-AAPT2="$HOME/Android/Sdk/build-tools/35.0.0/aapt2"
+AAPT2="$HOME/Android/Sdk/build-tools/36.0.0/aapt2"
 "$AAPT2" dump badging app/build/outputs/apk/debug/app-debug.apk | grep -E "^application:|application-icon"
 unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -i ic_launcher
 ```
@@ -2075,7 +2075,7 @@ git grep -lE 'noteNFC' -- app core | cat        # expect: app/release/app-releas
 
 ```bash
 ./gradlew clean :core:test :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin --console=plain
-AAPT2="$HOME/Android/Sdk/build-tools/35.0.0/aapt2"
+AAPT2="$HOME/Android/Sdk/build-tools/36.0.0/aapt2"
 "$AAPT2" dump badging app/build/outputs/apk/debug/app-debug.apk \
   | grep -E "^package:|application-label:|launchable-activity:|uses-permission"
 unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -ci 'ic_launcher.*\.webp'   # expect: 0

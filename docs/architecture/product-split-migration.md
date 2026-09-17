@@ -530,6 +530,9 @@ workstation-driven.
 
 **Do.**
 
+Before anything else, read the preserved data archive once, off the phone: `unzip -p <data zip> data.json` and confirm its `nfcTags` array holds no row whose `payloadFormat` is anything but `V1`. ServiceTag's restore refuses an unknown enum name for the whole archive (`BackupFormat.enumOrCorrupt`), so a `LEGACY_MD5` row would abort §C.4 cleanly but completely. The set exported on 2026-09-16 has zero `nfcTags` rows (checked 2026-09-16 during Phase D), so this is a guard for a re-export, not a known problem.
+
+
 ```bash
 export ANDROID_SERIAL=<the phone>      # set once, never printed into a document
 STAMP=$(date +%Y%m%d-%H%M%S)
