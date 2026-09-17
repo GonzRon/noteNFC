@@ -91,7 +91,7 @@ two real consumers (§4, C5, O5).
 | | **ServiceTag** | **NoteTag** | **nfc-tag-core** |
 |---|---|---|---|
 | Remote | `https://github.com/GonzRon/ServiceTag.git` | `https://github.com/GonzRon/NoteTag.git` | `https://github.com/GonzRon/nfc-tag-core.git` |
-| Default branch | `master` (unchanged) | `master` | `main` (ratified P1) — a new repo has no history to inherit a branch name from |
+| Default branch | `master` (unchanged) | `master` | `master` — owner F-4 ruling, 2026-09-17, superseding P1's earlier `main` choice: a new repo has no history to inherit a branch name from, so all three repositories share one convention; pinned by `git init -b master` and verified on GitHub after the first push (runbook §B.1) |
 | Visibility | PUBLIC, unchanged | **PUBLIC** (controller ruling): the same history is already public in this repository, so branching it publishes nothing new. What it does publish is stated below | PUBLIC |
 | How it comes into being | **Rename** of the current `GonzRon/noteNFC` (§9, O7): same repository, same history, same issues, same design record. The rename is a settings PATCH the active token can perform; it **cannot delete** a repository (arch §4.3), so no step may require one | **New** repository, then a branch taken from **`c84b881`** in a local clone of the pre-split history — exact ancestry, no rewrite, no graft, **no second history rewrite** (C6, arch §2.7) | **New** repository seeded from files extracted out of `ac523d7`, with the provenance table in §4.6 copied into its `README.md`. "Correctness of the neutral extraction matters more" than carrying history (§9) |
 | History it carries | everything: 175 commits, 8 merges, the whole Evernote→Joplin→Phase-0→Phase-4A line (arch §2.2, §3, §9 D1) | `5fb6aed`…`c84b881` — 30 commits, **zero merge commits**, independently confirmed by the archaeology review | **none**; a fresh root commit. Ancestry is documented, not inherited — §4.6 |
@@ -1313,7 +1313,7 @@ rather than in a list:
 | **P20** | approved — Compose, one activity, two tiny screens | §4.9 |
 | **P21** | approved — ServiceTag keeps its AAR by default pending the §D.3 dispatch spike; NoteTag ships without one per O13 | §3 identity table; §4.9 |
 
-Ratified earlier, and likewise in the text: P1 and P6 (library branch and Kotlin package roots; O15
+Ratified earlier, and likewise in the text: P1 and P6 (library branch and Kotlin package roots — P1's package-root portion remains ratified; its library-branch portion, `main`, is **superseded by the owner's F-4 ruling of 2026-09-17: `master`**; O15
 removed Maven coordinates entirely), P2, P3 and P5 (cosmetic identities), P7 (the Kotlin-stdlib-only
 `nfc-core`), P8 (the formatted-size capacity rule, now corrected by G1), P10 (rename the fixture
 directory rather than allow-list it), P13 (create the library remote first), P17 (product-prefixed
