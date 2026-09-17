@@ -13,6 +13,12 @@ val keystoreProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// A signing config needs all four values. A partial properties file must fail to SIGN, not fail to
+// CONFIGURE: with only some keys present the old `isNotEmpty()` guard built a release config whose
+// storeFile was null, and the whole build died at configuration time.
+val hasSigningKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    .all { keystoreProps.getProperty(it)?.isNotBlank() == true }
+
 // This app's identity, typed once. The namespace, the applicationId, the NFC Forum external-type
 // domain and the Application Record all read it, so no two of them can be edited apart.
 val appId = "com.loosecannon.servicetag"
@@ -45,7 +51,7 @@ android {
     }
 
     signingConfigs {
-        if (keystoreProps.isNotEmpty()) {
+        if (hasSigningKeys) {
             create("release") {
                 storeFile = file(keystoreProps.getProperty("storeFile"))
                 storePassword = keystoreProps.getProperty("storePassword")
@@ -64,7 +70,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (keystoreProps.isNotEmpty()) signingConfig = signingConfigs.getByName("release")
+            if (hasSigningKeys) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

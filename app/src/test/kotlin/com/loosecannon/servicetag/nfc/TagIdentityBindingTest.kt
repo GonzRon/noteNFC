@@ -1,7 +1,9 @@
 package com.loosecannon.servicetag.nfc
 
 import com.loosecannon.servicetag.BuildConfig
+import com.loosecannon.servicetag.core.links.DeepLinkRoute
 import com.loosecannon.servicetag.core.nfc.TagIdentity
+import com.loosecannon.servicetag.core.nfc.TagRoute
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -53,6 +55,18 @@ class TagIdentityBindingTest {
         assertEquals(
             "no identity literal may survive in the manifest", 0,
             Regex(Regex.escape(identity.externalType)).findAll(manifest).count(),
+        )
+    }
+
+    /**
+     * The deep-link scheme is bound the same way the NDEF identity is: one `:core` constant, which
+     * both route parsers and the manifest's `servicetag://` filters read.
+     */
+    @Test fun theDeepLinkSchemeIsTheOneWeMeant() {
+        assertEquals(TagRoute.SCHEME, DeepLinkRoute.SCHEME)
+        assertTrue(
+            "the servicetag:// filters must carry the scheme :core parses",
+            manifest.contains("android:scheme=\"${TagRoute.SCHEME}\""),
         )
     }
 

@@ -736,10 +736,10 @@ class BackupViewModelTest {
     }
 
     /**
-     * The retired product's file names still import. The name is not part of the format: the
-     * importer is handed bytes (`BackupIO.read()`), and `BackupSetNames` is only ever consulted
-     * on the export side (arch §7.3). This is the regression guard for the prefix change, so the
-     * owner's preserved `noteNFC-*` set stays importable after the rename.
+     * The file name is not part of the format: the importer is handed bytes (`BackupIO.read()`),
+     * and `BackupSetNames` is only ever consulted on the export side (arch §7.3). This is the
+     * regression guard for the prefix change — an archive named with the retired `noteNFC-*`
+     * prefix restores, because nothing on the import path reads the name at all.
      */
     @Test fun aPreservedRetiredPrefixArchiveStillImports() = runTest {
         val vm = viewModel()

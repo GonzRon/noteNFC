@@ -43,10 +43,10 @@ private const val SUBSCRIPTION_GRACE_MS = 5_000L
  * `LaunchLink` has no route on purpose: a link tag launches its note and shows no sheet (R-7).
  */
 internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
-    is Resolution.OpenAsset -> Route.TagResult(tag.payloadFormat.name, tag.payloadKey)
-    is Resolution.Unbound -> Route.TagResult(tag.payloadFormat.name, tag.payloadKey)
-    is Resolution.Revoked -> Route.TagResult(tag.payloadFormat.name, tag.payloadKey)
-    is Resolution.UnknownV1 -> Route.TagResult(PayloadFormat.V1.name, tagId.value)
+    is Resolution.OpenAsset -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
+    is Resolution.Unbound -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
+    is Resolution.Revoked -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
+    is Resolution.UnknownV1 -> Route.TagResult(TagResultWire.wordFor(PayloadFormat.V1), tagId.value)
     is Resolution.NeedsNewerApp ->
         Route.TagResult(TagResultWire.FORMAT_NONE, "written by a newer ServiceTag (payload format $version)")
     is Resolution.NotOurs -> Route.TagResult(TagResultWire.FORMAT_NONE, describe(payload))
@@ -296,11 +296,11 @@ class WriteTagViewModel(
 
 /** The tag row the sheet is talking about, as the plate spells identity (G1 §3 correction a). */
 fun TagBinding.identityLine(): String =
-    "${id.value.take(8)} · v1"
+    "${id.value.take(8)} · ${payloadFormat.name.lowercase()}"
 
 /** The same line for a tag that has no row yet. */
 fun identityLine(key: String): String =
-    "${key.take(8)} · v1"
+    "${key.take(8)} · ${PayloadFormat.V1.name.lowercase()}"
 
 /** The honest name for a target that has none: a spare tag is bound on its first scan. */
 private fun unnamed(target: TagTarget): String =

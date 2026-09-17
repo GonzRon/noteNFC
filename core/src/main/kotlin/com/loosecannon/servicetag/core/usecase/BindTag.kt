@@ -24,6 +24,7 @@ class BindTag(
     private val uow: UnitOfWork,
     private val clock: Clock,
 ) {
+    // [format] is kept, not folded away to V1: `payload_format` is a persisted discriminator and a second format is planned.
     suspend fun run(format: PayloadFormat, key: String, target: TagTarget, label: String? = null): TagBinding {
         require(target != TagTarget.None) { "bind needs an asset or a link" }
         NdefCodec.requireCanonicalUuid(TagId(key))

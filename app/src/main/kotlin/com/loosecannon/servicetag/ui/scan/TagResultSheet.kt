@@ -57,15 +57,17 @@ import com.loosecannon.servicetag.ui.theme.SheetShape
 import com.loosecannon.servicetag.ui.theme.SheetSentence
 
 /**
- * What a scanned (format, key) pair turned out to be — including "not ours" (format NONE).
+ * What a scanned (format, key) pair turned out to be — including "not ours"
+ * ([TagResultWire.FORMAT_NONE]).
  *
  * The sheets here are the D12 §11 / G1 §1.4 set: eyebrow, one sentence, the mono identifier,
  * actions stacked with the filled one first. None of them is an error: an unregistered tag and a
  * foreign tag are both offers, and only the wording and the glyph change.
  *
  * @param key the scanned tag's identifier — but only while [format] names a payload format we
- *   wrote. When `format == "NONE"` there is no identifier to show and `key` carries a prose reason
- *   the tag could not be read, so nothing may present it as an id or look it up as one.
+ *   wrote. When [format] is [TagResultWire.FORMAT_NONE] there is no identifier to show and `key`
+ *   carries a prose reason the tag could not be read, so nothing may present it as an id or look
+ *   it up as one.
  */
 @Composable
 fun TagResultSheet(

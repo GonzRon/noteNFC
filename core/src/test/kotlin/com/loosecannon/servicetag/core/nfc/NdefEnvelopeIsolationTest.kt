@@ -15,6 +15,7 @@ import kotlin.test.assertTrue
  * does not exist in this repository and never will.
  */
 class NdefEnvelopeIsolationTest {
+    // TODO(Phase F): this test names an application; it stays behind when nfc-core moves to nfc-tag-core
     private val ours = TagIdentity("com.loosecannon.servicetag", "tag", "com.loosecannon.servicetag")
     private val codec = NdefCodec(ours)
 
@@ -24,6 +25,7 @@ class NdefEnvelopeIsolationTest {
     /** A NoteTag JOPLIN_NOTE record: version 1, kind 0x01, flags 0, then 16 raw id bytes. */
     @OptIn(ExperimentalStdlibApi::class)
     private val noteTagJoplinRecord = external(
+        // TODO(Phase F): this test names an application; it stays behind when nfc-core moves to nfc-tag-core
         "com.loosecannon.notetag:tag",
         byteArrayOf(0x01, 0x01, 0x00) + "123e4567e89b12d3a456426614174000".hexToByteArray(),
     )

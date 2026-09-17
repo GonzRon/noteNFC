@@ -22,6 +22,7 @@ private const val NTAG213_MAX_MESSAGE_BYTES = 137
 
 @OptIn(ExperimentalStdlibApi::class)
 class NdefCodecV1Test {
+    // TODO(Phase F): this test names an application; it stays behind when nfc-core moves to nfc-tag-core
     private val identity = TagIdentity("com.loosecannon.servicetag", "tag", "com.loosecannon.servicetag")
     private val codec = NdefCodec(identity)
     private val id = TagId("123e4567-e89b-12d3-a456-426614174000")

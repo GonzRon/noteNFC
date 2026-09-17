@@ -39,6 +39,11 @@ class TagResultWireTest {
         assertNull(TagResultWire.payloadOf("v1", id.value))   // the enum name, exactly, or nothing
     }
 
+    /** The word a stored row contributes to the pair is that row's enum name, nothing else. */
+    @Test fun aStoredRowsWordIsItsEnumName() {
+        assertEquals(PayloadFormat.V1.name, TagResultWire.wordFor(PayloadFormat.V1))
+    }
+
     /** A V1 word with a key that is not a tag id is still not a payload. */
     @Test fun aV1WordNeedsACanonicalId() {
         assertNull(TagResultWire.payloadOf(PayloadFormat.V1.name, "not-a-uuid"))

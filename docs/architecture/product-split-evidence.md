@@ -25,7 +25,7 @@ artefacts; the controller recorded the result and amended the plan in `094b023`.
 fifteen task commits, two fix rounds, one regression pass, six plan commits — not the
 "fifteen plus two verification commits" the plan's template guessed at.
 
-**Identity, read off the built debug APK** (`aapt2 dump badging`, build-tools 35.0.0):
+**Identity, read off the built debug APK** (`aapt2 dump badging`, build-tools 36.0.0):
 `package: name='com.loosecannon.servicetag' versionCode='7' versionName='2.5'`,
 `application-label:'ServiceTag'`. The two launchable activities are `MainActivity` and the
 debug-only `DebugBackupActivity` (`label='ServiceTag Backup (debug)'`); the third
@@ -153,7 +153,7 @@ as not attempted and why.
 | §21 row | Discharged by |
 |---|---|
 | the core maintenance product (assets, journal, measurements, profiles, templates) | `:core:test` + `:app:testDebugUnitTest` + `AssetModelDeviceProofTest`, `JournalDeviceProofTest`, `EditorsDeviceProofTest` |
-| NFC asset binding, ambient resolution, standalone links | `NfcIdentityDeviceProofTest` + `TagUseCasesRoomTest` |
+| NFC asset binding, ambient resolution, standalone links | `NfcIdentityDeviceProofTest` + `TagUseCasesRoomTest` + `ResolveTagTest.boundToALinkLaunchesIt` (`:core:test`) |
 | foreign / malformed safety | `NfcIdentityDeviceProofTest` + `NdefEnvelopeIsolationTest` + `NdefCodecTest` |
 | intentional write, capacity, read-back | `TagWriteControllerTest` off-device with the capacity seed; the physical rows are §D Session 1 |
 | attachments | `AttachmentsDeviceProofTest`, `SafTreeAttachmentStoreContractTest` |

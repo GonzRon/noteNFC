@@ -4,6 +4,7 @@ import com.loosecannon.servicetag.core.model.TagId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class OverwritePolicyTest {
     private val mine = TagId("123e4567-e89b-12d3-a456-426614174000")
@@ -15,4 +16,9 @@ class OverwritePolicyTest {
     @Test fun foreignConfirms() { assertIs<OverwriteDecision.Confirm>(OverwritePolicy.decide(TagPayload.Foreign("tnf=1 type=U"), mine)) }
     @Test fun malformedConfirms() { assertIs<OverwriteDecision.Confirm>(OverwritePolicy.decide(TagPayload.Malformed("x"), mine)) }
     @Test fun newerVersionConfirms() { assertIs<OverwriteDecision.Confirm>(OverwritePolicy.decide(TagPayload.NewerVersion(3), mine)) }
+
+    /** The question the user is asked names what is on the tag, not just that something is. */
+    @Test fun reasonNamesTheTagThatIsThere() {
+        assertTrue(other.value in (OverwritePolicy.decide(TagPayload.V1(other), mine) as OverwriteDecision.Confirm).reason)
+    }
 }

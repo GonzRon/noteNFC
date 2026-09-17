@@ -17,6 +17,9 @@ object TagResultWire {
     /** Not a payload format: "this tag is not ours, and the key is why". */
     const val FORMAT_NONE: String = "NONE"
 
+    /** The format word for a stored row. */
+    fun wordFor(format: PayloadFormat): String = format.name
+
     /** The word for a payload the sheet can resolve; [FORMAT_NONE] for everything else. */
     fun formatOf(payload: TagPayload): String = when (payload) {
         is TagPayload.V1 -> PayloadFormat.V1.name

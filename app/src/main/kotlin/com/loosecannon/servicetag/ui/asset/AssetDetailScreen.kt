@@ -87,6 +87,7 @@ import com.loosecannon.servicetag.ui.journal.quickActionLabel
 import com.loosecannon.servicetag.ui.journal.stateColors
 import com.loosecannon.servicetag.ui.journal.stateIcon
 import com.loosecannon.servicetag.ui.journal.stateLabel
+import com.loosecannon.servicetag.ui.scan.identityLine
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import java.time.Instant
 import java.time.LocalDate
@@ -550,7 +551,7 @@ private fun AssetPlate(state: AssetDetailState) {
             "Location" to PlateValue(asset.location),
             "Purchased" to PlateValue(asset.purchaseOn.orEmpty().asDayDate()),
             "In service" to PlateValue(asset.inServiceOn.orEmpty().asDayDate()),
-            "NFC tag" to PlateValue(state.tags.firstOrNull()?.let(::tagIdentity).orEmpty(), mono = true),
+            "NFC tag" to PlateValue(state.tags.firstOrNull()?.identityLine().orEmpty(), mono = true),
         ),
         icon = categoryIcon(asset.category),
         badges = plateBadges(asset, state.outOfSeason),
@@ -683,9 +684,6 @@ private fun componentLine(child: ComponentRow): String = listOfNotNull(
     },
 ).joinToString(" · ")
 
-/** The tag's own id, not the chip's hardware UID (G1 §3 correction a), with the payload format. */
-private fun tagIdentity(tag: TagBinding): String = "${tag.id.value.take(8)} · v1"
-
 @Composable
 private fun TagsSection(tags: List<TagBinding>) {
     SectionHeader(title = "Tags")
@@ -702,7 +700,7 @@ private fun TagsSection(tags: List<TagBinding>) {
             month = month,
             year = year,
             title = if (tag.writtenAt != null) "Tag written" else "Tag bound",
-            detail = tagIdentity(tag),
+            detail = tag.identityLine(),
             badge = if (tag.status != TagStatus.ACTIVE) {
                 {
                     StatusBadge(

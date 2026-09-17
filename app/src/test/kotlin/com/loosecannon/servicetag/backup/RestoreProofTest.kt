@@ -248,10 +248,12 @@ class RestoreProofTest {
             assertEquals(1, g2.links.forAsset(AssetId("asset-furnace")).size)
             assertEquals(listOf(LinkId("link-standalone")), g2.links.standalone().map { it.id })
             assertEquals(TagTarget.None, g2.tags.get(TagId("tag-spare"))!!.target)
-            assertEquals(
-                PayloadFormat.V1,
-                g2.tags.findByPayload(PayloadFormat.V1, "11111111-1111-4111-8111-111111111111")!!.payloadFormat,
-            )
+            // The payload lookup finds the furnace's row: (format, key) survived as a pair, and
+            // the row it names is still pointing at the asset it was bound to.
+            val byPayload = g2.tags.findByPayload(PayloadFormat.V1, "11111111-1111-4111-8111-111111111111")!!
+            assertEquals(TagId("tag-on-furnace"), byPayload.id)
+            assertEquals("11111111-1111-4111-8111-111111111111", byPayload.payloadKey)
+            assertEquals(TagTarget.AssetTarget(AssetId("asset-furnace")), byPayload.target)
         } finally {
             db2.close()
         }

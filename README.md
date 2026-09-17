@@ -124,7 +124,7 @@ in place again — a new key means a new install for every user.
 ## Where this app came from
 
 This repository was a combined note-utility and maintenance product before the 2026 product
-split; the maintenance product kept the history and became ServiceTag, and the note utility was
-reconstructed as its own project. What moved, what stayed, what the identities are now and how
-the data migrated are all in `docs/architecture/product-split-migration.md`. Everything under
+split; the maintenance product kept the history and became ServiceTag, and the note utility is to
+be reconstructed as its own project. What moved, what stayed, what the identities are now and how
+the data is to be migrated are all in `docs/architecture/product-split-migration.md`. Everything under
 `docs/design/` predates the split and is history.
