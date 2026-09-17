@@ -12,25 +12,27 @@
 
 ---
 
-## Owner decisions requested at this review (rule before RELEASE)
+## Owner decisions — ruled 2026-09-17 (HOLD with corrections → scoped review → RELEASE)
 
-| # | Proposal | Why | If refused |
+All seven ACCEPTED (G-2 and G-6 as amended by the corrections below). The table keeps the proposals as argued; the last column is the owner's ruling.
+
+| # | Proposal | Why | Ruling |
 |---|---|---|---|
-| **G-1** | Each app's **`:core` module depends on `:nfc-core`** (`implementation(project(":nfc-core"))`) in addition to `:app` → `:nfc-android` | Target §6.2 shows only `:app` → `:nfc-android`, but both body codecs (`NdefCodec`, `NoteTagCodec`), `OverwritePolicy`'s consumers, `WritePlanner` (`NdefSize`) and `ResolveTap` live in the pure-JVM `:core` modules, which cannot see `:app`'s dependencies. `:nfc-core` is stdlib-only JVM, so the edge is clean and keeps `:core` Android-free | move the body codecs into `:app` — a larger, worse change; not recommended |
-| **G-2** | The release workflow **materialises the existing local signing mechanism** on the runner: it writes `$HOME/.config/<servicetag|notenfc>/keystore.properties` and decodes the keystore from secrets to the path that file names, then runs the unchanged `assembleRelease`; no Gradle change, and the same four-key `hasSigningKeys` guard applies | one signing mechanism in both places; a runner without the secrets simply builds unsigned — which the workflow then **fails closed** on (`apksigner verify` + fingerprint compare), never publishing | a second Gradle signing path driven by env vars; more surface, same result |
-| **G-3** | Names, fixed here: GitHub environment **`release`**; secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`; repository **variable** (not secret) `RELEASE_CERT_SHA256` = the certificate's SHA-256 fingerprint (colon-separated upper-case hex, as `apksigner` prints it). Provisioning is **an owner manual step at K/L** (`gh secret set … --env release`, `gh variable set`), one of the ≤3 | the workflow needs stable names before K/L; the fingerprint is public by the owner's rule and is the independent post-build identity check | different names; the plan's YAML changes one line per name |
-| **G-4** | **NoteTag's product tag namespace follows its `versionName`**: NoteTag ships `versionName = "2.0"` (Phase E, past the historical 1.1), so the final product tag is **`notetag-v2.0`**, not the runbook's `notetag-v1.0`; `release.yml` **fails closed unless the tag's version equals the built `versionName`** (parsed from `aapt2 dump badging`), for both apps (`servicetag-v2.5` ↔ `"2.5"`) | a release whose tag and APK disagree on the version is exactly the inconsistency the owner asked the workflow to refuse; runbook §G (§28) still reserves `notetag-v1.0` | keep `notetag-v1.0` and bump nothing: then `release.yml`'s version check must be dropped, which weakens fail-closed; not recommended |
-| **G-5** | The two consumer **"formatted" sentences** (R3, consumer wording): NoteTag **"Formatted the tag. Hold it to the phone again to write the link."**; ServiceTag **"Formatted. Lift the tag off and hold it again to write."** | R3 said the old sentence overstated what remained; both now say exactly what the next tap does | other wording; the tests pin whatever is ruled |
-| **G-6** | ServiceTag's controller **locks only through `write(lock = true)`** in Phase G; the standalone verify-then-lock branch (`awaitingVerify`) is deleted with the unverified-format path that needed it. The library's `lock(tag, expected)` stays available and unused by ServiceTag | the format path no longer writes, so the second tap is a normal write, which locks after its own verified read-back (invariant 9 by code) | keep a standalone lock tap via `lock(tag, intended)`; adds a state for no user-visible gain |
-| **G-7** | NoteTag keeps its emulator `NdefSizeDeviceTest` as **the product's own 49-byte pin**, retargeted to the library types, rather than relying only on the library's generic pin | the number is NoteTag's (its type string length), and the test costs nothing | delete it; the library's `NdefBridgeDeviceTest` pins the arithmetic on a neutral identity |
+| **G-1** | Each app's **`:core` module depends on `:nfc-core`** (`implementation(project(":nfc-core"))`) in addition to `:app` → `:nfc-android` | Target §6.2 shows only `:app` → `:nfc-android`, but both body codecs (`NdefCodec`, `NoteTagCodec`), `OverwritePolicy`'s consumers, `WritePlanner` (`NdefSize`) and `ResolveTap` live in the pure-JVM `:core` modules, which cannot see `:app`'s dependencies. `:nfc-core` is stdlib-only JVM, so the edge is clean and keeps `:core` Android-free | **ACCEPT** |
+| **G-2** | The release workflow **materialises the existing local signing mechanism** on the runner: it writes `$HOME/.config/<servicetag|notenfc>/keystore.properties` and decodes the keystore from secrets to the path that file names, then runs the unchanged `assembleRelease`; no Gradle change, and the same four-key `hasSigningKeys` guard applies | one signing mechanism in both places; a runner without the secrets **fails before the release build starts** (the four-secret presence check), and a build that somehow produced an unsigned or wrongly signed APK fails at `apksigner verify` + the fingerprint compare — nothing unsigned is ever published | **ACCEPT as amended** (correction 3, and the prose in this row) |
+| **G-3** | Names, fixed here: GitHub environment **`release`**; secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`; repository **variable** (not secret) `RELEASE_CERT_SHA256` = the certificate's SHA-256 fingerprint (colon-separated upper-case hex, as `apksigner` prints it). Provisioning is **an owner manual step at K/L** (`gh secret set … --env release`, `gh variable set`), one of the ≤3 | the workflow needs stable names before K/L; the fingerprint is public by the owner's rule and is the independent post-build identity check | **ACCEPT** — provisioned at K/L, not Phase G |
+| **G-4** | **NoteTag's product tag namespace follows its `versionName`**: NoteTag ships `versionName = "2.0"` (Phase E, past the historical 1.1), so the final product tag is **`notetag-v2.0`**, not the runbook's `notetag-v1.0`; `release.yml` **fails closed unless the tag's version equals the built `versionName`** (parsed from `aapt2 dump badging`), for both apps (`servicetag-v2.5` ↔ `"2.5"`) | a release whose tag and APK disagree on the version is exactly the inconsistency the owner asked the workflow to refuse; runbook §G (§28) still reserves `notetag-v1.0` | **ACCEPT** — every target/runbook occurrence of `notetag-v1.0` is amended (Task 11); no competing first-tag names |
+| **G-5** | The two consumer **"formatted" sentences** (R3, consumer wording): NoteTag **"Formatted the tag. Hold it to the phone again to write the link."**; ServiceTag **"Formatted. Lift the tag off and hold it again to write."** | R3 said the old sentence overstated what remained; both now say exactly what the next tap does | **ACCEPT** — pinned by test |
+| **G-6** | ServiceTag's controller **locks only through `write(lock = true)`** in Phase G; the standalone verify-then-lock branch (`awaitingVerify`) is deleted with the unverified-format path that needed it. The library's `lock(tag, expected)` stays available and unused by ServiceTag | the format path no longer writes, so the second tap is a normal write, which locks after its own verified read-back (invariant 9 by code) | **ACCEPT in principle, with correction 1** (consent is recorded, never written through the sheet's handle) |
+| **G-7** | NoteTag keeps its emulator `NdefSizeDeviceTest` as **the product's own 49-byte pin**, retargeted to the library types, rather than relying only on the library's generic pin | the number is NoteTag's (its type string length), and the test costs nothing | **ACCEPT** — the library proves the arithmetic, NoteTag proves its own envelope's 49 bytes |
 
-On RELEASE the controller records the rulings in the ledger; Task 11 carries the accepted G-3/G-4 wording into the design and runbook.
+Task 11 carries G-3/G-4 into the design and runbook — including every `notetag-v1.0` occurrence.
 
 ## The four Phase E residuals, dispositioned here (owner: "requirements Phase G must consciously disposition")
 
 | Residual | ServiceTag (Task 3) | NoteTag (Task 7) | Proof |
 |---|---|---|---|
-| **R1** orphan mapping per formatable tag | not applicable to a provisioned row: the row exists before any tap and is deleted on close unless a verified write claimed it — unchanged. The Format tap writes nothing and the row is not "claimed" | when `route()` is `Format`: call `tagIo.format(tag)`, **plan nothing, mint no uuid, persist nothing**; the second tap plans against the real `maxSize` | NoteTag test: on the Format tap `newUuid` is never invoked and the store is untouched; ServiceTag test: the Format tap leaves `writeAttempts == 0` and the row unclaimed |
+| **R1** orphan mapping per formatable tag | the ServiceTag row is provisioned on the first **writable** tap, never on a format-only tap (the `Format` branch returns before `ProvisionTag.begin`); once provisioned it is reused across retries and abandoned on close unless a verified write claims it | when `route()` is `Format`: call `tagIo.format(tag)`, **plan nothing, mint no uuid, persist nothing**; the second tap plans against the real `maxSize` | NoteTag test: on the Format tap `newUuid` is never invoked and the store is untouched; ServiceTag test: the Format tap leaves `writeAttempts == 0` and the row unclaimed |
 | **R2** fakes model the second tap | `FakeTagIo` (library seam) with a mutable inspection; the two-tap test flips `read` from `Readable(empty)`/`needsFormat` to `Readable(empty)`/`Writable(maxSize)` | the same, and the second-tap `Confirm` shape asserted is the one a formatted (empty) tag yields | both controller tests |
 | **R3** honest sentence | G-5 sentence | G-5 sentence | pinned by test |
 | **R4** the read exception | `onTag` catch: rethrow `CancellationException`, `Log.w(TAG, "inspect failed", t)`, then the fixed sentence; `Failed.cause` logged at the catch that turns it into a sentence; `TagRead.Unreadable.cause` logged when classified | the same, and NoteTag's `onTag` catch widened to rethrow cancellation (its A4/A12 siblings already do) | grep: every `Failed` and `Unreadable` arm logs `cause`; the cancellation rethrow precedes each broad catch |
@@ -378,7 +380,7 @@ object OverwriteReasons {
 
 **Interfaces:**
 - Consumes: `com.loosecannon.nfc.tagcore.android.{NfcReaderModeSession, TagHandle, NfcTagHandle, TagIo, RealTagIo, TagInspection, TagRead, WriteResult, WriteRoute, CapacityVerdict, route, fit, ndefRecords, nfcTag, toHexOrNull}`; `com.loosecannon.nfc.tagcore.NdefSize`; Task 2's `NdefCodec`, `OverwriteReasons`.
-- Produces: `TagWriteController(provisionTag, appScope, io: TagIo, codec, target, label, scope, ioDispatcher)` with the same `WriteState` minus `Verifying` (G-6) and the same public functions (`setLock`, `onTag`, `confirmOverwrite`, `keepIt`, `abandonIfUnwritten`, `state`, `lock`).
+- Produces: `TagWriteController(provisionTag, appScope, io: TagIo, codec, target, label, scope, ioDispatcher)` with the same `WriteState` minus `Verifying` (G-6) and the same public functions (`setLock`, `onTag`, `confirmOverwrite`, `keepIt`, `abandonIfUnwritten`, `state`, `lock`). `confirmOverwrite` performs no tag I/O (correction 1); the row is provisioned on the first writable tap, not on a format-only tap (correction 2).
 
 - [ ] **Step 1: Write the failing controller tests** — `TagWriteControllerTest` keeps its existing cases (adapted to the library's `TagInspection(uid, read, maxSize, writable, needsFormat, canLock)` and `WriteResult.Written(readBack, bytes, locked)`) and adds these, over a `FakeTagIo` that implements the library's four-operation `TagIo` (mutable `inspection`, `writeResult`, `formatResult`, counters `inspectCount`/`formatCount`/`writeAttempts`, `lastWriteLock`, `lastLockExpected`, and an `inspectFailure: Throwable?`):
 
@@ -389,11 +391,11 @@ object OverwriteReasons {
         controller.onTag(handle); advanceUntilIdle()
         assertEquals(1, io.formatCount); assertEquals(0, io.writeAttempts)
         assertEquals(WriteState.Idle("Formatted. Lift the tag off and hold it again to write."), controller.state.value)
-        assertFalse(provision.completed)                      // the row is not claimed by a format
+        assertEquals(0, provision.begun)                       // a format-only tap creates no row (correction 2)
         io.inspection = TagInspection("04a1", TagRead.Readable(emptyList()), maxSize = 137, writable = true, needsFormat = false, canLock = true)
         io.writeResult = WriteResult.Written(intended, 95, locked = false)
         controller.onTag(handle); advanceUntilIdle()
-        assertEquals(1, io.writeAttempts); assertIs<WriteState.Written>(controller.state.value); assertTrue(provision.completed)
+        assertEquals(1, io.writeAttempts); assertIs<WriteState.Written>(controller.state.value); assertEquals(1, provision.begun); assertTrue(provision.completed)
     }
 
     /** C1 — unreadable NDEF is never treated as an empty tag. */
@@ -433,6 +435,42 @@ object OverwriteReasons {
         assertEquals(WriteState.Written(rowId, locked = true), controller.state.value)
     }
 
+    /** Invariant 10 — consent is recorded, never written through the sheet's (stale) handle. */
+    @Test fun confirmingRecordsConsentAndPerformsNoTagIo() = runTest {
+        io.inspection = holdingOtherTag                      // Readable(records of another ServiceTag id), writable, 137
+        controller.onTag(handle); advanceUntilIdle()
+        assertIs<WriteState.Confirm>(controller.state.value)
+        controller.confirmOverwrite(); advanceUntilIdle()
+        assertEquals(0, io.writeAttempts)
+        assertEquals(WriteState.Idle("Overwrite confirmed. Hold the same tag to the phone again to write."), controller.state.value)
+    }
+
+    /** The fresh tap carrying the SAME content consumes the consent and writes through its own handle. */
+    @Test fun theNextTapWithTheSameContentWritesThroughTheFreshHandle() = runTest {
+        io.inspection = holdingOtherTag
+        controller.onTag(handle); advanceUntilIdle(); controller.confirmOverwrite(); advanceUntilIdle()
+        io.writeResult = WriteResult.Written(intended, 95, locked = false)
+        val fresh = FakeHandle(uid = "04a1-second-discovery")
+        controller.onTag(fresh); advanceUntilIdle()
+        assertEquals(1, io.writeAttempts); assertEquals(fresh, io.lastWriteHandle)
+        assertIs<WriteState.Written>(controller.state.value)
+    }
+
+    /** A fresh tap carrying DIFFERENT content discards the consent and asks again. */
+    @Test fun theNextTapWithDifferentContentAsksAgain() = runTest {
+        io.inspection = holdingOtherTag
+        controller.onTag(handle); advanceUntilIdle(); controller.confirmOverwrite(); advanceUntilIdle()
+        io.inspection = holdingAThirdTag                     // a different ServiceTag id
+        controller.onTag(handle); advanceUntilIdle()
+        assertEquals(0, io.writeAttempts)
+        assertIs<WriteState.Confirm>(controller.state.value)
+        // and that second question, once confirmed, is honoured on the next matching tap
+        controller.confirmOverwrite(); advanceUntilIdle()
+        io.writeResult = WriteResult.Written(intended, 95, locked = false)
+        controller.onTag(handle); advanceUntilIdle()
+        assertEquals(1, io.writeAttempts)
+    }
+
     /** R4 — a read failure is one fixed sentence and the next tap is still handled. */
     @Test fun aTagThatCannotBeReadIsOneSentenceAndTheNextTapStillWorks() = runTest {
         io.inspectFailure = IOException("lost")
@@ -444,7 +482,7 @@ object OverwriteReasons {
     }
 ```
 
-(`writable137`, `intended`, `rowId`, `provision` are the fixture's existing names or their obvious additions; the implementer keeps the file's fixture style.)
+(`writable137`, `holdingOtherTag`, `holdingAThirdTag`, `intended`, `rowId`, `provision` are the fixture's existing names or their obvious additions; `FakeTagIo` records `lastWriteHandle`; the implementer keeps the file's fixture style.)
 
 - [ ] **Step 2: Run to verify they fail** — `./gradlew :app:testDebugUnitTest --console=plain` → compilation failures (the library types are not yet imported; `Verifying` still exists).
 
@@ -503,9 +541,9 @@ sealed interface WriteState {
  * still needs formatting is formatted and nothing else — `format(null)`, no payload — and the next
  * tap is an ordinary write against the capacity that now exists (invariant 7).
  *
- * A row is provisioned on the first tap and reused for every retry; [abandonIfUnwritten] deletes
- * it if the screen closes before a verified write, so no phantom tag is left behind. A format tap
- * does not claim the row.
+ * A ServiceTag row is provisioned on the first writable tap — a format-only tap creates no
+ * product state at all — and is reused across retries; [abandonIfUnwritten] deletes it if the
+ * screen closes before a verified write claims it, so no phantom tag is left behind.
  */
 class TagWriteController(
     private val provisionTag: ProvisionTag,
@@ -541,15 +579,12 @@ class TagWriteController(
     @Volatile private var done = false
     @Volatile private var busy = false
 
-    /** The tap the confirmation sheet is asking about; it owns [busy] until it is answered. */
-    @Volatile private var awaitingAnswer: PendingWrite? = null
-
-    private class PendingWrite(
-        val existing: TagPayload,
-        val tag: TagHandle,
-        val intended: List<NdefRecordData>,
-        val row: TagBinding,
-    )
+    /**
+     * The content the confirmation sheet is asking about; it owns [busy] until it is answered. Only
+     * the content is kept: the handle that raised the question is exactly the one that may be
+     * stale by the time the answer arrives, so it is never written through (owner, 2026-09-17).
+     */
+    @Volatile private var awaitingAnswer: TagPayload? = null
 
     fun setLock(value: Boolean) { _lock.value = value }
 
@@ -599,18 +634,19 @@ class TagWriteController(
         val existing = existingOn(inspection)
         val consent = confirmedOverwrite
         if (consent != null) {
+            confirmedOverwrite = null                       // consent is consumed by this tap, either way
             if (consent == existing) {
-                // The user already agreed to replace exactly this content; this tap carries a
-                // fresh handle, so the write can go ahead without asking twice.
+                // The user already agreed to replace exactly this content; THIS tap's handle is
+                // fresh, so the write goes ahead through it without asking twice.
                 write(tag, intended, row)
                 return false
             }
-            confirmedOverwrite = null   // a different tag: the earlier consent does not carry over
+            // a different tag, or the same tag changed under the sheet: ask again
         }
         return when (val d = OverwriteReasons.decide(existing, row.id)) {
             OverwriteDecision.Proceed -> { write(tag, intended, row); false }
             is OverwriteDecision.Confirm -> {
-                awaitingAnswer = PendingWrite(existing, tag, intended, row)
+                awaitingAnswer = existing
                 _state.value = WriteState.Confirm(OverwriteReasons.sentence(d))
                 true
             }
@@ -640,23 +676,18 @@ class TagWriteController(
         }
     }
 
-    /** "Overwrite" on the confirmation sheet. */
+    /**
+     * "Overwrite" on the confirmation sheet: record consent for the content that was asked about
+     * and release the sheet. NO tag I/O here — the handle that raised the question may be stale;
+     * the next tap re-inspects through a fresh handle and, if the content still matches, writes
+     * through that one (invariant 10).
+     */
     fun confirmOverwrite() {
         val asked = awaitingAnswer ?: return
         awaitingAnswer = null
-        confirmedOverwrite = asked.existing
-        scope.launch {
-            try {
-                write(asked.tag, asked.intended, asked.row)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "write after consent failed", e)
-                _state.value = WriteState.Error("Overwrite confirmed, but the tag was lost. Hold it to the phone again to finish.")
-            } finally {
-                busy = false
-            }
-        }
+        confirmedOverwrite = asked
+        busy = false
+        _state.value = WriteState.Idle("Overwrite confirmed. Hold the same tag to the phone again to write.")
     }
 
     /** "Keep it", and the same thing a dismissed sheet means: the tag is left exactly as it was. */
@@ -1267,7 +1298,7 @@ Identical to Task 4 in the NoteTag repository: `tools/check-submodule-pin.sh` (t
 
 ```yaml
 name: release
-on:
+'on':                                       # quoted: PyYAML's YAML-1.1 loader reads a bare `on` as the boolean True (owner correction 4)
   push:
     tags:
       - 'servicetag-v*'                     # NoteTag: 'notetag-v*'
@@ -1313,10 +1344,11 @@ jobs:
           for v in RELEASE_KEYSTORE_BASE64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
             [ -n "${!v:-}" ] || { echo "release secret $v is missing; refusing to build a release"; exit 1; }
           done
-          d="$HOME/.config/$APP_DIR"; mkdir -p "$d"; chmod 700 "$d"
+          umask 077                                   # BEFORE any key file exists (owner correction 3)
+          d="$HOME/.config/$APP_DIR"; mkdir -p "$d"
           printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$d/release.jks"
-          umask 077
           printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$d/release.jks" "$RELEASE_STORE_PASSWORD" "$RELEASE_KEY_ALIAS" "$RELEASE_KEY_PASSWORD" > "$d/keystore.properties"
+          chmod 700 "$d"
           chmod 600 "$d/release.jks" "$d/keystore.properties"
       - name: build the signed release
         run: ./gradlew :app:assembleRelease --console=plain
@@ -1349,9 +1381,9 @@ jobs:
 
 Notes the implementer must keep: `apksigner verify` exits non-zero for an unsigned or badly signed APK, so "unsigned" cannot pass; the fingerprint compare prints neither value; `grep -c 'secrets\.' .github/workflows/ci.yml` must stay 0 while `release.yml` is the only file that names them; `gh` is preinstalled on `ubuntu-latest`.
 
-- [ ] **Step 2: `tools/release-dry-run.sh`** — the same checks against the **local** signing material (no secrets, no network, no Release): assert the submodule pin; run the test gate; `./gradlew :app:assembleRelease`; if `app/build/outputs/apk/release/app-release.apk` is absent, print `BLOCKED: no signing material (target §8)` and exit 3 (**ServiceTag's expected result until the owner's keytool step**); otherwise `apksigner verify --print-certs` into a scratch file and compare the certificate's SHA-256 with an expected value taken, in this order, from `${RELEASE_CERT_SHA256:-}` if set, else from `~/.config/<dir>/release-cert-sha256.txt` if the owner has placed one there, else no compare — printing **only** `fingerprint compare: matches` / `differs` / `skipped (no expected value configured)`, never a fingerprint (the keystore password is never put on a command line, so `keytool -list` is not used here); then `aapt2 dump badging` versionName against the `versionName` line of `app/build.gradle.kts`; `sha256sum` of the renamed APK into the scratch directory; the scratch directory deleted on exit via `trap`. Exit 0 = every check passed or was `skipped`; 1 = a check failed; 3 = BLOCKED.
+- [ ] **Step 2: `tools/release-dry-run.sh`** — the same checks against the **local** signing material (no secrets, no network, no Release): assert the submodule pin; run the test gate; `./gradlew :app:assembleRelease`; if `app/build/outputs/apk/release/app-release.apk` is absent, print `BLOCKED: no signing material (target §8)` and exit 3 (**ServiceTag's expected result until the owner's keytool step**); otherwise `apksigner verify --print-certs` into a scratch file and compare the certificate's SHA-256 with an expected value taken, in this order, from `${RELEASE_CERT_SHA256:-}` if set, else from `~/.config/<dir>/release-cert-sha256.txt` if the owner has placed one there, else no compare — printing **only** `fingerprint compare: matches` / `differs` / `skipped (no expected value configured)`, never a fingerprint (the keystore password is never put on a command line, so `keytool -list` is not used here); then `aapt2 dump badging` versionName against the `versionName` line of `app/build.gradle.kts`; `sha256sum` of the renamed APK into the scratch directory; the scratch directory deleted on exit via `trap`. **The verdict line is honest about what was checked** (owner, 2026-09-17): `RELEASE DRY RUN: PASS` only when the fingerprint compare ran and matched; `RELEASE DRY RUN: PARTIAL — signing identity not independently checked` when it was skipped (exit 0 still, because nothing failed; the real `release.yml` is the authoritative fail-closed identity gate once K/L provisions `RELEASE_CERT_SHA256`); exit 1 = a check failed or the fingerprint differs; exit 3 = BLOCKED (no signing material).
 
-- [ ] **Step 3: Run it** — NoteTag: exit 0, `fingerprint compare: matches` or `skipped`, `version: 2.0 matches`, the checksum file produced then removed. ServiceTag: exit 3 `BLOCKED: no signing material (target §8)` — expected; recorded as such. `python3 -c 'import yaml; yaml.safe_load(open(".github/workflows/release.yml"))'` parses in both; the trigger block names only the tag glob (`on.push.tags`) and nothing else — assert with a one-liner that `on` has exactly one key `push` with exactly one key `tags`.
+- [ ] **Step 3: Run it** — NoteTag: exit 0 with `RELEASE DRY RUN: PARTIAL — signing identity not independently checked` (no expected fingerprint is configured in Phase G; recorded as PARTIAL, never as PASS) and `version: 2.0 matches`, the checksum file produced then removed. ServiceTag: exit 3 `BLOCKED: no signing material (target §8)` — expected; recorded as such. `python3 -c 'import yaml; d=yaml.safe_load(open(".github/workflows/release.yml")); assert "on" in d and True not in d; assert list(d["on"]) == ["push"] and list(d["on"]["push"]) == ["tags"]; print(d["on"]["push"]["tags"])'` prints the one tag glob in both apps — the key is the **string** `on` (quoted in the file), never the boolean `True`, and the trigger is `push.tags` and nothing else. `ci.yml` keeps its bare `on:` (GitHub reads both); only the file the assertion inspects is quoted.
 
 - [ ] **Step 4: README paragraph** (each app) — "Releases": a release is a tag `servicetag-v<versionName>` (NoteTag: `notetag-v<versionName>`) pushed to GitHub; the `release` workflow builds, tests, signs from the `release` environment's secrets (`RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`), verifies the certificate against the public variable `RELEASE_CERT_SHA256` and the version against the tag, and publishes the signed APK with its SHA-256; ordinary CI never sees the signing material; the local equivalent is `tools/release-dry-run.sh`.
 
@@ -1369,7 +1401,7 @@ The controller applies these with a script that asserts each anchor matches once
 - **Target §10.3** unchanged.
 - **Runbook front matter**: after "K/L produce the first green CI…" add "K/L exercise ordinary CI only; the release workflows are installed at the tail of G and first execute at §G's product tags."
 - **Runbook §B.3a verify 2 and §B.4 verify**: "green on the new workflow" → "green on the new `ci.yml`; `release.yml` is present and has not run (no product tag exists yet)"; **§B.6**: add "the `release` environment exists in both app repositories with its four secrets and the `RELEASE_CERT_SHA256` variable set (owner manual step; values never printed)".
-- **Runbook §G (§28)**: "no published GitHub releases/APKs" → the two-workflow model: the final product tags `servicetag-v2.5` and **`notetag-v2.0`** (G-4) trigger `release.yml`, which publishes the signed APK and its checksum as the GitHub Release; **runbook §J gate 10** gains "the two `release.yml` workflows installed and dry-run locally (not executed)".
+- **Runbook §G (§28)**: "no published GitHub releases/APKs" → the two-workflow model: the final product tags `servicetag-v2.5` and **`notetag-v2.0`** (G-4) trigger `release.yml`, which publishes the signed APK and its checksum as the GitHub Release; **every** occurrence of `notetag-v1.0` in the target and the runbook (the §G tag table, §J gate rows, any prose) becomes `notetag-v2.0`, verified by `git grep -c 'notetag-v1.0' docs/` = 0 after the commit; **runbook §J gate 10** gains "the two `release.yml` workflows installed and dry-run locally (not executed)".
 - **Runbook §A.4**: a closing note that Phase G ended with the workflows installed and the §A.4 verifications done, and that `:core` depends on `:nfc-core` (G-1).
 
 - [ ] Commit: `design: the apps get a tag-only signed release workflow; ordinary ci stays unprivileged`. Owner copies refreshed.
@@ -1379,7 +1411,7 @@ The controller applies these with a script that asserts each anchor matches once
 ### Task 12: the whole-phase proof and the Phase G evidence section
 
 - [ ] **Step 0:** FINALs fixed: ServiceTag `product-split` HEAD and NoteTag `master` HEAD after Tasks 10/11; the library untouched at `7e0377a`.
-- [ ] **Step 1:** in each app: clean tree; `bash tools/check-submodule-pin.sh`; the per-task gate; `bash tools/release-dry-run.sh` (NoteTag 0; ServiceTag 3 = BLOCKED, expected); the constraint greps of Tasks 3/7; the local clean clone once more with `--no-build-cache`.
+- [ ] **Step 1:** in each app: clean tree; `bash tools/check-submodule-pin.sh`; the per-task gate; `bash tools/release-dry-run.sh` (NoteTag 0 = PARTIAL, recorded as such; ServiceTag 3 = BLOCKED, expected); the constraint greps of Tasks 3/7; the local clean clone once more with `--no-build-cache`.
 - [ ] **Step 2:** `## Phase G — both apps consume nfc-tag-core (§A.4)` appended to `docs/architecture/product-split-evidence.md` after the Phase F section, mirroring the earlier sections: the two FINALs; the tag and gitlink sha in both; what was deleted (the file lists) and what replaced it; the four residual dispositions with their test names; the suite counts per app (JVM and connected, with the D/E baselines); the four negative tests' transcripts (one line each); the clean-clone lines; the workflows (installed, YAML-validated, dry-run results, never triggered); the G-1…G-7 rulings as ruled; the amendments commit; what did not happen (no push, no tag, no remote on NoteTag, no phone, no NFC; the ServiceTag key still the owner's step); the closing line **verbatim**: **Phase G local consumption complete; both apps green on `nfc-tag-core-v0.1.0`; K/L pending owner authorization.**
 - [ ] Commit on `product-split`: `evidence: phase g, two apps on one tag`.
 
@@ -1391,4 +1423,4 @@ The rename `noteNFC → ServiceTag` (§B.2), the `--no-ff` merge of `product-spl
 
 ## Review status
 
-- 2026-09-17: plan written → owner HOLD/RELEASE pending, with rulings requested on G-1…G-7.
+- 2026-09-17: plan written (`5f4dac4`) → owner **HOLD with corrections**: G-1…G-7 accepted (G-2, G-6 as amended); correction 1 — ServiceTag's `confirmOverwrite` records consent only, never tag I/O through the sheet's stale handle, and the next fresh tap consumes consent only when the content still matches (three tests); correction 2 — the row is provisioned on the first writable tap, never on a format-only tap (prose and test); correction 3 — `umask 077` before any key file is created, and G-2's prose says missing secrets fail before the build; correction 4 — `release.yml` quotes `'on'` and the YAML assertion checks the string key; the dry run reports PARTIAL, never PASS, when the fingerprint compare is skipped → corrections applied in this revision → scoped review of exactly those items → on "internally consistent": **Phase G plan RELEASED. Begin Task 1 under the existing implement → independent review → close discipline.** All prohibitions stand: no app push, no app tag, no rename, no secret provisioning, no phone, no physical NFC.
