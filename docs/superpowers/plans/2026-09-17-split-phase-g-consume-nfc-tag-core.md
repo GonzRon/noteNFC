@@ -974,7 +974,7 @@ object OverwriteWording {
 
 - [ ] **Step 5: `WritePlanner.kt`, `ResolveTap.kt`** — imports only (`NdefRecordData`, `NdefSize` from `com.loosecannon.nfc.tagcore`). `WritePlan.Refused.records` stays `emptyList()` and is never sized (the library's `NdefSize` refuses an empty list); `WritePlannerTest` gains one case asserting the planner never calls `serialisedSize` for a `Refused` plan (a refused plan is returned before any size is computed — assert by ordering: an unparseable share text yields `Refused` with no exception).
 
-- [ ] **Step 6: Delete, grep, run** — `git rm` the four main and two test files; `git grep -n 'Interim copy' -- 'core/**'` → 0; `./gradlew :core:test --console=plain` green; record every class's count (the `:core` total drops by the two deleted classes' 24 and rises by the moved/added cases).
+- [ ] **Step 6: Delete, grep, run** — `git rm` the four main and two test files; `git grep -n 'Interim copy' -- 'core/**'` → 0; `./gradlew :core:test --console=plain` green; record every class's count (the `:core` total drops by the two deleted classes' 12 — NdefEnvelopeTest 7, NdefSizeTest 5 — and rises by the four moved/added cases: 78 → 70).
 
 - [ ] **Step 7: Commit** — `git add -A && git commit -m "core: the envelope, the size and the overwrite rule come from the library; the words stay ours"`.
 
