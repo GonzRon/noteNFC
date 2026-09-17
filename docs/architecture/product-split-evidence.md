@@ -523,4 +523,29 @@ NoteTag are unchanged except this evidence commit. No tag was cut: `nfc-tag-core
 `GonzRon/nfc-tag-core` remote stayed untouched. The physical rows of runbook §D are untouched —
 everything above is emulator and JVM evidence.
 
+**Post-close, pre-publish (owner verdict 2026-09-17: Phase F ACCEPTED; A1–A3 RATIFIED as the v0.1.0
+API; two hardening items before §B.1).** The Phase F endpoint stays `4ca1a1e`; the nine tasks are not
+reopened. One owner-directed hardening commit follows it on `master` — `15f1cd5` "hardening: bad allow
+entries fail loud, a self-test proves it, ci runs the whole build" (six files, +197/−15, **no Kotlin
+file touched**, so the public API is byte-identical to `4ca1a1e`): `.github/workflows/ci.yml` now runs
+`bash tools/forbidden-scan.sh`, then `bash tools/forbidden-scan-selftest.sh`, then **`./gradlew build
+--console=plain`** — the same standalone build (check, lint, both unit suites, the debug aar) the local
+acceptance proof ran, so remote CI is no longer weaker than the local gate; still no connected step.
+`tools/forbidden-scan.sh` validates the allow file *before* scanning and fails loudly with **exit 2**
+on an empty path, an empty fragment or a colon-less entry (`forbidden-scan: bad allow entry <n>:
+'<entry>' (<why>)`, then `forbidden-scan: allow file invalid`), so a `path:` entry can no longer
+blanket-suppress a file; the `WORDS` pattern is unchanged and the allow file still has **0** entries.
+`tools/forbidden-scan-selftest.sh` (committed, executable) proves the contract in a `mktemp -d`
+scratch tree with eight cases — no entries → 1; exact `path:fragment` → 0; empty fragment → 2 with no
+`clean` line; empty path → 2; no colon → 2; wrong path → 1; a `FLAG_READER_SKIP_NDEF_CHECK` fixture
+→ 1; no fixtures → 0 — and is wired into Gradle `check` as `forbiddenScanSelfTest`, a root-script-only
+`Exec` task beside `forbiddenScan`, so `./gradlew build` runs both. The README's deferred section is now
+`## Deferred` and follows the owner's rulings: "prose false positives" is not a deliverable (the pattern
+is never weakened; a concrete case gets the narrowest `path:fragment` allowance); the NFC permission
+stays consumer-owned and is off the list (intent filters, dispatch identity and product exposure are the
+consumer's, unconditionally); the presence-check delay is deferred on evidence, not scheduled; the CI
+and empty-fragment items are done. Gates at `15f1cd5`, re-run by the controller: scan clean; self-test
+8/8; a live empty-fragment probe → exit 2 (file restored); 12 commits; clean tree; 0 remotes; 0 tags.
+Scoped review of this commit alone precedes §B.1.
+
 **Phase F local extraction complete; the v0.1.0 tag and the push wait for §B.1.**
