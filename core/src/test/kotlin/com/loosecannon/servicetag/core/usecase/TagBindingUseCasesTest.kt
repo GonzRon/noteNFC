@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
+import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.ExternalLink
@@ -11,7 +12,6 @@ import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
-import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork

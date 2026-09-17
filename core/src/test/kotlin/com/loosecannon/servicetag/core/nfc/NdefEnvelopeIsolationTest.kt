@@ -1,5 +1,8 @@
 package com.loosecannon.servicetag.core.nfc
 
+import com.loosecannon.nfc.tagcore.NdefEnvelope
+import com.loosecannon.nfc.tagcore.NdefRecordData
+import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.core.model.TagId
 import kotlin.test.Test
 import kotlin.test.assertIs
@@ -20,7 +23,7 @@ class NdefEnvelopeIsolationTest {
     private val codec = NdefCodec(ours)
 
     private fun external(type: String, payload: ByteArray) =
-        NdefRecordData(NdefCodec.TNF_EXTERNAL_TYPE, type.toByteArray(Charsets.US_ASCII), payload)
+        NdefRecordData(NdefEnvelope.TNF_EXTERNAL_TYPE, type.toByteArray(Charsets.US_ASCII), payload)
 
     /** A NoteTag JOPLIN_NOTE record: version 1, kind 0x01, flags 0, then 16 raw id bytes. */
     @OptIn(ExperimentalStdlibApi::class)

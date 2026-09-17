@@ -1,5 +1,9 @@
 package com.loosecannon.servicetag.core.nfc
 
+import com.loosecannon.nfc.tagcore.NdefEnvelope
+import com.loosecannon.nfc.tagcore.NdefRecordData
+import com.loosecannon.nfc.tagcore.NdefSize
+import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.core.model.TagId
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -29,7 +33,7 @@ class NdefCodecV1Test {
     private val idBytes = "123e4567e89b12d3a456426614174000".hexToByteArray()
 
     private fun v1(payload: ByteArray) =
-        NdefRecordData(NdefCodec.TNF_EXTERNAL_TYPE, identity.externalType.toByteArray(Charsets.US_ASCII), payload)
+        NdefRecordData(NdefEnvelope.TNF_EXTERNAL_TYPE, identity.externalType.toByteArray(Charsets.US_ASCII), payload)
 
     /** The exact bytes a ServiceTag tag carries: 3 + 30 + 18 = 51 B for the record (H2). */
     @Test fun exactByteLayout() {
@@ -38,8 +42,7 @@ class NdefCodecV1Test {
         assertContentEquals("com.loosecannon.servicetag:tag".toByteArray(Charsets.US_ASCII), rec.type)
         assertEquals(18, rec.payload.size)
         assertContentEquals(byteArrayOf(0x01, 0x00) + idBytes, rec.payload)
-        // kotlin.test puts the message LAST, unlike JUnit's Assert -- `:core` is kotlin.test.
-        assertEquals(51, 3 + rec.type.size + rec.payload.size, "the :tag record is 51 bytes")
+        assertEquals(51, NdefSize.serialisedSize(listOf(rec)), "the :tag record is 51 bytes")
     }
 
     @Test fun messageIsTagRecordThenApplicationRecord() {
@@ -69,13 +72,11 @@ class NdefCodecV1Test {
     }
 
     /** 51 B for the record plus 3 + 15 + 26 = 44 B for the AAR: a 95 B message (H2). */
-    @Test fun theWholeMessageIs95Bytes() {
-        val onTag = codec.encodeV1(id).sumOf { 3 + it.type.size + it.payload.size }
-        assertEquals(95, onTag)
-    }
+    @Test fun theWholeMessageIs95Bytes() = assertEquals(95, NdefSize.serialisedSize(codec.encodeV1(id)))
 
+    /** The budget is the exact message; the design-time `+ 3` TLV allowance is gone (target §4.3 invariant 7). */
     @Test fun fitsAnNtag213() {
-        val onTag = codec.encodeV1(id).sumOf { 3 + it.type.size + it.payload.size }
+        val onTag = NdefSize.serialisedSize(codec.encodeV1(id))
         assertTrue(onTag <= NTAG213_MAX_MESSAGE_BYTES, "the message needs $onTag bytes; the seed is $NTAG213_MAX_MESSAGE_BYTES")
     }
 
@@ -112,6 +113,18 @@ class NdefCodecV1Test {
     @Test fun tagRecordUnderWrongTnfIsForeign() {
         val rec = NdefRecordData(0x02, identity.externalType.toByteArray(Charsets.US_ASCII), byteArrayOf(0x01, 0x00) + idBytes)
         assertIs<TagPayload.Foreign>(codec.decode(listOf(rec)))
+    }
+
+    @Test fun onlyFirstRecordMatters() {
+        val ours = codec.v1Record(id)
+        val foreign = NdefRecordData(0x04, "com.example.other:tag".toByteArray(Charsets.US_ASCII), "whatever".toByteArray())
+        assertIs<TagPayload.V1>(codec.decode(listOf(ours, foreign)))
+        assertIs<TagPayload.Foreign>(codec.decode(listOf(foreign, ours)))
+    }
+
+    @Test fun uriRecordIsForeign() {
+        val uri = NdefRecordData(tnf = 0x01, type = byteArrayOf('U'.code.toByte()), payload = byteArrayOf(0x01) + "example.com".toByteArray())
+        assertIs<TagPayload.Foreign>(codec.decode(listOf(uri)))
     }
 
     /** An identity with no AAR writes one record and nothing else (O13's default). */
