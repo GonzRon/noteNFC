@@ -27,6 +27,7 @@
 - **Interim copies are labelled.** Every file copied from ServiceTag carries a one-line header comment `// Interim copy of ServiceTag's <path> (dc1bb1c lineage); Phase G replaces it with nfc-tag-core.` so Phase G can `grep` its own deletion list.
 - **Exactly two screens (P20).** `List` (the tags this phone has written, with an inline result card for whatever an ambient tap or a refusal has to say) and `Write` (share → hold a tag). There is no third navigation state and no message screen: the trampoline hands a sentence to `MainActivity`, which shows it on the list.
 - **Retained is not written (owner correction, 2026-09-17).** A `LOCAL_REF` mapping persisted before a write and retained after an ambiguous failure stays **resolvable** (`get`) but is **not** a confirmed write: `TagEntry.writtenAt` is null until a verified `Written` result confirms it, and `list()` — the only thing the UI shows as "tags this phone wrote" — returns confirmed entries only. The model permits a later ambient resolution of such a tag to promote the mapping (the tag's existence is then proven); Phase E does not implement that promotion.
+- **The `LOCAL_REF` warning is a binding UX rule (owner, 2026-09-17).** When the measured capacity forces the `LOCAL_REF` fallback, the writer stops **before writing** with "This tag needs this phone to open. Back up NoteTag to protect the link." and a Write / Cancel choice; the success state reads "Written · This phone only" with the line "Saved as a this-phone-only tag."; the list marks such entries "This phone only". Persistence and recovery (Room, versioned export/import, a SAF backup folder, scheduled backups) are roadmap after Phases F/G — target §10.2 — not this phase.
 - **Gate 6 is not claimed by this plan.** §23 end to end and CI green from scratch need Phase G (row 10) and the remote (§B.4). The phase ends as "Phase E local reconstruction complete; Gate 6 pending its deferred prerequisites", recorded in the ledger in those words.
 
 ## The identity, and everything derived from it
@@ -1157,7 +1158,7 @@ git commit -m "a json file store, replaced atomically, behind a small interface"
 
 **Interfaces:**
 - Consumes: `WritePlanner`, `NoteTagCodec`, `TagStore`.
-- Produces: `TagHandle`/`NfcTagHandle`/`TagIo`/`RealTagIo(codec)` (the seam; `inspect` returns `TagInspection?` with `maxSize`, `existing: NoteTagContent`, `writable`, `needsFormat`; `write(handle, records, lock=false): WriteResult`); `OverwriteWording.reason(existing: NoteTagContent, intended: Writable): String?` (null = proceed); `NoteTagWriteController(tagIo, codec, store, sharedText, scope, clock, newUuid)` with `state: StateFlow<WriteState>` (`Waiting(preview)`, `Confirm(reason)`, `Writing`, `Written(entry, deviceBound: Boolean)` (the entry as confirmed), `Refused(reason)`, `Error(message)`), `onTag(handle)`, `confirmOverwrite()`, `cancel()`, `abandon()`.
+- Produces: `TagHandle`/`NfcTagHandle`/`TagIo`/`RealTagIo(codec)` (the seam; `inspect` returns `TagInspection?` with `maxSize`, `existing: NoteTagContent`, `writable`, `needsFormat`; `write(handle, records, lock=false): WriteResult`); `OverwriteWording.reason(existing: NoteTagContent, intended: Writable): String?` (null = proceed) and `OverwriteWording.DEVICE_BOUND = "This tag needs this phone to open. Back up NoteTag to protect the link."`; `NoteTagWriteController(tagIo, codec, store, sharedText, scope, clock, newUuid)` with `state: StateFlow<WriteState>` (`Waiting(preview)`, `Confirm(reasons: List<String>, action: String)` — `action` is "Write over it" when an overwrite reason is present, else "Write"; the device-bound sentence is one of the reasons whenever the plan is `DeviceBound`, `Writing`, `Written(entry, deviceBound: Boolean)` (the entry as confirmed), `Refused(reason)`, `Error(message)`), `onTag(handle)`, `confirm()`, `cancel()`, `abandon()`.
 
 - [ ] **Step 1: The four interim copies**
 
@@ -1215,8 +1216,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface WriteState {
     data class Waiting(val message: String) : WriteState
-    /** [reason] is shown verbatim with two actions only: Write over it / Cancel (P11). */
-    data class Confirm(val reason: String) : WriteState
+    /**
+     * Every sentence in [reasons] is shown verbatim, with exactly two actions: [action] ("Write over
+     * it" when the tag holds something, else "Write") and Cancel (P11). The device-bound sentence
+     * (OverwriteWording.DEVICE_BOUND) is one of the reasons whenever the plan is LOCAL_REF — the
+     * binding warning BEFORE the write (owner, 2026-09-17).
+     */
+    data class Confirm(val reasons: List<String>, val action: String) : WriteState
     data object Writing : WriteState
     data class Written(val entry: TagEntry, val deviceBound: Boolean) : WriteState
     data class Refused(val reason: String) : WriteState
@@ -1235,10 +1241,11 @@ class NoteTagWriteController(
     private val _state = MutableStateFlow<WriteState>(WriteState.Waiting("Hold a tag to the phone."))
     val state: StateFlow<WriteState> = _state
     private val busy = AtomicBoolean(false)
-    private var pending: Pending? = null      // a confirmed-overwrite awaits the next tap of the same content
+    private var pending: Pending? = null      // a confirmation awaits the next tap of the same tag content
     private var done = false
 
-    private class Pending(val plan: WritePlan, val existing: NoteTagContent)
+    /** Consent is for THIS existing content and THIS plan kind (invariant 10). */
+    private class Pending(val plan: WritePlan, val existing: NoteTagContent, val consented: Boolean)
 
     /** Runs on the reader-mode binder thread; every state change is a flow emission. */
     fun onTag(tag: TagHandle) {
@@ -1256,19 +1263,27 @@ class NoteTagWriteController(
         val maxSize = if (inspection.needsFormat) UNMEASURED else inspection.maxSize
         val plan = WritePlanner.plan(sharedText, maxSize, codec, newUuid)
         if (plan is WritePlan.Refused) { _state.value = WriteState.Refused(plan.reason); return }
-        val consented = pending
+        val prior = pending
         pending = null
-        val reason = OverwriteWording.reason(inspection.existing, contentOf(plan))
-        if (reason != null && (consented == null || consented.existing != inspection.existing)) {
-            pending = Pending(plan, inspection.existing)                // consent is for THIS content (invariant 10)
-            _state.value = WriteState.Confirm(reason)
+        val reasons = listOfNotNull(
+            OverwriteWording.reason(inspection.existing, contentOf(plan)),
+            if (plan is WritePlan.DeviceBound) OverwriteWording.DEVICE_BOUND else null,   // the warning BEFORE the write
+        )
+        val sameQuestion = prior?.consented == true && prior.existing == inspection.existing && prior.plan::class == plan::class
+        if (reasons.isNotEmpty() && !sameQuestion) {
+            pending = Pending(plan, inspection.existing, consented = false)
+            _state.value = WriteState.Confirm(reasons, action = if (reasons.first() != OverwriteWording.DEVICE_BOUND) "Write over it" else "Write")
             return
         }
         write(tag, plan)
     }
 
-    fun confirmOverwrite() { _state.value = WriteState.Waiting("Hold the same tag to the phone again to write over it.") }
-    fun cancel() { pending = null; _state.value = WriteState.Waiting("Cancelled. Hold a tag to the phone to try again.") }
+    /** The user pressed Write / Write over it: remember it for the next tap of the same tag (the handle went stale under the sheet). */
+    fun confirm() {
+        pending = pending?.let { Pending(it.plan, it.existing, consented = true) }
+        _state.value = WriteState.Waiting("Hold the same tag to the phone again to write it.")
+    }
+    fun cancel() { val p = pending; pending = null; p?.let { scope.launch { forget(it.plan) } }; _state.value = WriteState.Waiting("Cancelled. Hold a tag to the phone to try again.") }
 
     /**
      * The LOCAL_REF sequence (target §4.9): persist first, UNCONFIRMED (writtenAt = null); confirm
@@ -1340,7 +1355,9 @@ Note the two design points the reviewer must check: for a `DeviceBound` plan the
 6. *(row 7)* `DeviceBound`, `Written` → RETAINED **and confirmed**: `store.list()` contains it with a non-null `writtenAt`, state `Written(deviceBound = true)`.
 6b. *(row 7)* `FullUri`, `Written` → a confirmed convenience entry appears in `list`; `FullUri`, `Failed` → nothing in the store at all (portable kinds never need it).
 7. *(row 6)* `Compact` plan with `maxSize = 0` still writes 49 bytes (the compact form never needs capacity checked by the planner; the writer's own `TooSmall` covers a genuinely tiny tag).
-8. *(row 9 / P11)* existing = a ServiceTag record → state `Confirm("This tag belongs to ServiceTag.")`, `writeAttempts == 0`; `confirmOverwrite()` then a second `onTag` with the same existing content → written; a second tap with **different** existing content → `Confirm` again, not written (invariant 10).
+8. *(row 9 / P11)* existing = a ServiceTag record → state `Confirm(listOf("This tag belongs to ServiceTag."), "Write over it")`, `writeAttempts == 0`; `confirm()` then a second `onTag` with the same existing content → written; a second tap with **different** existing content → `Confirm` again, not written (invariant 10).
+8b. *(binding UX)* a `DeviceBound` plan on an empty tag → `Confirm(listOf(OverwriteWording.DEVICE_BOUND), "Write")`, **nothing persisted and nothing written yet**; `confirm()` + the same tag → persisted, written, confirmed, state `Written(deviceBound = true)`; `cancel()` instead → nothing in the store.
+8c. *(binding UX)* a `DeviceBound` plan on a ServiceTag tag → one `Confirm` with **both** sentences, overwrite first, action "Write over it"; one consent covers both.
 9. *(invariant 11)* two `onTag` calls before the first completes → one inspect.
 10. *(row 6)* a `Refused` plan → state `Refused`, no inspect-then-write beyond the inspect.
 
@@ -1461,7 +1478,7 @@ class AppGraph(app: Application) {
 
 - [ ] **Step 2: The screens**
 
-`WriteScreen(controller: NoteTagWriteController, onDone: () -> Unit)`: shows the shared link, then the controller state: `Waiting` → the message plus "what will be written" (**"A link only this phone can open"** whenever the planned kind would be `LOCAL_REF` — computed by a preview `WritePlanner.plan(sharedText, Int.MAX_VALUE, codec)`: if that is already `DeviceBound`-impossible (it never is at MAX) the phrase is shown after the tap instead; so: show the phrase in the `Written(deviceBound = true)` state, and beforehand a neutral "If the link is too long for the tag, it will be saved on this phone instead."); `Confirm(reason)` → the sentence with exactly two buttons **Write over it** / **Cancel** (P11); `Writing` → "Writing…"; `Written` → "Written." plus the device-bound sentence when `deviceBound`, and a Done button; `Refused`/`Error` → the sentence and Done. Reader mode: `LifecycleResumeEffect { session.start(); onPauseOrDispose { session.stop() } }` with `NfcReaderModeSession(activity) { controller.onTag(NfcTagHandle(it)) }`; `DisposableEffect` on leave → `controller.abandon()`. If `!session.available` show "This phone has no NFC." and if `!session.enabled` "Turn NFC on to write a tag."
+`WriteScreen(controller: NoteTagWriteController, onDone: () -> Unit)`: shows the shared link, then the controller state: `Waiting` → the message plus a neutral "If the link is too long for the tag, it will be saved on this phone instead."; `Confirm(reasons, action)` → every sentence in `reasons`, each on its own line (so the device-bound warning **"This tag needs this phone to open. Back up NoteTag to protect the link."** appears before any write, exactly as the binding rule says), with exactly two buttons **`action`** / **Cancel** (P11); `Writing` → "Writing…"; `Written(deviceBound = false)` → "Written." and Done; `Written(deviceBound = true)` → **"Written · This phone only"** with the line **"Saved as a this-phone-only tag."** and Done; `Refused`/`Error` → the sentence and Done. Reader mode: `LifecycleResumeEffect { session.start(); onPauseOrDispose { session.stop() } }` with `NfcReaderModeSession(activity) { controller.onTag(NfcTagHandle(it)) }`; `DisposableEffect` on leave → `controller.abandon()`. If `!session.available` show "This phone has no NFC." and if `!session.enabled` "Turn NFC on to write a tag."
 
 `TagListScreen(entries, message, onDismissMessage)`: when `message` is non-null, an inline **result card** at the top carrying the sentence and a Dismiss action (this is where every ambient-tap and refusal sentence lands); below it the store's **confirmed** writes (`list()`), newest first: label, kind word, "this phone only" for `LOCAL_REF`, written-at as a date. Empty state: "Share a Joplin note or a link to NoteTag to write your first tag." There is no message screen.
 
@@ -1470,6 +1487,8 @@ class AppGraph(app: Application) {
 - [ ] **Step 3: Tests**
 
 `MainViewModelTest`: share text → `Write`; a message extra → `List(message)`, and `dismissMessage()` → `List(null)`; returning to `List` reloads entries from the store; **an unconfirmed entry in the store does not appear in `entries`**.
+
+`WriteScreenDeviceBoundTest` (emulator, Compose rule, no NFC needed): a `NoteTagWriteController` over a five-line `FakeTagIo` (duplicated in `androidTest`, not shared with `test`) whose inspection reports an empty writable tag with `maxSize` one byte below the URI's serialised size; `controller.onTag(FakeHandle)` → the screen shows the device-bound sentence and the **Write** button and nothing has been written; press Write, `onTag` again → "Written · This phone only" and "Saved as a this-phone-only tag."; a second run with a `maxSize` that fits → no warning, plain "Written.".
 
 `AppSmokeTest` (emulator, Compose test rule, fresh install in `@Before` via `clearInstall()` copied from ServiceTag's `AppSmokeTest.kt:45-77` pattern): launching shows the empty list sentence; an intent carrying `EXTRA_MESSAGE` shows the sentence on the list's result card and Dismiss clears it; an `ACTION_SEND` intent with `joplin://x-callback-url/openNote?id=<32 hex>` shows the write screen with the link and "Hold a tag to the phone." (the emulator has no NFC: the "no NFC" line is acceptable and asserted as *either* the hold sentence or the no-NFC sentence); a `Confirm` state is not reachable without a tag and is covered by the JVM tests.
 
@@ -1652,7 +1671,7 @@ git commit -m "evidence: phase e, notetag reconstructed on the emulator"
 | 4 signing with the existing key, signed release proof, versions past 2 / 1.1 | 2 (mechanism), 11 (proof) |
 | 5 share receiver, writer screen, ambient trampoline, minimal store; 2024 activities deleted; one filter; no tech filter | 2 (skeleton + deletions), 9, 10, 6 |
 | 6 the format, no AAR, the decision, JOPLIN_NOTE validation, mixed-case round-trip, URI fallback, capacity at maxSize/−1/+1, no TLV, no character count | 4, 5, (10 pins `NdefSize`) |
-| 7 the store, never required for portable kinds, device-bound warning, crash-consistency (a)/(b), three failure-injection cases | 6, 7 (controller + tests), 8 (store-deleted resolution), 9 (the sentence) |
+| 7 the store, never required for portable kinds, device-bound warning **before the write and on success** (binding UX rule), crash-consistency (a)/(b), three failure-injection cases | 6, 7 (controller + tests 8b/8c), 8 (store-deleted resolution), 9 (the sentences, `WriteScreenDeviceBoundTest`) |
 | 8 copied safe launch policy, both exceptions caught, tests per rejected scheme, missing handler is a message | 5 (policy), 10 (launcher, device case 1) |
 | 9 a ServiceTag tag is not a note; writer offers only Write over it / Cancel and names the other app | 4 (codec), 7 (wording + controller), 8, 10 (device case 2) |
 | 10 adopt nfc-tag-core | **Phase G** |

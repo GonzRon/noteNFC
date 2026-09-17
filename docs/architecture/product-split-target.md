@@ -759,8 +759,12 @@ message is refused cleanly (O13, O14).
 **Persistence.** NoteTag gets a **minimal local store** — `LOCAL_REF` targets plus convenience
 metadata (label, kind, written-at, last-opened) — and it is **never required to resolve a
 `JOPLIN_NOTE` or `URI` tag**: those are self-contained and portable. Only `LOCAL_REF` tags are
-**device-bound**, and the writer must tell the user so at write time. A NoteTag export/import of the
-local map is NoteTag roadmap, not split scope (O14). The store is a single **atomically-replaced JSON
+**device-bound**, and the writer must tell the user so at write time — **a binding NoteTag UX rule (owner,
+2026-09-17): the moment the measured capacity forces the `LOCAL_REF` fallback, before the write, the
+writer shows "This tag needs this phone to open. Back up NoteTag to protect the link." and asks; the
+success state says "Written · This phone only" with the line "Saved as a this-phone-only tag."; and the
+list marks such entries "This phone only".** A NoteTag export/import of the local map is NoteTag
+roadmap, not split scope (O14) — defined precisely in §10.2. The store is a single **atomically-replaced JSON
 file** behind a small interface, using kotlinx-serialization (already in the version catalog), so
 "no Room unless it earns it" stays true and the store can be swapped later without touching the tag
 format (ratified P19).
@@ -1204,6 +1208,21 @@ The roadmap starts with the two transferred issues, retitled under the NoteTag n
   use the `URI` kind unless a stable compact identifier earns its own kind value.
 - **#36** "First-class deep-link support for Joplin, Obsidian, Logseq, Evernote, Notion, OneNote and
   Todoist" — whose body is the ownership statement that started this operation.
+
+**NoteTag persistence and recovery (roadmap, defined 2026-09-17, after Phases F/G):** migrate the
+`TagStore` implementation to Room if the operational requirements justify it; provide versioned
+logical export/import (a manifest plus a JSON representation of the entries, never a raw database
+file, so the backup format is decoupled from the schema version); allow the user to select a
+persistent SAF backup directory (`ACTION_OPEN_DOCUMENT_TREE`, persisted URI permission); support
+manual and WorkManager-scheduled automatic backups with retention; verify backups before reporting
+success; and prominently protect all device-bound `LOCAL_REF` mappings — a backup-health line on the
+list ("N tags depend on this phone", last backup, location) and a prompt to choose a backup location
+when device-bound mappings exist and none is configured. The NFC format does not change: a
+`LOCAL_REF` tag still carries `version | kind | uuid`, and only the implementation behind `TagStore`
+is swapped (`JsonFileTagStore` → `RoomTagStore`). History for the record: the 2024 narrow app kept
+no database and no file — one `SharedPreferences` map named `noteNFCURLs`, 8-character key → shared
+text — so losing that map made every physical tag useless; the new format needs the phone only for
+`LOCAL_REF` tags.
 
 Also NoteTag's, and explicitly **not** split scope: an export/import of the local `LOCAL_REF` map
 (O14), and whether `notetag://` ever gets a `VIEW` filter, which ratified P4 defers to that work.
