@@ -370,3 +370,90 @@ capacity refusal, a read-back and a lock all need a radio and an NTAG213.
 
 **Phase E local reconstruction complete; Gate 6 pending its deferred prerequisites (row 10 /
 Phase G, §B.4 CI, the physical session).**
+
+## Phase F — nfc-tag-core extraction (§A.3)
+
+Same header discipline as Phases D and E — fingerprints only, no secrets, no physical-device ids,
+no owner paths. There is nothing to fingerprint in this phase: no release build was made and no
+signing key was touched anywhere in it; the only device id below is `emulator-5554`.
+
+**Commits.** The library repository, `~/Documents/Projects/AndroidStudioProjects/nfc-tag-core`,
+branch `master` (F-4), stands at FINAL `cdd86c6` — its whole history, **9 commits**
+(`git rev-list --count HEAD`). Composition: eight task commits (`d5b76f1` skeleton, `08e80a7`
+nfc-core envelope/identity/records, `cdb223d` nfc-core uuid bytes/overwrite/size arithmetic,
+`419a129` nfc-android bridge/reader mode/writer, `243cefd` the forbidden scan, `a24aded` the
+README, `3e4a5c1` CI, `cdd86c6` the emulator suite) plus one review-fix round that landed inside
+Task 6's own close (`8355d45`, correcting the README's invariant-proof overclaim) — the fix the
+brief allowed for as "9 with one Step-1 fix" had already happened before this task began; this
+task's own Step 1 forced no further fix, so FINAL did not move. `git ls-files | wc -l` is **42**.
+No remote, no tag: `git remote | wc -l` and `git tag | wc -l` are both `0`; nothing has ever been
+pushed. `GonzRon/nfc-tag-core` exists on GitHub, empty and public, created 2026-09-17 by owner
+authorization, and was not touched in this phase.
+
+**Layout as built.** Two Gradle modules under one root (`rootProject.name = "nfc-tag-core"`):
+`nfc-core` — `org.jetbrains.kotlin.jvm`, package `com.loosecannon.nfc.tagcore`, toolchain 17, no
+Android plugin, 7 main files — and `nfc-android` — `com.android.library`,
+`namespace = "com.loosecannon.nfc.tagcore.android"`, `compileSdk = 37`, `minSdk = 26`, 5 main
+files, depending on `nfc-core` (`api(project(":nfc-core"))`) and nothing else. `nfc-core`'s runtime
+classpath is stdlib-only — `./gradlew :nfc-core:dependencies --configuration runtimeClasspath`
+prints exactly one leaf, `\--- org.jetbrains.kotlin:kotlin-stdlib:2.4.20` — and its `src/main`'s
+only imports, across all seven files, are `java.nio.ByteBuffer` and `java.util.UUID`.
+
+**Suites at FINAL.** `nfc-core` — **49** tests across six JVM classes: `EnvelopeLimitsTest` 5,
+`NdefEnvelopeTest` 19, `NdefSizeTest` 5, `OverwritePolicyTest` 8, `TagIdentityTest` 5,
+`UuidBytesTest` 7. `nfc-android` unit — **9** across two classes: `TwoTapFakeTest` 2,
+`WriteRouteTest` 7. `nfc-android` connected — **10** on `emulator-5554` across two classes:
+`NdefBridgeDeviceTest` 9, `NfcReaderModeSessionDeviceTest` 1. **0 failures, 0 errors, 0 skipped**
+everywhere. The connected figure is Task 8's own run at this same FINAL — Step 1 forced no fix, so
+it was not repeated; its XML is
+`nfc-android/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 17.xml` (the
+file name carries a literal space), timestamped minutes before the `cdd86c6` commit itself.
+
+**Clean clone.** `git clone --no-local` into a throwaway scratch directory that had never held the
+project; `git rev-parse --short HEAD` there is `cdd86c6`, FINAL. `ANDROID_HOME` supplied out of
+band (a fresh clone has no `local.properties`). `./gradlew build --no-build-cache --console=plain`
+reports `BUILD SUCCESSFUL`, with no `FROM-CACHE` anywhere in the log — every task, the test tasks
+included, really ran there. `bash tools/forbidden-scan.sh` there reports `forbidden-scan: clean`.
+The clone's test-result XML reproduces the same 49-and-9 totals, `failures="0"` on every file. The
+clone was deleted afterwards.
+
+**The forbidden scan.** `tools/forbidden-scan.sh`'s `WORDS` pattern is target §4.4's list,
+verbatim, untouched since the commit that wrote it (Task 5). `tools/forbidden-scan.allow` carries
+**0** entries — nothing was ever allow-listed. The scan is wired into `check` only in the library's
+own root `build.gradle.kts` (a `forbiddenScan` task, `tasks.named("check") { dependsOn(forbiddenScan) }`,
+extended to subprojects) — invisible to a consumer app whose own root includes `:nfc-core` and
+`:nfc-android` as subprojects of itself. `.github/workflows/ci.yml` is authored (scan, then both
+unit suites, then `assembleDebug`) but has never run: there is no remote to push it to.
+
+**Provenance.** The README's provenance table carries **18 rows**. Re-running the hash-resolution
+loop from Task 6 Step 2 against the finished tree — `git cat-file -e "$h^{commit}"` against every
+7-hex-digit hash the README quotes, in the ServiceTag worktree, falling back to the NoteTag
+repository — printed nothing: every hash in the table resolves in one of the two repositories.
+(The loop's basename companion still flags the same handful of cross-repository filenames Task 6's
+report already explained — `NdefCodec.kt`, `NdefCodecTest.kt`, `NdefEnvelopeIsolationTest.kt`,
+`NdefSizeDeviceTest.kt`, `TagWriteController.kt`, plus the regex artifacts `gradle.kt`/`Test.kt` —
+names the table cites by design, as the pre-extraction identity of files that were split or renamed
+on the way in; `NdefBridgeDeviceTest.kt` has dropped off that list since Task 8 landed it.)
+
+**The four amendments, as ruled.** F-1 **accepted**: `WriteResult.Failed(reason, cause: Throwable?
+= null)`. F-2 **accepted as amended**: `NdefSize` lives in `nfc-core`, refusing an empty record
+list. F-3 **ownership accepted, API revised to two-stage**: `TagInspection.route()` (no message
+size) → `WriteRoute.Format` / `ReadOnly` / `Writable(maxSize)`; `Writable.fit(needed)` →
+`CapacityVerdict.Write` / `TooSmall`. F-4 **accepted**: the library's branch is `master`, plus a
+post-push default-branch verification recorded at runbook §B.1. The design/runbook amendment
+landed on `product-split` as `9d92ffd`; a later docs correction, `5300f1d`, brought target §2 into
+agreement that the branch is `master`. All four are built exactly as ruled — confirmed above and,
+task by task, by direct reading of the library's `WriteResult`, `NdefSize`, `WriteRoute` and
+`settings.gradle.kts`/branch facts during Tasks 4, 3, 4 and 1 respectively.
+
+**Phase E residuals.** R1–R4 are dispositioned in the README's "Consumer obligations carried from
+Phase E" section — each made representable or visible by the library, with the acting on it still
+owed by each consumer.
+
+**Not attempted in this phase, and why.** No consumer repository was touched — ServiceTag-split and
+NoteTag are unchanged except this evidence commit. No tag was cut: `nfc-tag-core-v0.1.0` waits for
+§B.1. No push and no `gh` command ran in either repository; the empty, owner-authorized
+`GonzRon/nfc-tag-core` remote stayed untouched. The physical rows of runbook §D are untouched —
+everything above is emulator and JVM evidence.
+
+**Phase F local extraction complete; the v0.1.0 tag and the push wait for §B.1.**
