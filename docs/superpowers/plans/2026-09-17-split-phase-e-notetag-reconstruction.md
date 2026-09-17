@@ -1793,9 +1793,12 @@ FINAL=$(git rev-parse --short HEAD)
 - [ ] **Step 4: The whole-phase verification, at that HEAD**
 
 ```bash
-git grep -niIE 'notenfc|noteNFC|NoteNfc|md5_short|TECH_DISCOVERED|nfc_tech_filter|looseCannon' -- . ':!README.md' | cat
-#   expect: exactly the keystore path lines in app/build.gradle.kts and .gitignore (~/.config/notenfc), nothing else
-git grep -n 'notenfc' -- README.md | cat          # expect: the keystore path and the history paragraph only
+git grep -nIE 'notenfc|noteNFC|NoteNfc|md5_short|TECH_DISCOVERED|nfc_tech_filter|looseCannon' -- . ':!README.md' | cat
+#   case-sensitive on purpose: `-i` would make `looseCannon` match the live `loosecannon` package on every line.
+#   expect exactly four lines: the keystore path in app/build.gradle.kts and .gitignore (~/.config/notenfc), and the
+#   two O3 negative-case lines in app/src/androidTest/.../nfc/TagIdentityDispatchTest.kt (the retired
+#   `com.loosecannon.notenfc:md5_short` type that must resolve to nothing of ours, and its comment)
+git grep -ni 'notenfc' -- README.md | cat         # expect: the keystore path and the history paragraph (it spells `noteNFC`) only
 git grep -c 'android:scheme="notetag"' | cat      # expect: no output (P4)
 grep -c NDEF_DISCOVERED app/src/main/AndroidManifest.xml     # expect: 1
 git ls-files | wc -l; git rev-list --merges --count HEAD; git log --oneline | tail -1; git rev-list --count HEAD
@@ -1810,7 +1813,8 @@ ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=
 CLEAN="$(mktemp -d -p "$SCRATCH")"
 git clone --no-local . "$CLEAN/NoteTag"
 test "$(git -C "$CLEAN/NoteTag" rev-parse --short HEAD)" = "$FINAL" && echo "clone is at $FINAL"
-(cd "$CLEAN/NoteTag" && ANDROID_HOME=~/Android/Sdk ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain)
+(cd "$CLEAN/NoteTag" && ANDROID_HOME=~/Android/Sdk ./gradlew --no-build-cache :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain)
+#   --no-build-cache: the shared Gradle build cache would otherwise serve the clone's test tasks FROM-CACHE and prove nothing
 rm -rf "$CLEAN"
 ```
 
