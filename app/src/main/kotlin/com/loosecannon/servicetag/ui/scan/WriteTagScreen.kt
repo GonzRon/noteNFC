@@ -143,7 +143,7 @@ private fun TargetLine(targetName: String) {
 
 /** The four states of the write flow, each in the family its meaning asks for (D12 §5, §11). */
 @Composable
-private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Unit) {
+internal fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Unit) {
     when (state) {
         is WriteState.Idle -> NfcSheet(
             eyebrow = "Write nfc tag",
@@ -204,7 +204,7 @@ private fun VerifiedLine() {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OverwriteSheet(
+internal fun OverwriteSheet(
     reason: String,
     target: String,
     onOverwrite: () -> Unit,
