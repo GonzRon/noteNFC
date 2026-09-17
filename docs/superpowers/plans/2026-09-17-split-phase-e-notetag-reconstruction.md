@@ -1138,7 +1138,7 @@ class StoreCorrupt(name: String, cause: Throwable) : RuntimeException("the tag s
 
 - [ ] **Step 2: `JsonFileTagStoreTest` (JUnit 5, `@TempDir`)**
 
-Cases: a missing file lists nothing; put/get/list/remove round-trip; `put` of an existing uuid replaces; `touch` sets `lastOpenedAt`; **an entry put with `writtenAt = null` is returned by `get` but absent from `list`, and appears in `list` after `confirm`** (the retained-is-not-written rule); after every write no `.tmp` file remains and the JSON is valid; a corrupt file throws `StoreCorrupt` (never a bare parse exception) on read; a `replace` that throws leaves the previous file byte-identical (**the "persist fails" seam Task 7 relies on**); concurrent `put`s from two coroutines both land (the mutex).
+Cases: a missing file lists nothing; **three confirmed entries with ascending `writtenAt` come back newest first**; put/get/list/remove round-trip; `put` of an existing uuid replaces; `touch` sets `lastOpenedAt`; **an entry put with `writtenAt = null` is returned by `get` but absent from `list`, and appears in `list` after `confirm`** (the retained-is-not-written rule); after every write no `.tmp` file remains and the JSON is valid; a corrupt file throws `StoreCorrupt` (never a bare parse exception) on read; a `replace` that throws leaves the previous file byte-identical (**the "persist fails" seam Task 7 relies on**); concurrent `put`s from two coroutines both land (the mutex).
 
 - [ ] **Step 3: Gate and commit**
 
@@ -1209,7 +1209,9 @@ import com.loosecannon.notetag.core.write.WritePlanner
 import com.loosecannon.notetag.nfc.TagHandle
 import com.loosecannon.notetag.nfc.TagIo
 import com.loosecannon.notetag.nfc.WriteResult
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1240,6 +1242,17 @@ class NoteTagWriteController(
     private val store: TagStore,
     private val sharedText: String?,
     private val scope: CoroutineScope,
+    /**
+     * Where a mapping's cleanup runs. It outlives [scope] on purpose: a screen that is torn down
+     * by the system disposes after its view model has been cleared, and the undo of a persisted
+     * LOCAL_REF mapping must not be the thing that gets cancelled.
+     */
+    private val cleanupScope: CoroutineScope = scope,
+    /**
+     * Where the three blocking [TagIo] calls run. [scope] is the screen's, and a screen's scope
+     * dispatches on the main thread; tag I/O blocks for as long as the chip takes.
+     */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
     private val newUuid: () -> UUID = UUID::randomUUID,
 ) {
@@ -1263,7 +1276,8 @@ class NoteTagWriteController(
     }
 
     private suspend fun handle(tag: TagHandle) {
-        val inspection = tagIo.inspect(tag) ?: run { _state.value = WriteState.Error("This tag type is not supported."); return }
+        val inspection = withContext(ioDispatcher) { tagIo.inspect(tag) }
+            ?: run { _state.value = WriteState.Error("This tag type is not supported."); return }
         if (!inspection.writable) { _state.value = WriteState.Error("This tag is read-only."); return }
         val maxSize = if (inspection.needsFormat) UNMEASURED else inspection.maxSize
         val plan = WritePlanner.plan(sharedText, maxSize, codec, newUuid)
@@ -1288,7 +1302,7 @@ class NoteTagWriteController(
         pending = pending?.let { Pending(it.plan, it.existing, consented = true) }
         _state.value = WriteState.Waiting("Hold the same tag to the phone again to write it.")
     }
-    fun cancel() { val p = pending; pending = null; p?.let { scope.launch { forget(it.plan) } }; _state.value = WriteState.Waiting("Cancelled. Hold a tag to the phone to try again.") }
+    fun cancel() { val p = pending; pending = null; p?.let { cleanupScope.launch { forget(it.plan) } }; _state.value = WriteState.Waiting("Cancelled. Hold a tag to the phone to try again.") }
 
     /**
      * The LOCAL_REF sequence (target §4.9): persist first, UNCONFIRMED (writtenAt = null); confirm
@@ -1302,7 +1316,7 @@ class NoteTagWriteController(
             try { store.put(entry) }                                     // (a) durably stored BEFORE the write
             catch (t: Throwable) { _state.value = WriteState.Error("Could not save the link on this phone; nothing was written to the tag."); return }
         }
-        when (val r = tagIo.write(tag, plan.records, lock = false)) {
+        when (val r = withContext(ioDispatcher) { tagIo.write(tag, plan.records, lock = false) }) {
             is WriteResult.Written -> {
                 val at = clock()
                 // A verified write is recorded even if the screen is already leaving; a store
@@ -1324,8 +1338,12 @@ class NoteTagWriteController(
         }
     }
 
-    /** Leaving the screen before any write: nothing can have reached a tag, so a pending LOCAL_REF mapping may go. */
-    fun abandon(): Job? { val p = pending; pending = null; return p?.let { scope.launch { forget(it.plan) } } }
+    /**
+     * Leaving the screen before any write: nothing can have reached a tag, so a pending LOCAL_REF
+     * mapping may go. It goes on [cleanupScope], which is not the screen's: a back press that
+     * finishes the activity disposes the composition after the view model is cleared.
+     */
+    fun abandon(): Job? { val p = pending; pending = null; return p?.let { cleanupScope.launch { forget(it.plan) } } }
 
     /**
      * Cleanup finishes even while the scope is being torn down: a bare `runCatching` would swallow
@@ -1357,7 +1375,7 @@ class NoteTagWriteController(
 }
 ```
 
-This block is the controller as hardened after Task 7's review (`c8d4dbf`): `forget` and the `Written` branch's store calls run under `NonCancellable`, `done` is `@Volatile`, and `abandon()`/`cancel()` clear `pending` before launching the removal. Note the two design points the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write` with `writtenAt = null`. A `Written` result confirms it (`store.confirm`) and never removes it; `VerifyMismatch` and `Failed` never remove it **and never confirm it** — retained, resolvable, hidden from the list; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` remove it.
+This block is the controller as hardened after the Task 7 and Task 9 reviews (`c8d4dbf`, `1be0a1f`): the two seam calls run under `withContext(ioDispatcher)` (default `Dispatchers.IO` — the main-thread contract of `TagIo`), `abandon()`/`cancel()` launch their cleanup on `cleanupScope` (the graph's process-lived `appScope`), and, from `c8d4dbf`, `forget` and the `Written` branch's store calls run under `NonCancellable`, `done` is `@Volatile`, and `abandon()`/`cancel()` clear `pending` before launching the removal. Note the two design points the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write` with `writtenAt = null`. A `Written` result confirms it (`store.confirm`) and never removes it; `VerifyMismatch` and `Failed` never remove it **and never confirm it** — retained, resolvable, hidden from the list; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` remove it.
 
 - [ ] **Step 4: `FakeTagIo` and the controller tests (JUnit 4, `runTest`)**
 
@@ -1471,7 +1489,7 @@ git commit -m "resolve a tap: open what is safe, say why when it is not, never n
 - Create: `app/src/test/kotlin/com/loosecannon/notetag/ui/MainViewModelTest.kt`, `app/src/androidTest/kotlin/com/loosecannon/notetag/ui/AppSmokeTest.kt`
 
 **Interfaces:**
-- Produces: `NoteTagApp.graph: AppGraph` (`identity` from `BuildConfig`, `codec`, `store = JsonFileTagStore(File(filesDir, "tags.json"))`, `tagIo = RealTagIo(codec)`, `resolveTap`, `newWriteController(sharedText, scope)`); `MainActivity` handles `ACTION_SEND text/plain` (cold and `onNewIntent`) and the hand-off extra `EXTRA_MESSAGE` from the trampoline; **exactly two screens (P20)** driven by `MainViewModel.screen: StateFlow<Screen>` — `List(message: String? = null)` and `Write(sharedText)`. A hand-off sentence is a transient result card on the list, not a screen.
+- Produces: `NoteTagApp.graph: AppGraph` (`identity` from `BuildConfig`, `codec`, `store = JsonFileTagStore(File(filesDir, "tags.json"))`, `tagIo = RealTagIo(codec)`, `resolveTap`, `newWriteController(sharedText, scope)`); `AppGraph` also owns `appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)` (process-lived, never cancelled by design) and passes it as the controller's `cleanupScope`. `WriteScreen(controller, sharedText: String, onDone)` — the link is a required non-null parameter — installs `BackHandler { onDone() }` so back returns to the list inside the activity (the path on which `onDispose` runs on a live scope). `MainActivity` handles `ACTION_SEND text/plain` (cold and `onNewIntent`) and the hand-off extra `EXTRA_MESSAGE` from the trampoline; **exactly two screens (P20)** driven by `MainViewModel.screen: StateFlow<Screen>` — `List(message: String? = null)` and `Write(sharedText)`. A hand-off sentence is a transient result card on the list, not a screen.
 
 - [ ] **Step 1: The graph and the activity**
 
@@ -1509,7 +1527,7 @@ class AppGraph(app: Application) {
 
 `WriteScreenDeviceBoundTest` (emulator, Compose rule, no NFC needed): a `NoteTagWriteController` over a five-line `FakeTagIo` (duplicated in `androidTest`, not shared with `test`) whose inspection reports an empty writable tag with `maxSize` one byte below the URI's serialised size; `controller.onTag(FakeHandle)` → the screen shows the device-bound sentence and the **Write** button and nothing has been written; press Write, `onTag` again → "Written · This phone only" and "Saved as a this-phone-only tag."; a second run with a `maxSize` that fits → no warning, plain "Written.".
 
-`AppSmokeTest` (emulator, Compose test rule, fresh install in `@Before` via `clearInstall()` copied from ServiceTag's `AppSmokeTest.kt:45-77` pattern): launching shows the empty list sentence; an intent carrying `EXTRA_MESSAGE` shows the sentence on the list's result card and Dismiss clears it; an `ACTION_SEND` intent with `joplin://x-callback-url/openNote?id=<32 hex>` shows the write screen with the link and "Hold a tag to the phone." (the emulator has no NFC: the "no NFC" line is acceptable and asserted as *either* the hold sentence or the no-NFC sentence); a `Confirm` state is not reachable without a tag and is covered by the JVM tests.
+`AppSmokeTest` (emulator, Compose test rule, fresh install in `@Before` via `clearInstall()` copied from ServiceTag's `AppSmokeTest.kt:45-77` pattern): `clearInstall()` is guarded by an emulator check (fingerprint/hardware of the SDK image) and fails loudly elsewhere, because it wipes the app's data; launching shows the empty list sentence; an intent carrying `EXTRA_MESSAGE` shows the sentence on the list's result card and Dismiss clears it; an `ACTION_SEND` intent with `joplin://x-callback-url/openNote?id=<32 hex>` shows the write screen with the link and "Hold a tag to the phone." (the emulator has no NFC: the "no NFC" line is acceptable and asserted as *either* the hold sentence or the no-NFC sentence); a `Confirm` state is not reachable without a tag and is covered by the JVM tests. That same case then presses back (`Espresso.pressBack()`) and asserts the list's invitation sentence — the pin for the `BackHandler`.
 
 - [ ] **Step 4: Gate and commit**
 
