@@ -1600,11 +1600,20 @@ T="$(mktemp -d -p "$SCRATCH")"
   | grep -i 'SHA-256 digest' | head -1 | sed 's/.*: *//' | tr -d ': \n' | tr 'A-F' 'a-f' > "$T/built"
 grep -m1 'SHA-256' ../ServiceTag-split/docs/design/phase-1a-evidence.md \
   | sed 's/.*SHA-256:[[:space:]]*//' | tr -d ': \n' | tr 'A-F' 'a-f' > "$T/recorded"
-test -s "$T/built" && test -s "$T/recorded" && { cmp -s "$T/built" "$T/recorded" && echo matches || echo differs; }
+if ! test -s "$T/built" || ! test -s "$T/recorded"; then
+    rm -rf "$T"
+    echo BLOCKED          # an empty digest on either side is a failure, never a silent pass
+    exit 1
+fi
+cmp -s "$T/built" "$T/recorded" && echo matches || {
+    rm -rf "$T"
+    echo differs
+    exit 1
+}
 rm -rf "$T"
 ```
 
-Write **only** the word (`matches` or `differs`) in the report and the evidence. If it prints `differs`, or either file was empty, stop and report BLOCKED: the wrong key or the wrong record was used. If `grep -m1 'SHA-256'` in the evidence file lands on a line that is not the certificate line, adjust the `grep` to the line that is — by line content, never by pasting the value.
+Only `matches`, `differs` or `BLOCKED` can escape this block. Write **only** that word in the report and the evidence. `differs` or `BLOCKED` stops the task: the wrong key or the wrong record was used. If `grep -m1 'SHA-256'` in the evidence file lands on a line that is not the certificate line, adjust the `grep` to the line that is — by line content, never by pasting the value.
 
 - [ ] **Step 2: The README, for the product**
 
