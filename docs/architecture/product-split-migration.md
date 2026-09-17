@@ -327,17 +327,23 @@ inactive account (arch §4.3). **No step below requires a delete, and none may b
 **Do.**
 
 ```bash
-gh repo create GonzRon/nfc-tag-core --public \
-  --description "Product-neutral NFC tag mechanism: external-record envelope, reader mode, safe writer" \
-  --disable-wiki
+# GonzRon/nfc-tag-core already exists on GitHub — created EMPTY and public on 2026-09-17 (owner
+# authorization, split ledger); no repo-create step here. The library's branch is `master` (F-4).
 cd ~/Documents/Projects/AndroidStudioProjects/nfc-tag-core
 git remote add origin https://github.com/GonzRon/nfc-tag-core.git
-git push -u origin main
-git tag -a nfc-tag-core-v0.1.0 -m "extracted from ac523d7; provenance in README"
+git push -u origin master
+git tag -a nfc-tag-core-v0.1.0 -m "extracted from the ServiceTag tree; provenance in README"
 git push origin nfc-tag-core-v0.1.0
+# The empty repository carried GitHub's placeholder default_branch = main. After the first push,
+# verify the ACTUAL default branch is master; if GitHub kept the placeholder, set it and check again,
+# so ServiceTag, NoteTag and nfc-tag-core all end on the same convention.
+gh api repos/GonzRon/nfc-tag-core --jq .default_branch            # expected: master
+# if it printed main:
+#   gh api -X PATCH repos/GonzRon/nfc-tag-core -f default_branch=master
+#   gh api repos/GonzRon/nfc-tag-core --jq .default_branch          # expected: master
 ```
 
-**Verify.** `gh repo view GonzRon/nfc-tag-core --json name,visibility,defaultBranchRef`;
+**Verify.** `gh repo view GonzRon/nfc-tag-core --json name,visibility,defaultBranchRef` (the default branch reads `master`);
 `gh api repos/GonzRon/nfc-tag-core/tags` lists the tag; the Actions run is green (§B.6 enables it if
 it is not on by default).
 

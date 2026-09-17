@@ -287,6 +287,19 @@ object UuidBytes {
     fun requireCanonical(value: String): java.util.UUID
 }
 
+/**
+ * The serialised size of an NDEF message, computed without Android (F-2, 2026-09-17): per record
+ * `1 + 1 + (1 if payload < 256 else 4) + type + payload`, no ID field, no TLV framing, no terminator.
+ * Exactly `NdefMessage.toByteArray().size` for every representable message; `nfc-android`'s
+ * `serialisedSize()` is the platform figure and the emulator suite pins the two equal. An EMPTY
+ * list is refused (`require`): Android's `NdefMessage` is one or more records, and this mirror
+ * models the same domain rather than sizing something Android would not call a message.
+ */
+object NdefSize {
+    /** @throws IllegalArgumentException for an empty list — an NDEF message needs at least one record. */
+    fun serialisedSize(records: List<NdefRecordData>): Int
+}
+
 /** What the CALLER's classifier made of what the tag already holds. No product words. */
 sealed interface ExistingContent {
     data object Empty : ExistingContent
@@ -311,7 +324,12 @@ sealed interface OverwriteDecision {
  * written (a retry). Everything else costs exactly one confirmation. The rule is identical for both
  * products; only the sentences differ, and the library builds none.
  */
-object OverwritePolicy { fun decide(existing: ExistingContent, isSameIdentity: Boolean): OverwriteDecision }
+object OverwritePolicy {
+    /** All six tokens, `EMPTY_TAG` and `SAME_TAG` included — §4.5's full matrix. */
+    fun reason(existing: ExistingContent, isSameIdentity: Boolean): OverwriteReason
+    /** `EMPTY_TAG`/`SAME_TAG` → [OverwriteDecision.Proceed]; everything else → [OverwriteDecision.Confirm] with the caller's evidence as `detail`. */
+    fun decide(existing: ExistingContent, isSameIdentity: Boolean): OverwriteDecision
+}
 
 // ---------- nfc-android (Android NFC adapter) ----------
 package com.loosecannon.nfc.tagcore.android
@@ -367,7 +385,8 @@ sealed interface WriteResult {
     data object ReadOnly : WriteResult
     data object Unsupported : WriteResult
     data class VerifyMismatch(val readBack: List<NdefRecordData>) : WriteResult
-    data class Failed(val reason: String) : WriteResult
+    /** [reason] is diagnostic prose; [cause] is the exception that was folded, kept so a consumer can log it (F-1, 2026-09-17). The library neither logs it nor stringifies it. */
+    data class Failed(val reason: String, val cause: Throwable? = null) : WriteResult
 }
 
 /**
@@ -414,6 +433,30 @@ interface TagIo {
     fun lock(tag: TagHandle): Boolean
 }
 object RealTagIo : TagIo   // the only place a Tag comes back out of a handle; format delegates to TagWriter.format
+
+/**
+ * Where an inspected tag goes next — decided WITHOUT a message size, before any consent question,
+ * before any product planning and before any I/O (F-3, 2026-09-17). A tag that still needs
+ * formatting has no capacity figure, so it is `Format` and nothing can be planned against it
+ * (invariant 9); a read-only tag is `ReadOnly` before capacity is a question (invariant 7). Only a
+ * [WriteRoute.Writable] carries a `maxSize`, and only it can be asked whether a message [fit]s, so
+ * **inspect → route → plan against maxSize → measure → fit → write** is the only order the types
+ * allow. Both consumers inherit this contract in Phase G; changing it afterwards is a
+ * three-repository migration.
+ */
+sealed interface WriteRoute {
+    /** Call [TagIo.format]; plan, measure, write, verify and lock on the next tap. */
+    data object Format : WriteRoute
+    data object ReadOnly : WriteRoute
+    /** The tag can take a message of up to [maxSize] serialised bytes: plan against it, then [fit]. */
+    data class Writable(val maxSize: Int) : WriteRoute
+}
+sealed interface CapacityVerdict {
+    data object Write : CapacityVerdict
+    data class TooSmall(val maxSize: Int, val needed: Int) : CapacityVerdict
+}
+fun TagInspection.route(): WriteRoute            // needsFormat → Format; !writable → ReadOnly; else Writable(maxSize)
+fun WriteRoute.Writable.fit(needed: Int): CapacityVerdict   // needed = the exact serialised message; nothing added
 ```
 
 ### 4.3 Invariants
@@ -572,7 +615,7 @@ classes (provenance in §4.6).
 | TNF gate | our exact type under a non-external TNF is `Foreign`, not `Recognised` — from `tagRecordUnderWrongTnfIsForeign` |
 | First-record-only | extra records after the first are ignored (`onlyFirstRecordMatters`); an AAR-only message is `Foreign` (`applicationRecordAloneIsForeign`); an empty list is `Empty` (`emptyMessageIsEmpty`) |
 | Malformed input | a truncated body, an empty body and a body under the wrong type all come back without an exception; the envelope never throws on hostile bytes |
-| Generic payload limits | `serialisedSize()` for representative messages, asserted to be exactly `toNdefMessage().toByteArray().size` with **no TLV allowance added**, and compared against **`NTAG213_MAX_MESSAGE_BYTES`** — one named constant, **[unobserved]** at a provisional 137 B and re-pinned to the `Ndef.maxSize` measured from a physical NTAG213 on **Session 1 tap 2** and recorded in the evidence file (§4.9). Parameterised so each consumer asserts its own budget (O14). A second case pins the boundary: a message of exactly `maxSize` bytes is accepted and one of `maxSize + 1` is `TooSmall` (invariant 7) |
+| Generic payload limits | `NdefSize.serialisedSize()` — the pure-JVM figure (F-2) — for representative messages, equal to `toNdefMessage().toByteArray().size` (the equality itself is pinned on the emulator, `nfc-android` tier) with **no TLV allowance added**, an empty list refused, and compared against **`NTAG213_MAX_MESSAGE_BYTES`** — one named constant, **[unobserved]** at a provisional 137 B and re-pinned to the `Ndef.maxSize` measured from a physical NTAG213 on **Session 1 tap 2** and recorded in the evidence file (§4.9). Parameterised so each consumer asserts its own budget (O14). A second case pins the boundary: a message of exactly `maxSize` bytes is accepted and one of `maxSize + 1` is `TooSmall` (invariant 7) |
 | `UuidBytes` | `toBytes`/`fromBytes` round-trip over random UUIDs and the all-zero / all-ones edges; big-endian layout pinned as bytes; `requireCanonical` refuses a non-UUID and an upper-case UUID, accepts the canonical form |
 | `TagIdentity` | refuses a mixed-case external type; `externalType` is `"$domain:$name"`; `aarPackage` defaults to null |
 | `OverwritePolicy` | the full `ExistingContent` × `isSameIdentity` matrix → the six `OverwriteReason` tokens; `Proceed` only for `Empty` and for `Ours` with `isSameIdentity` — generalised from `OverwritePolicyTest` |
@@ -581,7 +624,7 @@ classes (provenance in §4.6).
 
 | Tier | Where | Cases |
 |---|---|---|
-| Local unit (`test/`) | JVM, every push | `WriteResult` → outcome mapping; the capacity arithmetic (`serialisedSize` vs `maxSize` on the `Ndef` path; the `-1` formatable case routes to `format` and computes no verdict) against a fake `TagIo`; `TagInspection` construction from each inspect branch |
+| Local unit (`test/`) | JVM, every push | `WriteRouteTest`: `route()` without a message size — the `-1` formatable case is `Format` and computes no verdict, a read-only tag is `ReadOnly` before capacity is a question, a writable tag carries its measured `maxSize`, and `fit(needed)` accepts exactly `maxSize` and refuses `maxSize + 1` (F-3); `TwoTapFakeTest`: against a fake `TagIo` whose inspection flips after `format`, the planning/sizing seam is provably **not invoked** on the Format path and the second tap plans against the real `maxSize`, `fit`s and writes; `TagInspection` defaults. Every `TagWriter` branch that needs a `Tag` is a physical-tag row in the runbook, never a JVM test |
 | Instrumented (`androidTest/`) | **the emulator, locally — never in CI** | `NdefBridge` round-trips (`toNdefMessage` → `toRecordData` identity; an `Intent` carrying `EXTRA_NDEF_MESSAGES` on both the pre-33 and 33+ branches; `toHexOrNull`); `applicationRecord` against the real platform call; `NfcReaderModeSession.available == false` on an emulator with no NFC, with `start()`/`stop()` safe no-ops there. Anything needing a real chip is a physical-tag row in the runbook, never an automated test |
 
 The emulator suites stay local: CI has no `androidTest` step, correctly, because those need a device
@@ -602,17 +645,20 @@ the ServiceTag repository** — the renamed continuation of this one, which is w
 
 | NEW file in nfc-tag-core | Extracted from (at `ac523d7`) | `git log --follow` start | Change on extraction |
 |---|---|---|---|
+| *(note, 2026-09-17)* | Phase F copies from the **post-Phase-D** ServiceTag tree (product-split `63602d1`); the Phase F plan's provenance table gives both that path and the `ac523d7`-era one below, with the start points re-derived | | |
 | `nfc-core/…/NdefRecordData.kt` | `core/…/core/nfc/NdefCodec.kt:8-12` | `76b751a` "add :core with the legacy key and ndef codec pinned by tests" | own file; otherwise unchanged. "The single most reusable type in the repo" (arch §6.1) |
-| `nfc-core/…/TagIdentity.kt` | **NEW type** parameterising `NdefCodec.DOMAIN` (`:37`), `V1_TYPE_NAME` (`:39`), `PACKAGE_NAME` (`:46`) | `76b751a` (`DOMAIN`, normalised at `b9f7e51`), `f92a391` (`V1_TYPE_NAME`, `PACKAGE_NAME`) | three constants become a value type; domain and AAR package stay separate fields even when equal (C9) |
+| `nfc-core/…/TagIdentity.kt` | **NEW type** parameterising `NdefCodec.DOMAIN` (`:37`), `V1_TYPE_NAME` (`:39`), `PACKAGE_NAME` (`:46`); Phase D created the file itself at `5c075ea` and Phase F copies it verbatim | `5c075ea` (the file); `76b751a` (`DOMAIN`, normalised at `b9f7e51`), `f92a391` (`V1_TYPE_NAME`, `PACKAGE_NAME`) for the constants | three constants become a value type; domain and AAR package stay separate fields even when equal (C9) |
 | `nfc-core/…/NdefEnvelope.kt` | `NdefCodec.decode` (`:56-65`), `encodeV1` (`:90`), `v1Record` (`:93-102`), `applicationRecord` (`:104-109`) | `76b751a` (decode skeleton), `f92a391` "tag payload format v1: codec, AAR, overwrite policy" | identity becomes a parameter; the type switch collapses to "my type / not my type"; the body is returned unparsed; the AAR becomes optional, appended only when `aarPackage != null` (O13). The legacy branch does **not** come along (O2) |
 | `nfc-core/…/TagContent.kt` | `TagPayload.Foreign` / `.Empty` (`NdefCodec.kt:21-26`) | `76b751a` | `Recognised(body)` replaces the product arms `V1`/`LegacyMd5`; `NewerVersion` does not come along — version negotiation is a *body* concern and each app owns its body (§4.7) |
 | `nfc-core/…/TagContent.kt` — **`Malformed` does NOT come along** | `TagPayload.Malformed` (`NdefCodec.kt:25`), raised by `decodeV1`/`decodeLegacy` for a bad version byte, a wrong length or non-zero flags | `76b751a` (the type), `f92a391` (the v1 reasons) | **stays per app, by the same rule that keeps the layout out** (§4.7): "malformed" is a judgment about a *body*, and only the app that owns the body scheme can make it. The envelope's vocabulary is `Recognised` / `Foreign` / `Empty`; a recognised body that then fails to parse is the consumer's `Malformed`, in the consumer's words. The library does keep the *classification slot* — `ExistingContent.Unreadable` — so the overwrite decision can still be made about a tag whose body nobody could read |
 | `nfc-core/…/UuidBytes.kt` | the `ByteBuffer`/`UUID` halves of `NdefCodec.decodeV1` and `v1Record`, plus `requireCanonicalUuid` (`:111-120`) | `f92a391` | takes a `String`/`ByteArray` instead of a `TagId`, so the `TagId` wrapper stays in the app. **The layout it used to live in stays behind** (§4.7) |
 | `nfc-core/…/OverwritePolicy.kt` | `core/…/core/nfc/OverwritePolicy.kt` (whole file) | `f92a391` | `decide(existing: TagPayload, intended: TagId)` → `decide(existing: ExistingContent, isSameIdentity: Boolean)`; the five hard-coded sentences — each of which says "noteNFC" — become tokens plus a `detail` string |
+| `nfc-core/…/NdefSize.kt` | **NoteTag** `core/…/notetag/core/nfc/NdefSize.kt` (whole file, Phase E) | NoteTag `b0ec89c` (in the NoteTag repository) | package line; an empty list refused (F-2) |
 | `nfc-android/…/NdefBridge.kt` | `app/…/nfc/NdefBridge.kt` (whole file) | `dc1bb1c` "nfc adapter: ndef bridge, reader-mode session, tag writer with read-back" | wholesale; imports only `android.*` and `NdefRecordData`, so nothing to strip. `Intent.nfcTag()` is dead code in the app today (arch §6.2) and becomes live API. `serialisedSize()` is **NEW**, lifting `message.toByteArray().size` out of `TagWriter.write` so a consumer can ask before a tap |
 | `nfc-android/…/NfcReaderModeSession.kt` | `app/…/nfc/NfcReaderModeSession.kt` (whole file, 39 lines) | `dc1bb1c`; **corrected at `e2cf1d0`** | verbatim. **The doc comment is half the value — carry it across** (arch §6.2), including why the platform NDEF check stays on and the `onTag` threading contract |
 | `nfc-android/…/TagWriter.kt` (+ `TagInspection`, `WriteResult`) | `app/…/nfc/TagWriter.kt` (whole file, 126 lines) | `dc1bb1c`; throw contracts at `bdcc475`; lock-after-read-back and the unlocked format path at `e2cf1d0` | the single `NdefCodec.decode` call — used only to classify what was read — is removed, so the library carries no product type string; `TagInspection.existing: TagPayload` becomes `unreadable: String?` and the caller classifies. Adds the formatted-size capacity rule (invariant 7) |
-| `nfc-android/…/TagIo.kt` (+ `TagHandle`, `NfcTagHandle`, `RealTagIo`) | `app/…/ui/scan/TagWriteController.kt:32-65` | `c808b49` "scan, tag result sheets, write flow with the 1b rules, share card, links" | moved out of a UI file, where it does not belong (arch §6.2) |
+| `nfc-android/…/TagIo.kt` (+ `TagHandle`, `NfcTagHandle`, `RealTagIo`) | `app/…/ui/scan/TagWriteController.kt:32-65` | `c808b49` "scan, tag result sheets, write flow with the 1b rules, share card, links" | moved out of a UI file, where it does not belong (arch §6.2); `format` joins the seam |
+| `nfc-android/…/WriteRoute.kt` | the routing both controllers do inline (`TagWriteController`; NoteTag `NoteTagWriteController`) | `c808b49`; NoteTag `840e6ba` | **NEW** (F-3): two-stage — `route()` without a message size, then `fit(needed)` on a `Writable(maxSize)` |
 | `nfc-core/src/test/…/NdefEnvelopeTest.kt` | `core/src/test/…/NdefCodecTest.kt` | `76b751a`; legacy cases trimmed at `26ec9d0` | the legacy-key cases do not come along (O2); `evernoteEraTypeIsForeign` becomes the parameterised sibling-isolation case |
 | `nfc-core/src/test/…/UuidBytesTest.kt`, `…/EnvelopeLimitsTest.kt` | `core/src/test/…/NdefCodecV1Test.kt` | `f92a391` | the helper and limit cases are extracted; the version/flags cases stay with the app that owns the layout |
 | `nfc-core/src/test/…/OverwritePolicyTest.kt` | `core/src/test/…/OverwritePolicyTest.kt` | `f92a391` | asserts tokens instead of sentences |
