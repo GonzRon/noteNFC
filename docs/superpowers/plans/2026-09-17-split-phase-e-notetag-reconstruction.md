@@ -527,7 +527,7 @@ git commit -m "notetag: modern build, the identity typed once, and an empty comp
 - Create/replace: `app/src/main/res/drawable/ic_launcher_{background,foreground,monochrome}.xml`, `mipmap-anydpi-v26/ic_launcher{,_round}.xml`, the ten `.png` rasters
 
 **Interfaces:**
-- Consumes: the owner's pack, staged read-only at `~/Documents/Projects/AndroidStudioProjects/split-assets/NoteTag/app/src/main/res/` (amber tag + note mark on an ivory ground; a `<monochrome>` layer for themed icons). Do not touch the sibling `ServiceTag` pack.
+- Consumes: the owner's pack, staged read-only at `~/Documents/Projects/AndroidStudioProjects/split-assets/NoteTag/app/src/main/res/` (the tag-and-note mark; a `<monochrome>` layer for themed icons). **Colour revision 2026-09-17 (owner):** same shapes, recoloured to a Joplin-derived blue palette (frost ground `#F4F7FB`, azure tag `#1F5FA8`, white waves and paper, navy fold `#0B3A6E`, mist lines `#8A96A6`), rasters re-rendered from the SVG; the previous amber pack is preserved beside it as `NoteTag-amber-original/`. Task 3 landed the amber pack; Task 9b's fix round installs the recoloured files. Do not touch the sibling `ServiceTag` pack.
 
 - [ ] **Step 1: Swap the resources**
 
@@ -1551,20 +1551,23 @@ git commit -m "notetag screens: share it, hold a tag, see what this phone has wr
 - Consumes: Task 9's screens and their tests. **Every sentence the tests assert stays byte-identical**; this task changes how the screens look, never what they say, and it adds no screen (P20 holds: still `List` and `Write`).
 - Produces: `NoteTagTheme` built from the pack's palette; `Watermarked(modifier, alpha, content)`; the styled result card, list rows, write sheet and empty state.
 
-**The palette, read off the icon pack** (`~/Documents/Projects/AndroidStudioProjects/split-assets/NoteTag/`, its README and the drawables): the six colours the mark is drawn with, and nothing invented beyond two derived tints, each labelled:
+**The palette, read off the icon pack — the 2026-09-17 blue revision** (`~/Documents/Projects/AndroidStudioProjects/split-assets/NoteTag/`, its README's colour-revision section and the drawables). A variation of Joplin's brand palette (Joplin blue `#043873`, dark grey `#313640`, white), deliberately not a copy, and with nothing green or lime (the owner's ruling against the Evernote family). The six colours the mark is drawn with plus two labelled derived tones:
 
 | Token | Hex | Role (light) | Role (dark) |
 |---|---|---|---|
-| `Ivory` | `#F7F5EF` | `background`, `surface` | `onSurface`, `onBackground` |
-| `Paper` | `#FCFAF5` | `surfaceContainerHigh` (cards), `surfaceVariant` | — |
-| `Amber` | `#E2A633` | `primary`, `secondary` | `primary`, `secondary` |
-| `Umber` | `#4A3424` | `onPrimaryContainer`, `onSecondaryContainer`, `tertiary` | `primaryContainer` |
-| `Charcoal` | `#1B1F22` | `onBackground`, `onSurface`, `onPrimary` | `background`, `surface` |
-| `WarmGrey` | `#8C8B86` | `outline`, `onSurfaceVariant` | `outline`, `onSurfaceVariant` |
-| `AmberTint` *(derived: Amber at 30 % over Ivory)* | `#F5E3B8` | `primaryContainer`, `secondaryContainer` (chips) | `onPrimaryContainer` |
-| `Coal` *(derived: Charcoal lifted one step)* | `#262B2F` | — | `surfaceContainerHigh` (cards), `surfaceVariant` |
+| `Frost` | `#F4F7FB` | `background`, `surface` | `onSurface`, `onBackground` |
+| `Paper` | `#FFFFFF` | `surfaceContainerHigh` (cards), `surfaceVariant` | — |
+| `Azure` | `#1F5FA8` | `primary`, `secondary` | `primary`, `secondary` |
+| `Navy` | `#0B3A6E` | `onPrimaryContainer`, `onSecondaryContainer`, `tertiary` | `primaryContainer`, `secondaryContainer` |
+| `Slate` | `#2B3038` | `onBackground`, `onSurface` | `background`, `surface` |
+| `Mist` | `#8A96A6` | `outline`, `onSurfaceVariant` | `outline`, `onSurfaceVariant` |
+| `Sky` | `#5DA6F5` | `tertiaryContainer` | `tertiary` |
+| `SkyTint` *(derived: Sky at 25 % over Frost)* | `#D7E6F9` | `primaryContainer`, `secondaryContainer` (chips) | `onPrimaryContainer`, `onSecondaryContainer` |
+| `Ink` *(derived: Slate lifted one step)* | `#363C46` | — | `surfaceContainerHigh` (cards), `surfaceVariant` |
 
-Light and dark are both real: `NoteTagTheme(darkTheme: Boolean = isSystemInDarkTheme())` chooses `lightColorScheme(...)` / `darkColorScheme(...)` with exactly the roles above; every other role takes Material 3's default derived from these. `colors.xml` names the same six hex values (`notetag_ivory`, …) so `themes.xml` can set `android:windowBackground` to `@color/notetag_ivory` (light) — the only XML use; Compose reads the Kotlin tokens.
+`onPrimary` is `Paper` (white on azure, as Joplin's mark). `onTertiary` is `Paper` in light and `Slate` in dark. The retired amber tokens (`Ivory`, `Amber`, `Umber`, `Charcoal`, `WarmGrey`, `AmberTint`, `Coal`) do not survive anywhere in the app.
+
+Light and dark are both real: `NoteTagTheme(darkTheme: Boolean = isSystemInDarkTheme())` chooses `lightColorScheme(...)` / `darkColorScheme(...)` with exactly the roles above; every other role takes Material 3's default derived from these. `colors.xml` names the same six hex values (`notetag_frost`, `notetag_paper`, `notetag_azure`, `notetag_navy`, `notetag_slate`, `notetag_mist`) so `themes.xml` can set `android:windowBackground` to `@color/notetag_frost` (light) — the only XML use; Compose reads the Kotlin tokens.
 
 **Type.** System fonts only (no network, no bundled font files). Material 3 `Typography()` with these overrides and no others: `headlineSmall` and `titleLarge` at `FontWeight.SemiBold`; `labelLarge` with `letterSpacing = 0.6.sp` (chips and buttons); `bodyLarge` `lineHeight = 24.sp`.
 
@@ -1582,6 +1585,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -1595,24 +1600,28 @@ import com.loosecannon.notetag.R
 @Composable
 fun Watermarked(modifier: Modifier = Modifier, alpha: Float = 0.07f, content: @Composable () -> Unit) {
     Box(modifier = modifier.clipToBounds()) {
-        Image(
-            painter = painterResource(R.drawable.ic_launcher_foreground),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.align(Alignment.BottomEnd).size(260.dp).alpha(alpha),
-        )
-        Box(Modifier.fillMaxSize()) { content() }
+        // The mark must not size the box: it lives in an overlay that matches the content's size
+        // and spills past the bottom-end edge, where clipToBounds trims it (fixed after review).
+        Box(Modifier.matchParentSize()) {
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.align(Alignment.BottomEnd).size(260.dp).offset(x = 48.dp, y = 56.dp).alpha(alpha),
+            )
+        }
+        content()
     }
 }
 ```
 
-In dark theme pass `alpha = 0.10f` (the mark is charcoal-on-amber; on Coal it needs a touch more). It appears in exactly four places: behind the list's **result card**, behind the list's **empty state** (`alpha = 0.09f`), behind the **write sheet**, and nowhere else — a watermark on every surface is wallpaper.
+In dark theme pass `alpha = 0.10f` (on Ink the azure mark needs a touch more). It appears in exactly four places: behind the list's **result card**, behind the list's **empty state** (`alpha = 0.09f`), behind the **write sheet**, and nowhere else — a watermark on every surface is wallpaper.
 
 - [ ] **Step 1: The theme and the colours**
 
-`NoteTagTheme.kt`: the eight tokens as `val` `Color`s, `LightScheme = lightColorScheme(primary = Amber, onPrimary = Charcoal, primaryContainer = AmberTint, onPrimaryContainer = Umber, secondary = Amber, onSecondary = Charcoal, secondaryContainer = AmberTint, onSecondaryContainer = Umber, tertiary = Umber, onTertiary = Ivory, background = Ivory, onBackground = Charcoal, surface = Ivory, onSurface = Charcoal, surfaceVariant = Paper, onSurfaceVariant = WarmGrey, surfaceContainerHigh = Paper, outline = WarmGrey)`, `DarkScheme = darkColorScheme(primary = Amber, onPrimary = Charcoal, primaryContainer = Umber, onPrimaryContainer = AmberTint, secondary = Amber, onSecondary = Charcoal, secondaryContainer = Umber, onSecondaryContainer = AmberTint, tertiary = AmberTint, onTertiary = Charcoal, background = Charcoal, onBackground = Ivory, surface = Charcoal, onSurface = Ivory, surfaceVariant = Coal, onSurfaceVariant = WarmGrey, surfaceContainerHigh = Coal, outline = WarmGrey)`, the `Typography` above, and `NoteTagTheme(darkTheme, content)` = `MaterialTheme(colorScheme, typography, content)`. `MainActivity` calls `enableEdgeToEdge()` before `setContent` so the ivory (or charcoal) runs under the system bars.
+`NoteTagTheme.kt`: the nine tokens as `val` `Color`s, `LightScheme = lightColorScheme(primary = Azure, onPrimary = Paper, primaryContainer = SkyTint, onPrimaryContainer = Navy, secondary = Azure, onSecondary = Paper, secondaryContainer = SkyTint, onSecondaryContainer = Navy, tertiary = Navy, onTertiary = Paper, tertiaryContainer = Sky, onTertiaryContainer = Navy, background = Frost, onBackground = Slate, surface = Frost, onSurface = Slate, surfaceVariant = Paper, onSurfaceVariant = Mist, surfaceContainerHigh = Paper, outline = Mist)`, `DarkScheme = darkColorScheme(primary = Azure, onPrimary = Paper, primaryContainer = Navy, onPrimaryContainer = SkyTint, secondary = Azure, onSecondary = Paper, secondaryContainer = Navy, onSecondaryContainer = SkyTint, tertiary = Sky, onTertiary = Slate, background = Slate, onBackground = Frost, surface = Slate, onSurface = Frost, surfaceVariant = Ink, onSurfaceVariant = Mist, surfaceContainerHigh = Ink, outline = Mist)`, the `Typography` above, and `NoteTagTheme(darkTheme, content)` = `MaterialTheme(colorScheme, typography, content)`. `MainActivity` calls `enableEdgeToEdge()` before `setContent` so the ivory (or charcoal) runs under the system bars.
 
-`colors.xml`: the six named colours. `themes.xml`: add `<item name="android:windowBackground">@color/notetag_ivory</item>` inside `Theme.NoteTag` (its parent stays the light `NoActionBar` parent Task 9 set). Dark-mode window background is left to the theme parent; Compose paints the surface immediately, so the flash is a frame at most.
+`colors.xml`: the six named colours. `themes.xml`: add `<item name="android:windowBackground">@color/notetag_frost</item>` inside `Theme.NoteTag` (its parent stays the light `NoActionBar` parent Task 9 set). Dark-mode window background is left to the theme parent; Compose paints the surface immediately, so the flash is a frame at most.
 
 - [ ] **Step 2: The list**
 
@@ -1634,13 +1643,13 @@ adb -s emulator-5554 shell am start -W -a android.intent.action.SEND -t text/pla
 adb -s emulator-5554 exec-out screencap -p > "$SCRATCH/notetag-write.png"     # look, describe, delete
 ```
 
-Expected: every test green with the same counts as Task 9 (no assertion text changed — `git diff --stat` must show no `androidTest`/`test` file); the two screenshots show ivory ground, amber accents, charcoal text and the faint mark behind the empty state and behind the write card. Describe both in the report; delete both.
+Expected: every test green with the same counts as Task 9 (no assertion text changed — `git diff --stat` must show no `androidTest`/`test` file); the two screenshots show a frost ground, azure accents, slate text and the faint mark behind the empty state and behind the write card; nothing amber, nothing green. Describe both in the report; delete both.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add app/src/main build.gradle.kts
-git commit -m "notetag wears its own colours: ivory, amber, umber, and the mark as a watermark"
+git commit -m "notetag wears its own colours: frost, azure, navy, and the mark as a watermark"
 ```
 
 ---
