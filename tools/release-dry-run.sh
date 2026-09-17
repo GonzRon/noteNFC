@@ -23,7 +23,7 @@ ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 bt="$ANDROID_HOME/build-tools/36.0.0"
 
 scratch="$(mktemp -d)"
-trap 'rm -rf "$scratch"' EXIT
+trap 'rm -rf "$scratch"' EXIT INT TERM
 
 echo "== the shared library is pinned at an exact tag =="
 bash tools/check-submodule-pin.sh
@@ -35,10 +35,19 @@ echo "== build the release APK =="
 ./gradlew :app:assembleRelease --console=plain
 
 apk="${RELEASE_DRY_RUN_APK:-app/build/outputs/apk/release/app-release.apk}"
-if [ ! -f "$apk" ]; then
+self_test=0
+if [ -n "${RELEASE_DRY_RUN_APK:-}" ]; then
+  self_test=1
+  echo "self-test hook: inspecting $apk (never a release path; the verdict is capped at PARTIAL)"
+  if [ ! -f "$apk" ]; then
+    echo "RELEASE DRY RUN: FAIL — RELEASE_DRY_RUN_APK names a file that does not exist"
+    exit 1
+  fi
+elif [ ! -f "$apk" ]; then
   echo "BLOCKED: no signing material (target §8)"
   exit 3
 fi
+echo "inspecting: $apk"
 
 echo "== the APK is signed =="
 certs="$scratch/certs.txt"
@@ -58,7 +67,8 @@ identity_checked=0
 if [ -n "$expected" ]; then
   if [ "$actual" = "$expected" ]; then
     fingerprint_status="matches"
-    identity_checked=1
+    # An override is never an identity proof of the artifact assembleRelease produced.
+    [ "$self_test" -eq 0 ] && identity_checked=1
   else
     fingerprint_status="differs"
     echo "fingerprint compare: $fingerprint_status"
@@ -70,7 +80,7 @@ echo "fingerprint compare: $fingerprint_status"
 
 echo "== the version matches =="
 built=$("$bt/aapt2" dump badging "$apk" | grep -o "versionName='[^']*'" | cut -d"'" -f2)
-declared=$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*versionName[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/')
+declared=$(grep -m1 -E '^[[:space:]]*versionName[[:space:]]*=' app/build.gradle.kts | sed -E 's/.*versionName[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/')
 if [ "$built" != "$declared" ]; then
   echo "version: $declared vs $built differs"
   echo "RELEASE DRY RUN: FAIL — built versionName differs from app/build.gradle.kts"
