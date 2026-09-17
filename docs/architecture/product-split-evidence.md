@@ -5,7 +5,7 @@ no secrets, no device ids, no owner paths.
 
 ## Phase D — ServiceTag identity conversion (§A.1)
 
-**Commits.** Phase D runs from `1a93b55` through this commit on `product-split` — twenty-four
+**Commits.** Phase D runs from `1a93b55` through `4c79418` on `product-split` — twenty-four
 commits, printed in order by `git log --oneline 1a93b55^..4c79418` (this fix round and the
 controller's plan amendments follow that endpoint). Of those, **six are the
 controller's plan work** (`1a93b55` added the 2,418-line phase plan; `d17355c`, `4bbf9b4`,
@@ -15,8 +15,8 @@ implementation**. Of those eighteen, fifteen are §A.1's task commits, two are r
 
 First task commit: `8af14eb` "root project name is ServiceTag". Last identity commit before the
 regression pass: `cffe8b7` "readme points at the fingerprint instead of printing it". Last commit
-of the phase: this one, "phase d regression pass on the emulator" — a commit cannot carry its own
-hash, so it is named by subject. The eleven commits between the `pre-split-checkpoint` tag
+of the phase: `4c79418`, "phase d regression pass on the emulator"; its review fix round `a0e4580`
+and the controller's plan-amendment commits follow that endpoint. The eleven commits between the `pre-split-checkpoint` tag
 (`ac523d7`) and `1a93b55` are the split's archaeology and target-architecture documents, not
 Phase D.
 
