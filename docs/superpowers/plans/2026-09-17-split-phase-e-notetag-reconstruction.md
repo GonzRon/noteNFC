@@ -1760,8 +1760,8 @@ T="$(mktemp -d -p "$SCRATCH")"
 # normalised (lower-case, no colons, no spaces) and are compared byte-for-byte.
 "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk 2>/dev/null \
   | grep -i 'SHA-256 digest' | head -1 | sed 's/.*: *//' | tr -d ': \n' | tr 'A-F' 'a-f' > "$T/built"
-grep -m1 'SHA-256' ../ServiceTag-split/docs/design/phase-1a-evidence.md \
-  | sed 's/.*SHA-256:[[:space:]]*//' | tr -d ': \n' | tr 'A-F' 'a-f' > "$T/recorded"
+grep -m1 '^SHA-256:' ../ServiceTag-split/docs/design/phase-1a-evidence.md \
+  | sed 's/^SHA-256:[[:space:]]*//' | tr -d ': \n' | tr 'A-F' 'a-f' > "$T/recorded"   # the certificate line starts the line; an unanchored grep hits a table row first
 if ! test -s "$T/built" || ! test -s "$T/recorded"; then
     rm -rf "$T"
     echo BLOCKED          # an empty digest on either side is a failure, never a silent pass
@@ -1775,7 +1775,7 @@ cmp -s "$T/built" "$T/recorded" && echo matches || {
 rm -rf "$T"
 ```
 
-Only `matches`, `differs` or `BLOCKED` can escape this block. Write **only** that word in the report and the evidence. `differs` or `BLOCKED` stops the task: the wrong key or the wrong record was used. If `grep -m1 'SHA-256'` in the evidence file lands on a line that is not the certificate line, adjust the `grep` to the line that is — by line content, never by pasting the value.
+Only `matches`, `differs` or `BLOCKED` can escape this block. Write **only** that word in the report and the evidence. `differs` or `BLOCKED` stops the task: the wrong key or the wrong record was used. The anchor `^SHA-256:` is deliberate: the evidence file mentions SHA-256 in prose and a table before the certificate line, and only the certificate line begins with it. Never adjust the comparison by pasting the value.
 
 - [ ] **Step 2: The README, for the product**
 
