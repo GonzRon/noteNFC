@@ -1679,7 +1679,9 @@ git commit -m "forbidden scan: the word list from the design, wired into check, 
 
 ```bash
 # the table abbreviates package paths with …, so the file check works on basenames
-for b in $(grep -oE '[A-Za-z]+\.kt' README.md | sort -u); do find nfc-core nfc-android -name "$b" | grep -q . || echo "README names a file that does not exist: $b"; done
+# Only the provenance table's NEW-file column (its first cell) names files of THIS repository; the
+# "Copied from" columns name ServiceTag/NoteTag files on purpose and must not be checked here.
+for b in $(grep -oE '^\| `nfc-(core|android)/[^`]*`' README.md | grep -oE '[A-Za-z]+\.kt' | sort -u); do find nfc-core nfc-android -name "$b" | grep -q . || echo "README names a file that does not exist: $b"; done
 for h in $(grep -oE '`[0-9a-f]{7}`' README.md | tr -d '`' | sort -u); do
   git -C ~/Documents/Projects/AndroidStudioProjects/ServiceTag-split cat-file -e "$h^{commit}" 2>/dev/null \
   || git -C ~/Documents/Projects/AndroidStudioProjects/NoteTag cat-file -e "$h^{commit}" 2>/dev/null \
@@ -1687,7 +1689,7 @@ for h in $(grep -oE '`[0-9a-f]{7}`' README.md | tr -d '`' | sort -u); do
 done
 ```
 
-Expected: no output from either loop.
+Expected: the hash loop prints nothing. The file loop prints exactly one line at this task — `NdefBridgeDeviceTest.kt`, the row Task 8 creates — and nothing else; Task 9 Step 3 re-runs it after Task 8, when it must print nothing. (Amended 2026-09-17: the original loop matched every `.kt` name in the README, including the source files the table's "Copied from" columns name in the two app repositories, which are never in this tree.)
 
 - [ ] **Step 3: Commit**
 
@@ -1984,7 +1986,7 @@ done                                                          # expected: 49 acr
 cd - >/dev/null && rm -rf "$SCRATCH"
 ```
 
-- [ ] **Step 3: Every provenance start point resolves** — the README loop from Task 6 Step 2, run once more and quoted in the report (expected: no output).
+- [ ] **Step 3: Every provenance start point resolves, and every NEW file exists** — both loops from Task 6 Step 2 (as amended: the file loop reads the table's first column only), run once more after Task 8 and quoted in the report (expected: no output from either).
 
 - [ ] **Step 4: The emulator figure at FINAL** — Task 8's run is repeated only if FINAL moved in Step 1; otherwise its XML at FINAL is the figure. Record `emulator-5554`, the count (10), `failures="0"`.
 
