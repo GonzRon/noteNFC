@@ -611,7 +611,10 @@ appear in the library" (review P4): the scan is its standing gate.
 **False positives go in an allow file, never into a weakened pattern.**
 `tools/forbidden-scan.allow` holds one exact `path:fragment` per accepted hit with a one-line reason
 (matched as: the path exactly, the fragment as a fixed substring of that line's content — never a
-whole `path:line:content` line, which would pin a line number; review I5, 2026-09-17).
+whole `path:line:content` line, which would pin a line number; review I5, 2026-09-17). A malformed
+entry, an empty path or an empty fragment fails the scan loudly with exit 2 before anything is
+scanned, and `tools/forbidden-scan-selftest.sh` proves it in CI (owner ruling, 2026-09-17): an empty
+fragment could otherwise blanket-suppress a whole file.
 Expected entries, and how each was inspected rather than accepted:
 
 | Expected hit | Verdict |
@@ -1239,7 +1242,7 @@ private signing material in source** (§26).
 |---|---|
 | **ServiceTag** | checkout with **`submodules: recursive`** → JDK 17 → setup-android → setup-gradle → the submodule-pin assertion (§6.3) → `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug` → upload every `build/test-results` tree. Because the library's modules are subprojects of this build, one green also proves the catalog alias set agrees (§6.1) |
 | **NoteTag** | the same shape, the same submodule steps, NoteTag's own module list. **CI must be run from scratch**: `c84b881` itself never ran on a runner, and its green Phase-0 evidence belongs to pre-rewrite twins whose SHAs no longer exist (review correction 8) |
-| **nfc-tag-core** | checkout → JDK 17 → setup-android → setup-gradle → **`tools/forbidden-scan.sh`** → `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :nfc-android:assembleDebug` → upload both `build/test-results` trees. The scan runs **before** the build, so a violation is the first thing a reader sees |
+| **nfc-tag-core** | checkout → JDK 17 → setup-android → setup-gradle → **`tools/forbidden-scan.sh`** → `tools/forbidden-scan-selftest.sh` → **`./gradlew build`** (check, lint, both unit suites, the debug aar — the same standalone build the local acceptance proof runs; owner ruling 2026-09-17, so remote CI is never weaker than the local gate) → upload both `build/test-results` trees. The scan runs **before** the build, so a violation is the first thing a reader sees |
 
 **No instrumented step in any of the three.** The emulator suites — the app device-proof tests and
 the library's adapter tests — stay local (arch §4.2), and §15 keeps instrumented suites off the phone
