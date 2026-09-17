@@ -1210,9 +1210,11 @@ import com.loosecannon.notetag.nfc.TagIo
 import com.loosecannon.notetag.nfc.WriteResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -1244,7 +1246,7 @@ class NoteTagWriteController(
     val state: StateFlow<WriteState> = _state
     private val busy = AtomicBoolean(false)
     private var pending: Pending? = null      // a confirmation awaits the next tap of the same tag content
-    private var done = false
+    @Volatile private var done = false
 
     /** Consent is for THIS existing content and THIS plan kind (invariant 10). */
     private class Pending(val plan: WritePlan, val existing: NoteTagContent, val consented: Boolean)
@@ -1302,8 +1304,12 @@ class NoteTagWriteController(
         when (val r = tagIo.write(tag, plan.records, lock = false)) {
             is WriteResult.Written -> {
                 val at = clock()
-                if (plan is WritePlan.DeviceBound) runCatching { store.confirm(entry.uuid, at) }   // the read-back is the proof
-                else runCatching { store.put(entry.copy(writtenAt = at)) }                          // convenience only: never load-bearing
+                // A verified write is recorded even if the screen is already leaving; a store
+                // failure still cannot escape.
+                withContext(NonCancellable) {
+                    if (plan is WritePlan.DeviceBound) runCatching { store.confirm(entry.uuid, at) }   // the read-back is the proof
+                    else runCatching { store.put(entry.copy(writtenAt = at)) }                          // convenience only: never load-bearing
+                }
                 done = true
                 _state.value = WriteState.Written(entry.copy(writtenAt = at), deviceBound = plan is WritePlan.DeviceBound)
             }
@@ -1318,9 +1324,17 @@ class NoteTagWriteController(
     }
 
     /** Leaving the screen before any write: nothing can have reached a tag, so a pending LOCAL_REF mapping may go. */
-    fun abandon(): Job? = pending?.plan?.let { p -> scope.launch { forget(p) } }
+    fun abandon(): Job? { val p = pending; pending = null; return p?.let { scope.launch { forget(it.plan) } } }
 
-    private suspend fun forget(plan: WritePlan) { if (plan is WritePlan.DeviceBound) runCatching { store.remove(plan.content.uuid.toString()) } }
+    /**
+     * Cleanup finishes even while the scope is being torn down: a bare `runCatching` would swallow
+     * the CancellationException and leave the mapping behind. A store failure still cannot escape.
+     */
+    private suspend fun forget(plan: WritePlan) {
+        if (plan is WritePlan.DeviceBound) withContext(NonCancellable) {
+            runCatching { store.remove(plan.content.uuid.toString()) }
+        }
+    }
 
     private fun contentOf(plan: WritePlan): NoteTagContent.Writable = when (plan) {
         is WritePlan.Compact -> plan.content; is WritePlan.FullUri -> plan.content
@@ -1342,7 +1356,7 @@ class NoteTagWriteController(
 }
 ```
 
-Note the two design points the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write` with `writtenAt = null`. A `Written` result confirms it (`store.confirm`) and never removes it; `VerifyMismatch` and `Failed` never remove it **and never confirm it** — retained, resolvable, hidden from the list; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` remove it.
+This block is the controller as hardened after Task 7's review (`c8d4dbf`): `forget` and the `Written` branch's store calls run under `NonCancellable`, `done` is `@Volatile`, and `abandon()`/`cancel()` clear `pending` before launching the removal. Note the two design points the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write` with `writtenAt = null`. A `Written` result confirms it (`store.confirm`) and never removes it; `VerifyMismatch` and `Failed` never remove it **and never confirm it** — retained, resolvable, hidden from the list; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` remove it.
 
 - [ ] **Step 4: `FakeTagIo` and the controller tests (JUnit 4, `runTest`)**
 
@@ -1362,6 +1376,8 @@ Note the two design points the reviewer must check: for a `DeviceBound` plan the
 8c. *(binding UX)* a `DeviceBound` plan on a ServiceTag tag → one `Confirm` with **both** sentences, overwrite first, action "Write over it"; one consent covers both.
 9. *(invariant 11)* two `onTag` calls before the first completes → one inspect.
 10. *(row 6)* a `Refused` plan → state `Refused`, no inspect-then-write beyond the inspect.
+11. *(invariant 11, second half)* after a `Written` result a third `onTag` is dropped: `inspectCount` and `writeAttempts` unchanged, state still `Written`.
+(Case 4 also seeds a sibling `LOCAL_REF` entry that must survive the removal, and pins that `confirm()` followed by `abandon()` makes the next tap ask again with `writeAttempts == 0`.)
 
 - [ ] **Step 5: Gate and commit**
 
