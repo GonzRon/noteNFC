@@ -548,4 +548,22 @@ and empty-fragment items are done. Gates at `15f1cd5`, re-run by the controller:
 8/8; a live empty-fragment probe → exit 2 (file restored); 12 commits; clean tree; 0 remotes; 0 tags.
 Scoped review of this commit alone precedes §B.1.
 
-**Phase F local extraction complete; the v0.1.0 tag and the push wait for §B.1.**
+**§B.1, executed 2026-09-17 (owner authorization after the hardening review).** The hardening review
+(Approved) named one Important — self-test case 7 could not tell the flag word apart from the word
+fixture — and one Minor — a missing allow file gave a raw shell error; both were fixed by the
+controller in `7e0377a` "selftest: case 7 stands on the flag alone, and a missing allow file is an
+error" (case 7 now fails against a scanner copy with the flag word stripped; a tree without the allow
+file exits 2), and `./gradlew build` was green locally at that commit before anything left the
+machine. Then, in the runbook's order: `origin` added; `master` pushed (`7e0377a`, 13 commits from the
+empty tree); GitHub's default branch read **`master`** without a PATCH (the placeholder `main` was
+dropped on the first push); the first Actions run — https://github.com/GonzRon/nfc-tag-core/actions/runs/35265501042 — completed **success** on every step:
+checkout, JDK 17, setup-android, setup-gradle, `forbidden-knowledge scan`, `forbidden-scan
+self-test`, `standalone build (check, lint, both unit suites, the debug aar)`, upload-artifact. Only
+then was the tag cut: **`nfc-tag-core-v0.1.0`**, annotated, on `7e0377a`, pushed; `git ls-remote
+--tags origin` and the tags API both list it at that commit, and `git describe --exact-match --match
+'nfc-tag-core-v*' --tags HEAD` resolves. The tag is **provisional** (target §10.3, runbook §B.1):
+final only once both Phase G consumers are green against exactly it; until then it may be deleted
+and re-cut. Not done: no noteNFC rename, no app push, no issue migration, no phone, no physical NFC.
+The programme stops here at the **Phase G planning gate**.
+
+**Phase F local extraction complete; §B.1 done — `nfc-tag-core-v0.1.0` is cut and pushed, provisional until Phase G.**
