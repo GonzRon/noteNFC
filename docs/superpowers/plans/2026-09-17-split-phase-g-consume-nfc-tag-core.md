@@ -841,7 +841,7 @@ Run the two `run:` lines by hand from the worktree root; both succeed. `grep -c 
 SCRATCH=$(mktemp -d)   # the session scratchpad; never a literal /tmp path in a tracked file
 mv libs/nfc-tag-core/nfc-core/build.gradle.kts "$SCRATCH/guard"
 ./gradlew projects --console=plain 2>&1 | grep -A2 'libs/nfc-tag-core is missing'; mv "$SCRATCH/guard" libs/nfc-tag-core/nfc-core/build.gradle.kts; rm -rf "$SCRATCH"
-# (b) wrong commit → "not at an exact nfc-tag-core-v* tag"
+# (b) wrong commit → the script's FIRST failing check speaks: "submodule is at <sha> but this commit pins <sha>" (the sha-equality check precedes the tag check; the "not at an exact nfc-tag-core-v* tag" message needs a gitlink that itself points at an untagged commit — found in execution 2026-09-17)
 git -C libs/nfc-tag-core checkout --quiet HEAD~1; bash tools/check-submodule-pin.sh; echo "exit=$?"; git -C libs/nfc-tag-core checkout --quiet nfc-tag-core-v0.1.0
 # (c) dirty submodule → "submodule working tree is dirty"
 touch libs/nfc-tag-core/nfc-core/src/main/kotlin/x; bash tools/check-submodule-pin.sh; echo "exit=$?"; rm libs/nfc-tag-core/nfc-core/src/main/kotlin/x
