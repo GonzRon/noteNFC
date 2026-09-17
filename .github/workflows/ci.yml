@@ -7,6 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -16,12 +19,16 @@ jobs:
           packages: platform-tools
           accept-android-sdk-licenses: true
       - uses: gradle/actions/setup-gradle@v4
+      - name: assert the shared library is initialised at the pinned tag
+        run: bash tools/check-submodule-pin.sh
       - name: unit tests and debug build
-        run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain
+        run: ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
           path: |
+            libs/nfc-tag-core/nfc-core/build/test-results
+            libs/nfc-tag-core/nfc-android/build/test-results
             core/build/test-results
             app/build/test-results
