@@ -174,15 +174,46 @@ dispatch activity, codec and database (G4's reassignment).
 
 ## Phase E — NoteTag reconstruction (§A.2)
 
-**Commits.** Phase E is the whole of the NoteTag repository's own work: `c84b881..7794e08` on `master`
-— **16 commits**, printed in order by `git log --oneline c84b881..7794e08`, **0 merges**
+**Commits.** Phase E is the whole of the NoteTag repository's own work: `c84b881..9ff1d65` on `master`
+— **17 commits**, printed in order by `git log --oneline c84b881..9ff1d65`, **0 merges**
 (`git rev-list --merges --count HEAD` = 0). The ancestry is the original product's, not a fresh
-history: the root commit is `5fb6aed` "working!" and `git rev-list --count HEAD` is **46**, so the
+history: the root commit is `5fb6aed` "working!" and `git rev-list --count HEAD` is **47**, so the
 30 commits before `c84b881` are the noteNFC line, untouched. First commit of the phase: `8865990`
-"start the narrow product from its own history"; last: `7794e08` "notetag readme: what it is, what
-it writes, and where its history came from". The tree was **45 files** after that first commit (the
-deletion of the sibling's documents and the 2024 APK) and is **83** now (`git ls-files | wc -l`).
-This repository has no remote yet and nothing is pushed in this phase.
+"start the narrow product from its own history"; last: `9ff1d65` "review round: an unverified format
+is not a write, and the claims match the code". The tree was **45 files** after that first commit
+(the deletion of the sibling's documents and the 2024 APK) and is **85** now
+(`git ls-files | wc -l`). This repository has no remote yet and nothing is pushed in this phase.
+
+**After the whole-branch review.** The reconstruction was reviewed as a whole once it was finished,
+and the seven things it found that mattered are fixed in one commit, `9ff1d65` — the last of the
+phase, and the tree every number below was measured at. (1) An **unverified `Written` is no longer a
+write**: the interim adapter's `NdefFormatable` path returns `Written(verified = false)` after a
+format, and the controller used to confirm the store row, report "Written" and set `done`, which
+dropped the very next tap — the one that measures, capacity-checks, writes and verifies; it now says
+"Formatted the tag. Hold it to the phone again to finish writing the link.", confirms nothing, keeps
+a `LOCAL_REF` mapping persisted-unconfirmed exactly as for any other ambiguous outcome, and leaves
+the task open. (2) The writer's read failure says **one fixed NoteTag sentence** — "Could not read
+the tag. Hold it still and try again." — instead of leaking a platform exception's message, with the
+single-flight guard proved released by the tap that follows. (3) `WritePlanner` **refuses at plan
+time** a scheme that is neither blocked nor on the allowlist (`WritePlan.Refused("NoteTag does not
+open <scheme> links.")`), because `ResolveTap` answers such a link with a sentence and would never
+open the tag it had just written. (4) A tag list this phone **cannot read** is no longer reported as
+"written on another phone" — a false statement about the tag — but as "This phone's tag list could
+not be read.", with `CancellationException` rethrown. (5) The manifest names its three components
+**namespace-relatively** (`.NoteTagApp`, `.MainActivity`, `.nfc.NfcDispatchActivity`) and
+`MainActivity.EXTRA_MESSAGE` is built from `BuildConfig.APPLICATION_ID`, so the binding test's claim
+of no second copy of the identity *including in the manifest* is now literally true and asserted
+(`theManifestNamesNoComponentByItsPackageRoot`). (6) `tags.json` is **excluded from Android's cloud
+backup and from device-to-device transfer** by `res/xml/data_extraction_rules.xml`, because
+`allowBackup="false"` alone would have let a transfer carry the local map to a new phone and
+contradict what the README says a `LOCAL_REF` tag is. (7) `FsyncRename` **fsyncs the containing
+directory** after the atomic rename (target §4.9, amended in the same round): without it the rename
+itself can be lost to a power cut although the bytes were durable. Six smaller items travelled with
+them: the toast removed from the copied `LinkLauncher` (NoteTag speaks on the card, not in a toast),
+"49 bytes as an NDEF message" in the README, no `!!` on `writtenAt` in the list row,
+`CancellationException` rethrown before the pre-write persist's catch-all, a `values-night`
+platform theme so a dark cold start does not flash the light ground, and the two list chips made
+non-interactive labels so a screen reader does not announce them as buttons — the words unchanged.
 
 **Identity, read off the built debug APK** (`aapt2 dump badging`, build-tools 36.0.0):
 `package: name='com.loosecannon.notetag' versionCode='3' versionName='2.0'`,
@@ -199,7 +230,7 @@ reserved for #6/#36 and declares nothing); zero occurrences of the retired ident
 extra `uses-permission` is AGP's `com.loosecannon.notetag.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
 self-scoped to this applicationId.
 
-**The C9 binding.** `TagIdentityBindingTest` (JVM, 5 tests) and `TagIdentityDispatchTest` (emulator,
+**The C9 binding.** `TagIdentityBindingTest` (JVM, 6 tests) and `TagIdentityDispatchTest` (emulator,
 4 tests) both green. The identity is typed once in `app/build.gradle.kts`, the manifest carries only
 the placeholder, and `BuildConfig.NDEF_AAR_PACKAGE` is **null** — NoteTag writes no Application
 Record (O13), asserted in the binding test and in the build script's own text.
@@ -240,12 +271,22 @@ bytes) — pinned in `:core` by `NdefSizeTest` and `NoteTagCodecTest.aJoplinNote
 compared against `NdefMessage.toByteArray().size` for the 49 B message, for a 255-byte payload and
 for a 300-byte payload — across the short-record boundary where the length field grows from one
 byte to four — and for a two-record message. Green on the emulator, so the planner's off-device
-arithmetic is the platform's. Capacity is message bytes against the tag's measured `Ndef.maxSize`:
-no TLV allowance, no character count.
+arithmetic is the platform's. Capacity is message bytes against the tag's measured `Ndef.maxSize` —
+**for the `Ndef` path**: no TLV allowance, no character count. On the interim `NdefFormatable` path
+there is **no measured `maxSize` and so no comparison at all**: the planner treats that first tap as
+unmeasured and the writer's own pre-write check is the only refusal, until Phase F/G's
+`format(null)` two-step measures the tag before writing it. The controller now treats that path's
+unverified result as "hold it again", never as a write.
 
 **The store and the LOCAL_REF invariant.** `JsonFileTagStore` is one JSON file rewritten whole
-behind a `Mutex` and replaced atomically (temp file → `fsync` → `ATOMIC_MOVE` rename, with the
-temp file deleted if any step fails); P19 holds — no Room. `TagEntry.writtenAt` is nullable and
+behind a `Mutex` and replaced atomically (temp file → `fsync` → `ATOMIC_MOVE` rename → `fsync` of
+the **containing directory**, so the rename has its own durability barrier, with the temp file
+deleted if any step fails and the directory sync wrapped because some filesystems refuse to open a
+directory as a channel); P19 holds — no Room. The file is `tags.json` in `filesDir`, and it is
+**excluded from Android's cloud backup and from device-to-device transfer** by
+`res/xml/data_extraction_rules.xml`: `allowBackup="false"` governs only the cloud on targetSdk 36,
+and a transfer that carried the map to a new phone would contradict the README's statement that a
+`LOCAL_REF` tag does not survive a move. `TagEntry.writtenAt` is nullable and
 carries the invariant: a `LOCAL_REF` mapping is persisted **before** the write, so `get` resolves a
 retained entry (a live tag may exist), while `list` — the write history the UI shows — returns only
 confirmed entries. **Retained is not written.** The three failure injections, in
@@ -268,11 +309,11 @@ belongs to ServiceTag, not NoteTag." (§23: named, not called damage), with
 `TagIdentityDispatchTest.theSiblingExternalTypeResolvesToNothingOfOurs` proving a sibling *tag*
 never reaches us through the filter in the first place.
 
-**Suites** (at `7794e08`, after `./gradlew clean`): `:core:test` **76** tests in 9 classes —
+**Suites** (at `9ff1d65`, after `./gradlew clean`): `:core:test` **78** tests in 9 classes —
 `LinkLaunchPolicyTest` 11, `NdefEnvelopeTest` 7, `NdefSizeTest` 5, `OverwriteWordingTest` 9,
-`ResolveTapTest` 13, `JsonFileTagStoreTest` 12, `JoplinIdTest` 4, `NoteTagCodecTest` 10,
-`WritePlannerTest` 5; `:app:testDebugUnitTest` **23** in 3 classes — `TagIdentityBindingTest` 5,
-`MainViewModelTest` 4, `NoteTagWriteControllerTest` 14; `:app:connectedDebugAndroidTest` **19** in
+`ResolveTapTest` 14, `JsonFileTagStoreTest` 12, `JoplinIdTest` 4, `NoteTagCodecTest` 10,
+`WritePlannerTest` 6; `:app:testDebugUnitTest` **26** in 3 classes — `TagIdentityBindingTest` 6,
+`MainViewModelTest` 4, `NoteTagWriteControllerTest` 16; `:app:connectedDebugAndroidTest` **19** in
 5 classes on the emulator (`ANDROID_SERIAL=emulator-5554`) — `AmbientDispatchDeviceProofTest` 6,
 `NdefSizeDeviceTest` 4, `TagIdentityDispatchTest` 4, `AppSmokeTest` 3,
 `WriteScreenDeviceBoundTest` 2. **0 failures, 0 errors, 0 skipped** in all three. The same command
@@ -281,9 +322,9 @@ line also built `:app:assembleDebug`, `:app:assembleRelease` and `:app:compileDe
 `emulator-5554`.
 
 **Clean checkout.** `git clone --no-local` from the repository into a scratch directory that never
-held the project; the clone's `git rev-parse --short HEAD` is **`7794e08`**, the same commit every
+held the project; the clone's `git rev-parse --short HEAD` is **`9ff1d65`**, the same commit every
 number above was measured at. Then, with the Gradle build cache disabled so the suites really ran
-there, `:core:test :app:testDebugUnitTest :app:assembleDebug` — 76 and 23 tests green in the clone
+there, `:core:test :app:testDebugUnitTest :app:assembleDebug` — 78 and 26 tests green in the clone
 and `app-debug.apk` produced. The clone was deleted afterwards. The Phase D caveat reproduces:
 `local.properties` is gitignored, so a fresh clone needs `ANDROID_HOME` supplied out of band.
 
