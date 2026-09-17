@@ -6,6 +6,7 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.widget.Toast
+import com.loosecannon.nfc.tagcore.android.ndefRecords
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.ServiceTagApp
 import com.loosecannon.servicetag.core.model.ExternalLink

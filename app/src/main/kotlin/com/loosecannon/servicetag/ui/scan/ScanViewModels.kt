@@ -2,12 +2,18 @@ package com.loosecannon.servicetag.ui.scan
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loosecannon.nfc.tagcore.android.RealTagIo
+import com.loosecannon.nfc.tagcore.android.TagHandle
+import com.loosecannon.nfc.tagcore.android.TagInspection
+import com.loosecannon.nfc.tagcore.android.TagIo
+import com.loosecannon.nfc.tagcore.android.TagRead
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagTarget
+import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.LinkRepository
@@ -79,10 +85,11 @@ class ScanViewModel(
     private val resolveTag: ResolveTag,
     private val openLink: OpenLink,
     private val io: TagIo,
+    private val codec: NdefCodec,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.resolveTag, graph.openLink, RealTagIo(graph.ndefCodec))
+    constructor(graph: AppGraph) : this(graph.resolveTag, graph.openLink, RealTagIo, graph.ndefCodec)
 
     private val _state = MutableStateFlow(ScanState())
     val state: StateFlow<ScanState> = _state.asStateFlow()
@@ -99,7 +106,7 @@ class ScanViewModel(
         viewModelScope.launch {
             _state.update { it.copy(reading = true, problem = null) }
             try {
-                val payload = withContext(ioDispatcher) { io.inspect(tag) }?.existing
+                val payload = withContext(ioDispatcher) { io.inspect(tag) }?.let(::classify)
                     ?: TagPayload.Malformed("this tag does not support NDEF")
                 when (val resolution = resolveTag.run(payload)) {
                     is Resolution.LaunchLink -> launch(resolution.link.id)
@@ -114,6 +121,15 @@ class ScanViewModel(
                 busy = false
             }
         }
+    }
+
+    /**
+     * What the tag holds, in this product's terms. The library reads records and says when it
+     * could not parse them; unreadable NDEF stays unreadable and is never read as an empty tag (C1).
+     */
+    private fun classify(inspection: TagInspection): TagPayload = when (val read = inspection.read) {
+        is TagRead.Readable -> codec.decode(read.records)
+        is TagRead.Unreadable -> TagPayload.Malformed(read.reason)
     }
 
     private suspend fun launch(id: LinkId) {
@@ -256,7 +272,7 @@ class WriteTagViewModel(
         graph.links,
         target,
         label,
-        { scope -> TagWriteController(graph, RealTagIo(graph.ndefCodec), target, label, scope) },
+        { scope -> TagWriteController(graph, RealTagIo, target, label, scope) },
     )
 
     private val controller: TagWriteController = controllerFor(viewModelScope)

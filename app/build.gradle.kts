@@ -83,6 +83,11 @@ android {
         }
     }
     testOptions {
+        // The write controller logs every folded cause with `android.util.Log.w` (R4). On the JVM
+        // the mockable android.jar throws `RuntimeException("Stub!")` from every method unless the
+        // stubs are told to return defaults, which would turn a logged cause into a lost state
+        // update. No unit test here asserts on a stub throwing.
+        unitTests.isReturnDefaultValues = true
         unitTests.all { it.jvmArgs("--enable-native-access=ALL-UNNAMED") }
     }
 }
@@ -120,6 +125,7 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit4)
+    testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.room3.testing)
     testImplementation(libs.sqlite.bundled.jvm)

@@ -1,9 +1,9 @@
 package com.loosecannon.servicetag.testing
 
+import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.attachments.Thumbnails
 import com.loosecannon.servicetag.core.nfc.NdefCodec
-import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
 import com.loosecannon.servicetag.core.ports.Clock

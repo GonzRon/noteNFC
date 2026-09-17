@@ -32,11 +32,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.loosecannon.nfc.tagcore.android.NfcReaderModeSession
+import com.loosecannon.nfc.tagcore.android.NfcTagHandle
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.nfc.NfcReaderModeSession
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
@@ -140,7 +141,7 @@ private fun TargetLine(targetName: String) {
     }
 }
 
-/** The five states of the write flow, each in the family its meaning asks for (D12 §5, §11). */
+/** The four states of the write flow, each in the family its meaning asks for (D12 §5, §11). */
 @Composable
 private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Unit) {
     when (state) {
@@ -156,13 +157,6 @@ private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Uni
             border = ServiceTagTheme.semanticColors.dueSoon.foreground,
             glyph = ServiceTagIcons.NfcTag,
             sentence = "Hold the tag to the phone while you answer.",
-        )
-
-        is WriteState.Verifying -> NfcSheet(
-            eyebrow = "Verifying",
-            accent = MaterialTheme.colorScheme.tertiary,
-            glyph = ServiceTagIcons.NfcTag,
-            sentence = state.message,
         )
 
         is WriteState.Written -> NfcSheet(

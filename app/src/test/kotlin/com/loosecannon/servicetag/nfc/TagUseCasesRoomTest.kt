@@ -1,11 +1,11 @@
 package com.loosecannon.servicetag.nfc
 
+import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
-import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.UuidGenerator
 import com.loosecannon.servicetag.core.usecase.ProvisionTag

@@ -1,8 +1,8 @@
 package com.loosecannon.servicetag.nfc
 
+import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.links.DeepLinkRoute
-import com.loosecannon.servicetag.core.nfc.TagIdentity
 import com.loosecannon.servicetag.core.nfc.TagRoute
 import java.io.File
 import org.junit.Assert.assertEquals

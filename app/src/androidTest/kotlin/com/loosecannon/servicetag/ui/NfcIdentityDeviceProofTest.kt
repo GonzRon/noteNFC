@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
+import com.loosecannon.nfc.tagcore.NdefEnvelope
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagId
@@ -81,7 +82,7 @@ class NfcIdentityDeviceProofTest {
 
     private fun external(type: String, payload: ByteArray): NdefRecord =
         NdefRecord(
-            NdefCodec.TNF_EXTERNAL_TYPE.toShort(),
+            NdefEnvelope.TNF_EXTERNAL_TYPE.toShort(),
             type.toByteArray(Charsets.US_ASCII),
             ByteArray(0),
             payload,
