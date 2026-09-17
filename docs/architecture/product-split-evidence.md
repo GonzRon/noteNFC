@@ -128,6 +128,8 @@ phase and §12's signed-release proof is discharged there. The **retired 2024 si
 SHA-256 fingerprint is recorded once**, in `docs/design/phase-1a-evidence.md`; the README points
 there rather than reprinting it, and nothing in this file reproduces it.
 
+**After the reviews.** The Task 17 fix round (`a0e4580`) and the whole-branch review's fix round (`b4b016b`) added tests without changing any identity fact above: at `b4b016b` the suites are `:core:test` 354, `:app:testDebugUnitTest` 225 and `:app:connectedDebugAndroidTest` 66 in 13 classes, all 0 failures / 0 errors / 0 skipped, the connected suite re-run in full on the emulator at that commit.
+
 **Clean checkout.** `git clone --no-local --branch product-split` into a directory that never held
 the project, then `:core:test :app:testDebugUnitTest :app:assembleDebug` — green (Task 16, against
 `cffe8b7`; the clone was deleted afterwards). One caveat worth carrying: `local.properties` is
