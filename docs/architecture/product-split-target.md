@@ -780,8 +780,10 @@ never sees the mapping). Two rules, in this order of priority:
 The sequence:
 
 1. allocate the UUID;
-2. **atomically persist** the `LOCAL_REF → target` mapping (temporary file, `fsync`, atomic rename
-   over the store) and continue only once that has returned successfully;
+2. **atomically persist** the `LOCAL_REF → target` mapping (temporary file, `fsync` the file, atomic
+   rename over the store, then `fsync` the **directory** — without the directory sync the new entry
+   is not durable across a power loss even though the bytes are; whole-branch review finding,
+   2026-09-17) and continue only once that has returned successfully;
 3. write the tag and verify it by structural read-back;
 4. **on success, retain the mapping. On an *ambiguous* failure — the tag lost mid-write, or lost
    between the write and the read-back, or any I/O error once the message has been handed to the
