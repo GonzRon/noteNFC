@@ -1,7 +1,7 @@
 # Product-split evidence
 
 Commits, builds, test runs and device observations, one section per phase. Fingerprints only —
-no secrets, no device ids, no owner paths.
+no secrets, no physical-device ids, no owner paths.
 
 ## Phase D — ServiceTag identity conversion (§A.1)
 
