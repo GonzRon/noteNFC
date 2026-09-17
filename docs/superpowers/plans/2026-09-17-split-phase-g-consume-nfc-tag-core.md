@@ -83,7 +83,7 @@ docs (product-split): target §8/§9/§6.3, runbook front matter, §B.3a/§B.4/�
 ### Task 1 (§A.4 task 1 + the submodule): catalog alias, submodule at the tag, settings block, module edges
 
 **Files:**
-- Modify: `gradle/libs.versions.toml` (one alias), `settings.gradle.kts` (the §6.2 block), `core/build.gradle.kts` (G-1), `app/build.gradle.kts` (one line)
+- Modify: `gradle/libs.versions.toml` (one alias), `settings.gradle.kts` (the §6.2 block), `build.gradle.kts` (root: the library plugin `apply false`), `core/build.gradle.kts` (G-1), `app/build.gradle.kts` (one line)
 - Create: `.gitmodules` and the gitlink `libs/nfc-tag-core` (by `git submodule add`)
 
 **Interfaces:**
@@ -124,7 +124,7 @@ project(":nfc-core").projectDir    = file("libs/nfc-tag-core/nfc-core")
 project(":nfc-android").projectDir = file("libs/nfc-tag-core/nfc-android")
 ```
 
-- [ ] **Step 4: The edges** — in `core/build.gradle.kts` add `implementation(project(":nfc-core"))` as the first line of `dependencies { }` (G-1); in `app/build.gradle.kts` add `implementation(project(":nfc-android"))` directly after `implementation(project(":core"))`.
+- [ ] **Step 4: The edges** — in `core/build.gradle.kts` add `implementation(project(":nfc-core"))` as the first line of `dependencies { }` (G-1); in `app/build.gradle.kts` add `implementation(project(":nfc-android"))` directly after `implementation(project(":core"))`; and in the ROOT `build.gradle.kts` add `alias(libs.plugins.android.library) apply false` beside the existing `alias(libs.plugins.android.application) apply false` — AGP's application and library plugins must be declared on the one root plugin classpath, or configuration fails with a plugin-classpath conflict (found in execution 2026-09-17; the design's §6.2 shows only the settings side).
 
 - [ ] **Step 5: Verify the library builds inside this build**
 
@@ -862,7 +862,7 @@ git status --short | wc -l   # 0 after the four restores
 
 ### Task 5: catalog alias, submodule at the tag, settings block, module edges — NoteTag
 
-Identical to Task 1 with `rootProject.name = "NoteTag"`: Step 1 the alias; Step 2 `git submodule add https://github.com/GonzRon/nfc-tag-core.git libs/nfc-tag-core` + checkout `nfc-tag-core-v0.1.0` (`7e0377a`) + `git add .gitmodules libs/nfc-tag-core`; Step 3 the §6.2 block verbatim; Step 4 `core/build.gradle.kts` gains `implementation(project(":nfc-core"))` (G-1) and `app/build.gradle.kts` gains `implementation(project(":nfc-android"))`; Step 5 the same four verifications (`projects` shows four modules; the gate `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain` green; the `agp`/`kotlin` diff empty; the submodule clean). **No remote is added to NoteTag** — `git remote | wc -l` stays 0; the submodule's own remote is the library's URL and is a read.
+Identical to Task 1 with `rootProject.name = "NoteTag"`: Step 1 the alias; Step 2 `git submodule add https://github.com/GonzRon/nfc-tag-core.git libs/nfc-tag-core` + checkout `nfc-tag-core-v0.1.0` (`7e0377a`) + `git add .gitmodules libs/nfc-tag-core`; Step 3 the §6.2 block verbatim; Step 4 `core/build.gradle.kts` gains `implementation(project(":nfc-core"))` (G-1), `app/build.gradle.kts` gains `implementation(project(":nfc-android"))`, and the root `build.gradle.kts` gains `alias(libs.plugins.android.library) apply false` (the AGP plugin-classpath rule found in Task 1); Step 5 the same four verifications (`projects` shows four modules; the gate `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain` green; the `agp`/`kotlin` diff empty; the submodule clean). **No remote is added to NoteTag** — `git remote | wc -l` stays 0; the submodule's own remote is the library's URL and is a read.
 
 - [ ] Commit: `git add -A && git commit -m "wire in nfc-tag-core at v0.1.0 as subprojects"`.
 
