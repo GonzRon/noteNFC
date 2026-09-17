@@ -32,7 +32,9 @@ Three things follow, and they are why the order is not the alphabet:
 
 - **Remote before phone.** K/L produce the first green CI on a machine that is not this one, so the
   data migration in H runs against a ServiceTag whose build is already independently proven. §26 and
-  gate 10 are otherwise unreachable, because the clean-clone-from-URL proof needs the remotes.
+  gate 10 are otherwise unreachable, because the clean-clone-from-URL proof needs the remotes. K/L
+  exercise **ordinary CI only**; the apps' `release.yml` workflows are installed at the tail of G and
+  first execute at §G's product tags (owner ruling 2026-09-17).
 - **Phone-data before physical-tag.** H ends with the old package uninstalled and NoteTag installed
   (§15 steps 7–8). I/J **cannot** run before that: they need both final products on the device, and
   NoteTag does not exist on the phone until H's last step.
@@ -421,9 +423,10 @@ relying on the recovery refs.
 **Verify.**
 
 1. `git log --first-parent --oneline -3` shows the merge on top of `ac523d7`.
-2. `gh run list --repo GonzRon/ServiceTag --limit 1` is **green on the new workflow** — the one with
+2. `gh run list --repo GonzRon/ServiceTag --limit 1` is **green on the new `ci.yml`** — the one with
    `submodules: recursive`, `fetch-depth: 0` and the pin assertion (target §6.3). A green run here is
-   the first proof that the submodule mechanism works on a machine that is not this one.
+   the first proof that the submodule mechanism works on a machine that is not this one. `release.yml`
+   is present and has not run: no product tag exists yet.
 3. The submodule is initialised at the pinned tag in the runner's checkout (the assertion step says
    so), and the catalog `agp`/`kotlin` diff is empty.
 4. A fresh `git clone --recurse-submodules` of the **URL** builds — deferred to §B.6 with the others.
@@ -447,8 +450,9 @@ git push -u origin master
 ```
 
 **Verify.** `git log --oneline origin/master | tail -1` → `5fb6aed`, proving the 2023 root travelled;
-the repository carries **no** `docs/` directory and **no** `.apk`; the first CI run is green (it is
-the first run this lineage has ever had — review correction 8). **Rollback.** Cannot delete; rename
+the repository carries **no** `docs/` directory and **no** `.apk`; the first `ci.yml` run is green (it
+is the first run this lineage has ever had — review correction 8); `release.yml` is present and has
+not run. **Rollback.** Cannot delete; rename
 aside (`gh repo rename NoteTag-wip`) and re-push once fixed.
 
 ### B.5 (§27 step 10) Move the explicit narrow-product issues
@@ -491,9 +495,11 @@ never-used directory, **and once more from a second workstation** for the two ap
 what proves the submodule's recorded URL and pinned commit are fetchable by someone who is not the
 author; the second workstation is what proves no developer-local Gradle state was load-bearing.
 
-**Verify.** Three repositories, three green CI runs, three clean-clone builds. **No secrets, no
-absolute home path, no developer-local Gradle state, no device id, no private signing material in any
-source tree** (§26). **Only then**, and not before, may anyone consider the recovery refs
+**Verify.** Three repositories, three green CI runs, three clean-clone builds. **No secrets in any
+`ci.yml`, no absolute home path, no developer-local Gradle state, no device id, no private signing
+material in any source tree** (§26). The `release` environment exists in both app repositories with
+its four secrets and the `RELEASE_CERT_SHA256` variable set (owner manual step; values never printed;
+target §8). **Only then**, and not before, may anyone consider the recovery refs
 `pre-split-checkpoint` and `pre-split-master` retired — and this runbook does not retire them (§27
 step 12, §35). **Rollback.** Disable Actions on the affected repository; no code change.
 
@@ -996,9 +1002,9 @@ ownership.
 | **`pre-split-checkpoint`** | stays in ServiceTag at `ac523d7`; a ServiceTag-state marker, not a narrow-product marker (arch §4.8). Not deleted (§27 step 12) |
 | **`pre-split-master`** (branch) | stays in ServiceTag at `ac523d7`. Recorded because the name reads like a tag and is not — `git tag` lists only `pre-split-checkpoint` (arch §4.1) |
 | **ServiceTag's first tag** | **`servicetag-v2.5`** on the commit that passes gate 9, annotated with the split's completion date, the library tag both apps consume, and the certificate SHA-256 of the ServiceTag key. Product-prefixed because the repository's history contains a differently-named product and a bare `v2.5` would be ambiguous across the rename (ratified P17) |
-| **NoteTag's first tag** | **`notetag-v1.0`** on the commit that passes gate 9, annotated with the boundary commit `c84b881` it descends from and the library tag it consumes. **This is the first tag this lineage has ever had** — there is no 2023 or 2024 tag, locally or on origin (arch §4.1). No earlier narrow-product tag is "cleanly reconstructable", so none is invented |
+| **NoteTag's first tag** | **`notetag-v2.0`** — the tag follows the built `versionName` 2.0 (G-4, 2026-09-17; earlier drafts said `notetag-v1.0`) — on the commit that passes gate 9, annotated with the boundary commit `c84b881` it descends from and the library tag it consumes. **This is the first tag this lineage has ever had** — there is no 2023 or 2024 tag, locally or on origin (arch §4.1). No earlier narrow-product tag is "cleanly reconstructable", so none is invented |
 | **nfc-tag-core's first tag** | **`nfc-tag-core-v0.1.0`**, created in §B.1, annotated with the source commit `ac523d7` and a pointer to the provenance table |
-| **Releases on the new repositories** | none at creation. Nothing is published (O15), and the two apps are locally signed, so a GitHub release would carry an APK the owner does not want distributed |
+| **Releases on the new repositories** | none at creation, and none during K/L. At the final product tags (`servicetag-v2.5`, `notetag-v2.0`) each app's tag-only `release.yml` builds, signs from the `release` environment's secrets, verifies the certificate against the public `RELEASE_CERT_SHA256` and the version against the tag, and publishes the signed APK with its SHA-256 as the GitHub Release (target §8; owner ruling 2026-09-17). `nfc-tag-core` publishes nothing: its tag is the release |
 
 **Rollback.** Tags are deletable locally and on the remote and carry no data. The draft release is
 never touched.
@@ -1088,7 +1094,7 @@ proceeding; minor cleanup is recorded and deferred.*
 | **7** | **data / artifact migration** | H | §C.6 and §C.7 pass: eleven tables with identical id sets and per-field equality (events including `tzId`, `occurredOn`, `createdAt`, `(source, source_ref)`); 8×3 attachment hashes; the empty-tree restore proved independently; every difference accounted for by §C.8 and nothing else. **This gate precedes §C.9's irreversible uninstall** |
 | **8** | *withdrawn* | — | folded into gate 9 (O2; §5's "physical-tag proof — now: coexistence of final products only") |
 | **9** | **final coexistence / device** | I + J | Session 1's four writer taps recorded (§D.2, including format → measure → capacity-check → write → verify → lock-last on one tag, and the **measured `Ndef.maxSize`** written to the evidence file); Session 2's eight taps and three log-read rows passed (§E), with **dispatch spike S1 folded into checks 2–3 and S2 as check 8**; **owner actions exactly 12** (§E.1; a retap swallowed by a permission dialog does not count); zero chooser dialogs on checks 2–4 and 7; no database write on checks 5–7; sibling refusals offering **Write over it / Cancel** and nothing else; the per-package SAF grant observed on the emulator at C.8a before C.9 acted on it; every reassigned proof (§D.3) green off-device with the capacity fakes pinned to the measured NTAG213 budget; both apps on the same library tag; every observation in the evidence file with a verdict, and the **debug-build caveat** recorded |
-| **10** | **final three-repository convergence** | K + L + M + N | three repositories, three green CI runs, **ServiceTag's converted `master` pushed and green on the new workflow (§B.3a)**, three clean-clone builds **from URLs** plus one per app from a second workstation (§B.6); issues moved with backlinks and the notes added; the three first tags created; documentation changed only where §H says and additively where it touches history; every **[P*n*]** ratified or superseded; every "to observe on-device" marker resolved or explicitly deferred; and the §36 handoff assembled — checkpoint SHA, the historical split SHA and why, three repo names/URLs/canonical commits, what the original repository became, what moved into nfc-tag-core, what stayed app-specific, the dependency/version mechanism, both applicationIds and namespaces, NFC record and deep-link ownership, AAR behaviour, signing fingerprints only, the migration backup format, the ID-preservation and attachment-hash proofs, the SAF grant procedure, the coexistence proof, CI status ×3, issue movements, releases/tags, rollback, and remaining debt. **Next operation after handoff: ServiceTag Phase 3** |
+| **10** | **final three-repository convergence** | K + L + M + N | three repositories, three green CI runs, **ServiceTag's converted `master` pushed and green on the new workflow (§B.3a)**, three clean-clone builds **from URLs** plus one per app from a second workstation (§B.6); the two `release.yml` workflows installed and dry-run locally (not executed until the product tags); issues moved with backlinks and the notes added; the three first tags created; documentation changed only where §H says and additively where it touches history; every **[P*n*]** ratified or superseded; every "to observe on-device" marker resolved or explicitly deferred; and the §36 handoff assembled — checkpoint SHA, the historical split SHA and why, three repo names/URLs/canonical commits, what the original repository became, what moved into nfc-tag-core, what stayed app-specific, the dependency/version mechanism, both applicationIds and namespaces, NFC record and deep-link ownership, AAR behaviour, signing fingerprints only, the migration backup format, the ID-preservation and attachment-hash proofs, the SAF grant procedure, the coexistence proof, CI status ×3, issue movements, releases/tags, rollback, and remaining debt. **Next operation after handoff: ServiceTag Phase 3** |
 
 **No gate is self-certified**; each is reviewed against the artifact it names, by someone who did not
 produce it — the pattern already used for gates 1–3.

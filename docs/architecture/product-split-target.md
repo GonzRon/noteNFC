@@ -98,7 +98,7 @@ two real consumers (§4, C5, O5).
 | Deleted at the new branch tip | — | the inherited ServiceTag design package (`docs/design/`, `docs/superpowers/` — 70 files at `c84b881`) and the tracked release APK `app/release/app-release.apk`, whose blob is byte-identical at `3a3c69a` and `c84b881` and **is the 2024 shipped artifact** (review addition 8) | — |
 | What that does **not** do | — | **it does not scrub any of it from history**, and no second rewrite will be done (C6). Still reachable in the public history: the ServiceTag design documents; the owner's GitHub handle and personal issue URLs in `docs/design/issues/applied.md` and one superpowers plan; the release-signer certificate digests in `docs/design/phase-0-evidence.md`; and the author name plus personal email in the commit metadata of **all 30 preserved commits** (review correction 10). None of it is a secret — a public handle and public-key fingerprints — and all of it is *already* public here (arch §2.8) | — |
 | Recovery refs | tag `pre-split-checkpoint` and branch `pre-split-master`, both at `ac523d7`, both pushed. **Not deleted until all three repositories are green** (§27 step 12, §35) | inherits none | none |
-| Releases | keeps the 2023 draft as history (§28; arch §2.10, §4.8): untagged, unanchored, Evernote-era, no assets. Not published, not deleted | none at creation; gets `notetag-v1.0` when it passes its gate (§28: "never claim a maintenance release was a narrow release") | `nfc-tag-core-v0.1.0` at extraction |
+| Releases | keeps the 2023 draft as history (§28; arch §2.10, §4.8): untagged, unanchored, Evernote-era, no assets. Not published, not deleted; `servicetag-v2.5` at the final gate publishes a signed APK through `release.yml` (§8) | none at creation; gets **`notetag-v2.0`** — the tag follows its built `versionName` (G-4, 2026-09-17; earlier drafts said `notetag-v1.0`) — when it passes its gate (§28: "never claim a maintenance release was a narrow release"), published as a signed APK through `release.yml` (§8) | `nfc-tag-core-v0.1.0` at extraction; the tag is the release, no binary |
 | Issues | 34 of 36 stay (§10, O8, C7) | receives **#6** and **#36**, retitled under the NoteTag name (§10, O8) | none at creation |
 
 **Why the rename rather than a fresh ServiceTag repository.** §9 is explicit — *"Do not shallow-copy
@@ -1068,7 +1068,7 @@ dependencies {
 | the assertion step above, also available as `tools/check-submodule-pin.sh` for local runs and as a `check` dependency | both apps | §19's "exact version/commit pinned" and "mutable HEAD not silently consumed" |
 | clean-clone builds for **both** apps | §26 acceptance, run outside CI as well | `git clone --recurse-submodules <url> <tmp>` into a never-used directory, then that repo's CI task list; once more from a second workstation |
 | nothing about the daemon JVM, the catalog or the configuration cache | — | that is the point of subprojects: those files exist once, at the app root, and now cover the library too |
-| no credential, token or repository URL in any build file | all three | preserves the current property that CI interpolates no `secrets.*` (arch §4.2) and satisfies §26 |
+| no credential, token or repository URL in any build file | all three | preserves the property that ordinary CI interpolates no `secrets.*` (arch §4.2) and satisfies §26; the apps' tag-only `release.yml` repeats this pin assertion before it signs anything (§8) |
 
 ### 6.4 A version bump, and what fails loudly
 
@@ -1192,7 +1192,7 @@ verdict these are **final coexistence gates, not architecture blockers**.
 | Permissions | 0600 on the files, 0700 on the directory | the same |
 | Read by | `app/build.gradle.kts` at configuration time via `System.getProperty("user.home") + "/.config/<dir>/keystore.properties"`; absent or empty → the release build type simply has no signing config **[code]** | the same mechanism |
 | In the repository | nothing: no keystore, no properties file, no password, no alias. `.gitignore` covers `keystore.properties`, `*.jks`, `*.keystore` | the same |
-| In CI | nothing. Release signing is entirely local; CI builds `assembleDebug` only and interpolates no `secrets.*` (§26, arch §4.2) | the same |
+| In CI | **Ordinary CI (`ci.yml`): nothing** — it builds `assembleDebug` only and interpolates no `secrets.*` (§26, arch §4.2). **Release (owner ruling 2026-09-17): the tag-only `release.yml`**, triggered only by `servicetag-v*` (ServiceTag) / `notetag-v*` (NoteTag), runs under the GitHub environment **`release`**: checkout of the exact tag with submodules → the submodule-pin assertion → the complete test gate → the keystore and its four values restored from the environment's encrypted secrets (`RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`) into the same `$HOME/.config/<dir>/keystore.properties` contract the build already reads → `assembleRelease` → `apksigner verify` with the certificate's SHA-256 compared to the **public repository variable** `RELEASE_CERT_SHA256` → the APK's `versionName` compared to the tag → a GitHub Release for that exact tag carrying the signed APK and its SHA-256. It fails closed on a missing secret (before the build), a signature or fingerprint mismatch, an unsigned APK, an inexact core pin, a failing test, or a tag/version disagreement; it never publishes an unsigned APK and never echoes a secret. The GitHub copy of the key does not replace the owner's offline encrypted backup. | the same, with the ServiceTag key once it exists (§12) |
 | Recorded | the certificate **SHA-256 fingerprint only**, in the evidence file. Hygiene item: the current `README.md:121-125` reproduces the signer DN **and** the full colon-separated SHA-256 in the repository (review correction 11) — §H's README rewrite reduces that to a pointer | the new certificate's SHA-256 fingerprint, recorded once. Fingerprints are public keys; passwords and keystores are never printed, committed, pasted or logged |
 | Proof required | a signed release build, produced and verified (§12) | the same |
 
@@ -1235,13 +1235,15 @@ All three workflows keep the shape the current one has: `ubuntu-latest`, `action
 `actions/setup-java@v4` with Temurin 17, `android-actions/setup-android@v3` (`platform-tools` only),
 `gradle/actions/setup-gradle@v4`, `--console=plain`, and `actions/upload-artifact@v4` with
 `if: always()` for test results (arch §4.2). Triggers stay `push` and `pull_request`. **No
-`secrets.*` anywhere; no absolute home path, no developer-local Gradle state, no device id, no
-private signing material in source** (§26).
+`secrets.*` in `ci.yml`; no absolute home path, no developer-local Gradle state, no device id, no
+private signing material in source** (§26). The only workflow that names a secret is each app's
+tag-only `release.yml`, in the `release` environment (§8; owner ruling 2026-09-17); `nfc-tag-core`
+has no such workflow.
 
 | Repository | Steps |
 |---|---|
-| **ServiceTag** | checkout with **`submodules: recursive`** → JDK 17 → setup-android → setup-gradle → the submodule-pin assertion (§6.3) → `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug` → upload every `build/test-results` tree. Because the library's modules are subprojects of this build, one green also proves the catalog alias set agrees (§6.1) |
-| **NoteTag** | the same shape, the same submodule steps, NoteTag's own module list. **CI must be run from scratch**: `c84b881` itself never ran on a runner, and its green Phase-0 evidence belongs to pre-rewrite twins whose SHAs no longer exist (review correction 8) |
+| **ServiceTag** | checkout with **`submodules: recursive`** → JDK 17 → setup-android → setup-gradle → the submodule-pin assertion (§6.3) → `./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug` → upload every `build/test-results` tree. Because the library's modules are subprojects of this build, one green also proves the catalog alias set agrees (§6.1). Plus a second workflow, `release.yml`, on `servicetag-v*` only (§8) |
+| **NoteTag** | the same shape, the same submodule steps, NoteTag's own module list. **CI must be run from scratch**: `c84b881` itself never ran on a runner, and its green Phase-0 evidence belongs to pre-rewrite twins whose SHAs no longer exist (review correction 8). Plus `release.yml` on `notetag-v*` only (§8) |
 | **nfc-tag-core** | checkout → JDK 17 → setup-android → setup-gradle → **`tools/forbidden-scan.sh`** → `tools/forbidden-scan-selftest.sh` → **`./gradlew build`** (check, lint, both unit suites, the debug aar — the same standalone build the local acceptance proof runs; owner ruling 2026-09-17, so remote CI is never weaker than the local gate) → upload both `build/test-results` trees. The scan runs **before** the build, so a violation is the first thing a reader sees |
 
 **No instrumented step in any of the three.** The emulator suites — the app device-proof tests and
@@ -1253,7 +1255,9 @@ collected from **debug builds** — that is what §15 installs and what the emul
 *debug-build evidence*. The signed-release requirement of §12 is discharged separately and only as a
 **build-verified** claim: a release APK is produced, signed and its certificate fingerprint recorded,
 but no device row is collected from a release build. Both facts are stated in the evidence file so
-nobody later reads a debug observation as a release guarantee.
+nobody later reads a debug observation as a release guarantee. The first real `release.yml`
+executions happen only at the final product tags (`servicetag-v2.5`, `notetag-v2.0`), after the
+phone and physical gates; K/L exercises ordinary CI only.
 
 **Where CI sits in the order.** The canonical master order is **local D–G → remote K/L → phone H →
 physical and coexistence I/J → docs and handoff M/N** (the runbook's front matter states it once and
