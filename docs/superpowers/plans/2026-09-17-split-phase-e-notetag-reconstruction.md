@@ -25,6 +25,9 @@
 - **CI file kept, not re-run here.** `.github/workflows/ci.yml` stays as inherited (`:core:test :app:testDebugUnitTest :app:assembleDebug`); §A.2 row 3's "re-run from scratch" needs the remote and happens at §B.4. Every task's local gate runs that same line.
 - **Per-task gate:** `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain` from the NoteTag root; plus `:app:compileDebugAndroidTestKotlin` from Task 9 on. Each task is one commit on `master` of the NoteTag repository. **Rollback:** revert the task commit; the phase's floor is the Task 1 commit; the repository's floor is "delete the directory and re-clone — `c84b881` is immutable history" (§A.2).
 - **Interim copies are labelled.** Every file copied from ServiceTag carries a one-line header comment `// Interim copy of ServiceTag's <path> (dc1bb1c lineage); Phase G replaces it with nfc-tag-core.` so Phase G can `grep` its own deletion list.
+- **Exactly two screens (P20).** `List` (the tags this phone has written, with an inline result card for whatever an ambient tap or a refusal has to say) and `Write` (share → hold a tag). There is no third navigation state and no message screen: the trampoline hands a sentence to `MainActivity`, which shows it on the list.
+- **Retained is not written (owner correction, 2026-09-17).** A `LOCAL_REF` mapping persisted before a write and retained after an ambiguous failure stays **resolvable** (`get`) but is **not** a confirmed write: `TagEntry.writtenAt` is null until a verified `Written` result confirms it, and `list()` — the only thing the UI shows as "tags this phone wrote" — returns confirmed entries only. The model permits a later ambient resolution of such a tag to promote the mapping (the tag's existence is then proven); Phase E does not implement that promotion.
+- **Gate 6 is not claimed by this plan.** §23 end to end and CI green from scratch need Phase G (row 10) and the remote (§B.4). The phase ends as "Phase E local reconstruction complete; Gate 6 pending its deferred prerequisites", recorded in the ledger in those words.
 
 ## The identity, and everything derived from it
 
@@ -59,7 +62,7 @@ NoteTag/
       tag/NoteTagCodec.kt          version|kind|flags|body over the envelope (Task 4)
       links/LinkLaunchPolicy.kt    copied, not shared (Task 5)
       write/WritePlanner.kt        compact → URI-if-it-fits → LOCAL_REF, against an injected maxSize (Task 5)
-      store/TagStore.kt, TagEntry.kt, JsonFileTagStore.kt   atomic-replace JSON store (Task 6)
+      store/TagStore.kt, TagEntry.kt, JsonFileTagStore.kt   atomic-replace JSON store; writtenAt null = not yet confirmed (Task 6)
       resolve/ResolveTap.kt        records → Open(uri) | Message(text) (Task 8)
       nfc/OverwriteWording.kt      NoteTag's sentences for the read-before-write question (Task 7)
     src/test/kotlin/...            one test class per file above
@@ -68,12 +71,12 @@ NoteTag/
     src/main/res/{values,mipmap-*,drawable}/     strings, themes, the icon pack (Tasks 2, 3)
     src/main/kotlin/com/loosecannon/notetag/
       NoteTagApp.kt                the graph: store file, identity, codec, TagIo (Task 9)
-      MainActivity.kt              single activity; share receiver; three screens (Task 9)
+      MainActivity.kt              single activity; share receiver; two screens: List (with its result card) and Write (Task 9)
       nfc/NdefBridge.kt, NfcReaderModeSession.kt, TagWriter.kt, TagIo.kt   interim copies (Task 7)
       nfc/NfcDispatchActivity.kt   translucent trampoline (Task 10)
       links/LinkLauncher.kt        copied, both catches (Task 10)
       write/NoteTagWriteController.kt   single-flight, read-before-write, the LOCAL_REF sequence (Task 7)
-      ui/WriteScreen.kt, TagListScreen.kt, MessageScreen.kt, NoteTagTheme.kt   (Task 9)
+      ui/WriteScreen.kt, TagListScreen.kt (with its inline result card), NoteTagTheme.kt   (Task 9)
     src/test/kotlin/...            controller, resolver wiring, identity binding
     src/androidTest/kotlin/...     NdefSize pin, smoke, ambient device proof (Tasks 9, 10)
   README.md                        rewritten twice: Task 1 (C6 statement) and Task 11 (the product)
@@ -1027,7 +1030,7 @@ git commit -m "the writer's decision: compact, then the uri if it fits the measu
 - Create: `core/src/test/kotlin/com/loosecannon/notetag/core/store/JsonFileTagStoreTest.kt`
 
 **Interfaces:**
-- Produces: `TagEntry(uuid: String, kind: String, label: String, target: String?, writtenAt: Long, lastOpenedAt: Long?)`; `interface TagStore { suspend fun put(entry); suspend fun get(uuid): TagEntry?; suspend fun list(): List<TagEntry>; suspend fun remove(uuid); suspend fun touch(uuid, at) }`; `JsonFileTagStore(file, json = Json, replace: AtomicReplace = FsyncRename)` where `fun interface AtomicReplace { fun replace(target: File, bytes: ByteArray) }` is the injection point for "persist fails".
+- Produces: `TagEntry(uuid: String, kind: String, label: String, target: String?, writtenAt: Long?, lastOpenedAt: Long?)` — **`writtenAt == null` means persisted but not confirmed written**; `interface TagStore { suspend fun put(entry); suspend fun get(uuid): TagEntry?; suspend fun list(): List<TagEntry>; suspend fun remove(uuid); suspend fun confirm(uuid, at); suspend fun touch(uuid, at) }` where `get` sees every entry and `list` returns **confirmed entries only**; `JsonFileTagStore(file, json = Json, replace: AtomicReplace = FsyncRename)` where `fun interface AtomicReplace { fun replace(target: File, bytes: ByteArray) }` is the injection point for "persist fails".
 
 - [ ] **Step 1: The types and the store**
 
@@ -1036,22 +1039,32 @@ package com.loosecannon.notetag.core.store
 
 import kotlinx.serialization.Serializable
 
-/** One tag this phone wrote. Only [target] is load-bearing, and only for LOCAL_REF entries. */
+/**
+ * One tag this phone wrote, or tried to. Only [target] is load-bearing, and only for LOCAL_REF
+ * entries. [writtenAt] is the write-history confirmation: null while a LOCAL_REF mapping has been
+ * persisted (before the write) but no verified read-back has confirmed the tag holds it. Such an
+ * entry is still resolvable through [TagStore.get] — a live tag may exist — but it is not shown as
+ * a tag this phone wrote (target §4.9, owner correction 2026-09-17).
+ */
 @Serializable
 data class TagEntry(
     val uuid: String,
     val kind: String,          // "JOPLIN_NOTE" | "URI" | "LOCAL_REF"
     val label: String,         // what the user saw: the uri, or the note id
     val target: String? = null,   // the LOCAL_REF target; null for self-contained kinds
-    val writtenAt: Long,
+    val writtenAt: Long? = null,  // null = persisted, not confirmed written
     val lastOpenedAt: Long? = null,
 )
 
 interface TagStore {
     suspend fun put(entry: TagEntry)
+    /** Every entry, confirmed or not: resolution must see a retained mapping. */
     suspend fun get(uuid: String): TagEntry?
+    /** Confirmed writes only (`writtenAt != null`), newest first: the write history the UI shows. */
     suspend fun list(): List<TagEntry>
     suspend fun remove(uuid: String)
+    /** A verified read-back happened: the entry becomes part of the write history. */
+    suspend fun confirm(uuid: String, at: Long)
     suspend fun touch(uuid: String, at: Long)
 }
 ```
@@ -1104,7 +1117,12 @@ class JsonFileTagStore(
         val s = read(); write(s.copy(entries = s.entries.filterNot { it.uuid == entry.uuid } + entry))
     } }
     override suspend fun get(uuid: String): TagEntry? = lock.withLock { withContext(Dispatchers.IO) { read().entries.firstOrNull { it.uuid == uuid } } }
-    override suspend fun list(): List<TagEntry> = lock.withLock { withContext(Dispatchers.IO) { read().entries.sortedByDescending { it.writtenAt } } }
+    override suspend fun list(): List<TagEntry> = lock.withLock { withContext(Dispatchers.IO) {
+        read().entries.filter { it.writtenAt != null }.sortedByDescending { it.writtenAt }
+    } }
+    override suspend fun confirm(uuid: String, at: Long) = lock.withLock { withContext(Dispatchers.IO) {
+        val s = read(); write(s.copy(entries = s.entries.map { if (it.uuid == uuid) it.copy(writtenAt = at) else it }))
+    } }
     override suspend fun remove(uuid: String) = lock.withLock { withContext(Dispatchers.IO) {
         val s = read(); if (s.entries.any { it.uuid == uuid }) write(s.copy(entries = s.entries.filterNot { it.uuid == uuid }))
     } }
@@ -1118,7 +1136,7 @@ class StoreCorrupt(name: String, cause: Throwable) : RuntimeException("the tag s
 
 - [ ] **Step 2: `JsonFileTagStoreTest` (JUnit 5, `@TempDir`)**
 
-Cases: a missing file lists nothing; put/get/list/remove round-trip; `put` of an existing uuid replaces; `touch` sets `lastOpenedAt`; after every write no `.tmp` file remains and the JSON is valid; a corrupt file throws `StoreCorrupt` (never a bare parse exception) on read; a `replace` that throws leaves the previous file byte-identical (**the "persist fails" seam Task 7 relies on**); concurrent `put`s from two coroutines both land (the mutex).
+Cases: a missing file lists nothing; put/get/list/remove round-trip; `put` of an existing uuid replaces; `touch` sets `lastOpenedAt`; **an entry put with `writtenAt = null` is returned by `get` but absent from `list`, and appears in `list` after `confirm`** (the retained-is-not-written rule); after every write no `.tmp` file remains and the JSON is valid; a corrupt file throws `StoreCorrupt` (never a bare parse exception) on read; a `replace` that throws leaves the previous file byte-identical (**the "persist fails" seam Task 7 relies on**); concurrent `put`s from two coroutines both land (the mutex).
 
 - [ ] **Step 3: Gate and commit**
 
@@ -1139,7 +1157,7 @@ git commit -m "a json file store, replaced atomically, behind a small interface"
 
 **Interfaces:**
 - Consumes: `WritePlanner`, `NoteTagCodec`, `TagStore`.
-- Produces: `TagHandle`/`NfcTagHandle`/`TagIo`/`RealTagIo(codec)` (the seam; `inspect` returns `TagInspection?` with `maxSize`, `existing: NoteTagContent`, `writable`, `needsFormat`; `write(handle, records, lock=false): WriteResult`); `OverwriteWording.reason(existing: NoteTagContent, intended: Writable): String?` (null = proceed); `NoteTagWriteController(tagIo, codec, store, sharedText, scope, clock, newUuid)` with `state: StateFlow<WriteState>` (`Waiting(preview)`, `Confirm(reason)`, `Writing`, `Written(entry, deviceBound: Boolean)`, `Refused(reason)`, `Error(message)`), `onTag(handle)`, `confirmOverwrite()`, `cancel()`, `abandon()`.
+- Produces: `TagHandle`/`NfcTagHandle`/`TagIo`/`RealTagIo(codec)` (the seam; `inspect` returns `TagInspection?` with `maxSize`, `existing: NoteTagContent`, `writable`, `needsFormat`; `write(handle, records, lock=false): WriteResult`); `OverwriteWording.reason(existing: NoteTagContent, intended: Writable): String?` (null = proceed); `NoteTagWriteController(tagIo, codec, store, sharedText, scope, clock, newUuid)` with `state: StateFlow<WriteState>` (`Waiting(preview)`, `Confirm(reason)`, `Writing`, `Written(entry, deviceBound: Boolean)` (the entry as confirmed), `Refused(reason)`, `Error(message)`), `onTag(handle)`, `confirmOverwrite()`, `cancel()`, `abandon()`.
 
 - [ ] **Step 1: The four interim copies**
 
@@ -1252,19 +1270,25 @@ class NoteTagWriteController(
     fun confirmOverwrite() { _state.value = WriteState.Waiting("Hold the same tag to the phone again to write over it.") }
     fun cancel() { pending = null; _state.value = WriteState.Waiting("Cancelled. Hold a tag to the phone to try again.") }
 
-    /** The LOCAL_REF sequence (target §4.9): persist first; retain on any ambiguous failure. */
+    /**
+     * The LOCAL_REF sequence (target §4.9): persist first, UNCONFIRMED (writtenAt = null); confirm
+     * only on a verified Written; retain — still unconfirmed, still resolvable — on any ambiguous
+     * failure, so a tag that may exist resolves and a tag we cannot vouch for is not shown as written.
+     */
     private suspend fun write(tag: TagHandle, plan: WritePlan) {
         _state.value = WriteState.Writing
-        val entry = entryFor(plan)
+        val entry = entryFor(plan)                                       // writtenAt == null for every plan
         if (plan is WritePlan.DeviceBound) {
             try { store.put(entry) }                                     // (a) durably stored BEFORE the write
             catch (t: Throwable) { _state.value = WriteState.Error("Could not save the link on this phone; nothing was written to the tag."); return }
         }
         when (val r = tagIo.write(tag, plan.records, lock = false)) {
             is WriteResult.Written -> {
-                if (plan !is WritePlan.DeviceBound) runCatching { store.put(entry) }   // convenience only: never load-bearing
+                val at = clock()
+                if (plan is WritePlan.DeviceBound) runCatching { store.confirm(entry.uuid, at) }   // the read-back is the proof
+                else runCatching { store.put(entry.copy(writtenAt = at)) }                          // convenience only: never load-bearing
                 done = true
-                _state.value = WriteState.Written(entry, deviceBound = plan is WritePlan.DeviceBound)
+                _state.value = WriteState.Written(entry.copy(writtenAt = at), deviceBound = plan is WritePlan.DeviceBound)
             }
             // pre-write rejections: no bytes can have reached the tag, so the mapping may go
             is WriteResult.TooSmall -> { forget(plan); _state.value = WriteState.Error("This tag is too small: it holds ${r.maxSize} bytes and this needs ${r.needed}.") }
@@ -1286,10 +1310,11 @@ class NoteTagWriteController(
         is WritePlan.DeviceBound -> plan.content; is WritePlan.Refused -> error("refused plans are not written")
     }
 
+    /** Never confirmed here: [writtenAt] stays null until a verified read-back. */
     private fun entryFor(plan: WritePlan): TagEntry = when (plan) {
-        is WritePlan.Compact -> TagEntry(newUuid().toString(), "JOPLIN_NOTE", plan.content.id, null, clock())
-        is WritePlan.FullUri -> TagEntry(newUuid().toString(), "URI", plan.content.uri, null, clock())
-        is WritePlan.DeviceBound -> TagEntry(plan.content.uuid.toString(), "LOCAL_REF", plan.target, plan.target, clock())
+        is WritePlan.Compact -> TagEntry(newUuid().toString(), "JOPLIN_NOTE", plan.content.id, null, writtenAt = null)
+        is WritePlan.FullUri -> TagEntry(newUuid().toString(), "URI", plan.content.uri, null, writtenAt = null)
+        is WritePlan.DeviceBound -> TagEntry(plan.content.uuid.toString(), "LOCAL_REF", plan.target, plan.target, writtenAt = null)
         is WritePlan.Refused -> error("refused plans are not written")
     }
 
@@ -1300,19 +1325,20 @@ class NoteTagWriteController(
 }
 ```
 
-Note the one design point the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write`. A `Written` result never removes it; `VerifyMismatch` and `Failed` never remove it; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` do.
+Note the two design points the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write` with `writtenAt = null`. A `Written` result confirms it (`store.confirm`) and never removes it; `VerifyMismatch` and `Failed` never remove it **and never confirm it** — retained, resolvable, hidden from the list; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` remove it.
 
 - [ ] **Step 4: `FakeTagIo` and the controller tests (JUnit 4, `runTest`)**
 
 `FakeTagIo(inspection: TagInspection?, result: WriteResult)` records `writeAttempts` and the records written. A `FailingStore(delegate)` whose `put` throws.
 
 `NoteTagWriteControllerTest`, cases (each names its §A.2 row):
-1. *(row 7, failure injection 1)* `DeviceBound` plan (uri longer than `maxSize`), store ok, `tagIo.write` → `Failed("tag left the field")`: state `Error`, `writeAttempts == 1`, **`store.get(uuid)` is not null (RETAINED)**.
+1. *(row 7, failure injection 1)* `DeviceBound` plan (uri longer than `maxSize`), store ok, `tagIo.write` → `Failed("tag left the field")`: state `Error`, `writeAttempts == 1`, **`store.get(uuid)` is not null (RETAINED) and `store.list()` does not contain it (NOT CONFIRMED)**.
 2. *(row 7, 2)* `DeviceBound`, `FailingStore`: state `Error` naming "nothing was written", **`writeAttempts == 0`**.
 3. *(row 7, 3a)* `DeviceBound`, `tagIo.write` → `TooSmall`: mapping removed (`store.get == null`), `writeAttempts == 1` (the rejection is the writer's pre-write check).
 4. *(row 7, 3b)* `DeviceBound`, then `abandon()` before any write (no tap): mapping absent; with a pending confirmation → `cancel()` removes it.
-5. *(row 7)* `DeviceBound`, `VerifyMismatch` → RETAINED.
-6. *(row 7)* `DeviceBound`, `Written` → RETAINED, state `Written(deviceBound = true)`.
+5. *(row 7)* `DeviceBound`, `VerifyMismatch` → RETAINED and not confirmed (`get` non-null, absent from `list`).
+6. *(row 7)* `DeviceBound`, `Written` → RETAINED **and confirmed**: `store.list()` contains it with a non-null `writtenAt`, state `Written(deviceBound = true)`.
+6b. *(row 7)* `FullUri`, `Written` → a confirmed convenience entry appears in `list`; `FullUri`, `Failed` → nothing in the store at all (portable kinds never need it).
 7. *(row 6)* `Compact` plan with `maxSize = 0` still writes 49 bytes (the compact form never needs capacity checked by the planner; the writer's own `TooSmall` covers a genuinely tiny tag).
 8. *(row 9 / P11)* existing = a ServiceTag record → state `Confirm("This tag belongs to ServiceTag.")`, `writeAttempts == 0`; `confirmOverwrite()` then a second `onTag` with the same existing content → written; a second tap with **different** existing content → `Confirm` again, not written (invariant 10).
 9. *(invariant 11)* two `onTag` calls before the first completes → one inspect.
@@ -1356,7 +1382,11 @@ sealed interface TapOutcome {
     data class Message(val text: String) : TapOutcome
 }
 
-/** What an ambient tap means. JOPLIN_NOTE and URI never need the store; only LOCAL_REF does (target §4.9). */
+/**
+ * What an ambient tap means. JOPLIN_NOTE and URI never need the store; only LOCAL_REF does (target
+ * §4.9). A LOCAL_REF hit on an entry with `writtenAt == null` proves the tag exists; the model permits
+ * promoting it with [TagStore.confirm] — deliberately not done in Phase E (owner correction 2026-09-17).
+ */
 class ResolveTap(private val codec: NoteTagCodec, private val store: TagStore) {
     suspend fun resolve(records: List<NdefRecordData>): TapOutcome = when (val c = codec.decode(records)) {
         is NoteTagContent.JoplinNote -> TapOutcome.Open(JoplinId.openNoteUri(c.id))
@@ -1385,7 +1415,7 @@ class ResolveTap(private val codec: NoteTagCodec, private val store: TagStore) {
 }
 ```
 
-- [ ] **Step 2: `ResolveTapTest`** — with a `JsonFileTagStore` in `@TempDir` and one with the file **deleted**: a `JOPLIN_NOTE` opens `joplin://x-callback-url/openNote?id=<lower-case id>` **with no store file present** (row 7); a `URI` opens with no store; a `LOCAL_REF` hit opens its target and carries the uuid; a `LOCAL_REF` miss is the "another phone" message, not an exception (row 7); a ServiceTag record is the message naming ServiceTag, never `Open` (row 9, §23); a `URI` whose scheme is blocked is a message, never `Open` (§23 "malformed tag does not launch unsafe content"); malformed / newer / unknown kind / empty each a message.
+- [ ] **Step 2: `ResolveTapTest`** — with a `JsonFileTagStore` in `@TempDir` and one with the file **deleted**: a `JOPLIN_NOTE` opens `joplin://x-callback-url/openNote?id=<lower-case id>` **with no store file present** (row 7); a `URI` opens with no store; a `LOCAL_REF` hit opens its target and carries the uuid — **including a hit on a retained, unconfirmed entry** (`writtenAt == null`), which must resolve exactly like a confirmed one; a `LOCAL_REF` miss is the "another phone" message, not an exception (row 7); a ServiceTag record is the message naming ServiceTag, never `Open` (row 9, §23); a `URI` whose scheme is blocked is a message, never `Open` (§23 "malformed tag does not launch unsafe content"); malformed / newer / unknown kind / empty each a message.
 
 - [ ] **Step 3: Gate and commit**
 
@@ -1401,11 +1431,11 @@ git commit -m "resolve a tap: open what is safe, say why when it is not, never n
 
 **Files:**
 - Modify: `app/src/main/kotlin/com/loosecannon/notetag/NoteTagApp.kt`, `MainActivity.kt`
-- Create: `app/src/main/kotlin/com/loosecannon/notetag/ui/NoteTagTheme.kt`, `ui/WriteScreen.kt`, `ui/TagListScreen.kt`, `ui/MessageScreen.kt`, `ui/MainViewModel.kt`
+- Create: `app/src/main/kotlin/com/loosecannon/notetag/ui/NoteTagTheme.kt`, `ui/WriteScreen.kt`, `ui/TagListScreen.kt`, `ui/MainViewModel.kt`
 - Create: `app/src/test/kotlin/com/loosecannon/notetag/ui/MainViewModelTest.kt`, `app/src/androidTest/kotlin/com/loosecannon/notetag/ui/AppSmokeTest.kt`
 
 **Interfaces:**
-- Produces: `NoteTagApp.graph: AppGraph` (`identity` from `BuildConfig`, `codec`, `store = JsonFileTagStore(File(filesDir, "tags.json"))`, `tagIo = RealTagIo(codec)`, `resolveTap`, `newWriteController(sharedText, scope)`); `MainActivity` handles `ACTION_SEND text/plain` (cold and `onNewIntent`) and the hand-off extras `EXTRA_MESSAGE` from the trampoline; three screens driven by `MainViewModel.screen: StateFlow<Screen>` (`List`, `Write(sharedText)`, `Message(text)`).
+- Produces: `NoteTagApp.graph: AppGraph` (`identity` from `BuildConfig`, `codec`, `store = JsonFileTagStore(File(filesDir, "tags.json"))`, `tagIo = RealTagIo(codec)`, `resolveTap`, `newWriteController(sharedText, scope)`); `MainActivity` handles `ACTION_SEND text/plain` (cold and `onNewIntent`) and the hand-off extra `EXTRA_MESSAGE` from the trampoline; **exactly two screens (P20)** driven by `MainViewModel.screen: StateFlow<Screen>` — `List(message: String? = null)` and `Write(sharedText)`. A hand-off sentence is a transient result card on the list, not a screen.
 
 - [ ] **Step 1: The graph and the activity**
 
@@ -1427,23 +1457,21 @@ class AppGraph(app: Application) {
 }
 ```
 
-`MainActivity`: `singleTop`; on create and on new intent, derive the screen: `ACTION_SEND` with `EXTRA_TEXT` (plain or spanned — `getCharSequenceExtra`, then `toString()`) → `Screen.Write(text)`; an intent carrying `EXTRA_MESSAGE` (from the trampoline) → `Screen.Message`; otherwise `Screen.List`. Wrap intent reading in `try/catch` (hostile extras, 54f9aea). `setContent { NoteTagTheme { when (screen) { … } } }`.
+`MainActivity`: `singleTop`; on create and on new intent, derive the screen: `ACTION_SEND` with `EXTRA_TEXT` (plain or spanned — `getCharSequenceExtra`, then `toString()`) → `Screen.Write(text)`; an intent carrying `EXTRA_MESSAGE` (from the trampoline) → `Screen.List(message = text)`; otherwise `Screen.List()`. Wrap intent reading in `try/catch` (hostile extras, 54f9aea). `setContent { NoteTagTheme { when (screen) { … } } }`.
 
 - [ ] **Step 2: The screens**
 
 `WriteScreen(controller: NoteTagWriteController, onDone: () -> Unit)`: shows the shared link, then the controller state: `Waiting` → the message plus "what will be written" (**"A link only this phone can open"** whenever the planned kind would be `LOCAL_REF` — computed by a preview `WritePlanner.plan(sharedText, Int.MAX_VALUE, codec)`: if that is already `DeviceBound`-impossible (it never is at MAX) the phrase is shown after the tap instead; so: show the phrase in the `Written(deviceBound = true)` state, and beforehand a neutral "If the link is too long for the tag, it will be saved on this phone instead."); `Confirm(reason)` → the sentence with exactly two buttons **Write over it** / **Cancel** (P11); `Writing` → "Writing…"; `Written` → "Written." plus the device-bound sentence when `deviceBound`, and a Done button; `Refused`/`Error` → the sentence and Done. Reader mode: `LifecycleResumeEffect { session.start(); onPauseOrDispose { session.stop() } }` with `NfcReaderModeSession(activity) { controller.onTag(NfcTagHandle(it)) }`; `DisposableEffect` on leave → `controller.abandon()`. If `!session.available` show "This phone has no NFC." and if `!session.enabled` "Turn NFC on to write a tag."
 
-`TagListScreen(entries)`: the store's list, newest first: label, kind word, "this phone only" for `LOCAL_REF`, written-at as a date. Empty state: "Share a Joplin note or a link to NoteTag to write your first tag."
+`TagListScreen(entries, message, onDismissMessage)`: when `message` is non-null, an inline **result card** at the top carrying the sentence and a Dismiss action (this is where every ambient-tap and refusal sentence lands); below it the store's **confirmed** writes (`list()`), newest first: label, kind word, "this phone only" for `LOCAL_REF`, written-at as a date. Empty state: "Share a Joplin note or a link to NoteTag to write your first tag." There is no message screen.
 
-`MessageScreen(text, onDone)`: the sentence and a Done button.
-
-`MainViewModel(graph)`: `screen`, `entries` (reloaded on `List`), `show(screen)`; unit-tested with a fake store.
+`MainViewModel(graph)`: `screen`, `entries` (reloaded on `List`), `show(screen)`, `dismissMessage()`; unit-tested with a fake store.
 
 - [ ] **Step 3: Tests**
 
-`MainViewModelTest`: share text → `Write`; a message extra → `Message`; returning to `List` reloads entries from the store.
+`MainViewModelTest`: share text → `Write`; a message extra → `List(message)`, and `dismissMessage()` → `List(null)`; returning to `List` reloads entries from the store; **an unconfirmed entry in the store does not appear in `entries`**.
 
-`AppSmokeTest` (emulator, Compose test rule, fresh install in `@Before` via `clearInstall()` copied from ServiceTag's `AppSmokeTest.kt:45-77` pattern): launching shows the empty list sentence; an `ACTION_SEND` intent with `joplin://x-callback-url/openNote?id=<32 hex>` shows the write screen with the link and "Hold a tag to the phone." (the emulator has no NFC: the "no NFC" line is acceptable and asserted as *either* the hold sentence or the no-NFC sentence); a `Confirm` state is not reachable without a tag and is covered by the JVM tests.
+`AppSmokeTest` (emulator, Compose test rule, fresh install in `@Before` via `clearInstall()` copied from ServiceTag's `AppSmokeTest.kt:45-77` pattern): launching shows the empty list sentence; an intent carrying `EXTRA_MESSAGE` shows the sentence on the list's result card and Dismiss clears it; an `ACTION_SEND` intent with `joplin://x-callback-url/openNote?id=<32 hex>` shows the write screen with the link and "Hold a tag to the phone." (the emulator has no NFC: the "no NFC" line is acceptable and asserted as *either* the hold sentence or the no-NFC sentence); a `Confirm` state is not reachable without a tag and is covered by the JVM tests.
 
 - [ ] **Step 4: Gate and commit**
 
@@ -1451,7 +1479,7 @@ class AppGraph(app: Application) {
 ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin --console=plain
 ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain
 git add -A app
-git commit -m "notetag screens: share it, hold a tag, see what this phone has written"
+git commit -m "notetag screens: share it, hold a tag, see what this phone has written (two screens, p20)"
 ```
 
 ---
@@ -1513,7 +1541,7 @@ class NfcDispatchActivity : Activity() {
 
 - [ ] **Step 4: The ambient device proof (through the real filter, like ServiceTag's `NfcIdentityDeviceProofTest`)**
 
-`AmbientDispatchDeviceProofTest`: fresh install; each case builds an **implicit** `NDEF_DISCOVERED` intent with `EXTRA_NDEF_MESSAGES` and the data URI `vnd.android.nfc://ext/${BuildConfig.NDEF_EXTERNAL_DOMAIN}:${BuildConfig.NDEF_TYPE_NAME}` (never `setClassName`), `FLAG_ACTIVITY_NEW_TASK`, `startActivity`, then asserts the message screen text with a bounded `awaitText`:
+`AmbientDispatchDeviceProofTest`: fresh install; each case builds an **implicit** `NDEF_DISCOVERED` intent with `EXTRA_NDEF_MESSAGES` and the data URI `vnd.android.nfc://ext/${BuildConfig.NDEF_EXTERNAL_DOMAIN}:${BuildConfig.NDEF_TYPE_NAME}` (never `setClassName`), `FLAG_ACTIVITY_NEW_TASK`, `startActivity`, then asserts the sentence on the list screen's result card with a bounded `awaitText`:
 1. a `JOPLIN_NOTE` record → the emulator has no Joplin, so the outcome is the launcher's "No app can open this link: joplin://x-callback-url/openNote?id=<id>" message — **no crash, and the id in the message is lower-case**;
 2. a ServiceTag record (`com.loosecannon.servicetag:tag`, a valid-looking 18-byte body) → "This tag belongs to ServiceTag, not NoteTag." (§23);
 3. a `LOCAL_REF` whose uuid is not in the store → "This tag was written on another phone…";
@@ -1532,29 +1560,47 @@ git commit -m "ambient dispatch: one filter, read only, open what is safe, say w
 
 ---
 
-### Task 11 (§A.2 row 4 and the whole-phase verify): the signed release, the README, the verification, the evidence
+### Task 11 (§A.2 row 4 and the whole-phase verify): the signed release, the README, the final commit, the verification, the evidence
 
 **Files:**
-- Modify: `README.md` (NoteTag repo)
-- Modify: `docs/architecture/product-split-evidence.md` (**in `../ServiceTag-split`, branch `product-split`** — a separate commit there)
+- Modify: `README.md` (NoteTag repo) — committed in **Step 3**, before any proof
+- Modify: `docs/architecture/product-split-evidence.md` (**in `../ServiceTag-split`, branch `product-split`**) — a separate commit there, **last**
 
-- [ ] **Step 1: The signed release (§12, row 4)**
+**Order matters (owner correction, 2026-09-17):** the final NoteTag commit exists **before** the whole-phase run, the clean clone and the evidence, so that every number and SHA the evidence records is the tree the clone proved.
+
+- [ ] **Step 1: The signed release (§12, row 4) — a comparison that prints one word**
 
 ```bash
 ./gradlew :app:assembleRelease --console=plain
 ls app/build/outputs/apk/release/            # expect: app-release.apk (signed), NOT app-release-unsigned.apk
 APKSIGNER=~/Android/Sdk/build-tools/36.0.0/apksigner
-"$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -i 'SHA-256' | head -1 > "$SCRATCH/notetag-signer.txt"
-grep -c 'SHA-256' ../ServiceTag-split/docs/design/phase-1a-evidence.md
+T="$(mktemp -d -p "$SCRATCH")"
+# Neither digest is ever printed, echoed, pasted or passed as an argument: both go to files, get
+# normalised (lower-case, no colons, no spaces) and are compared byte-for-byte.
+"$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk 2>/dev/null \
+  | grep -i 'SHA-256 digest' | head -1 | sed 's/.*: *//' | tr -d ': \n' | tr 'A-F' 'a-f' > "$T/built"
+grep -m1 'SHA-256' ../ServiceTag-split/docs/design/phase-1a-evidence.md \
+  | sed 's/.*SHA-256:[[:space:]]*//' | tr -d ': \n' | tr 'A-F' 'a-f' > "$T/recorded"
+test -s "$T/built" && test -s "$T/recorded" && { cmp -s "$T/built" "$T/recorded" && echo matches || echo differs; }
+rm -rf "$T"
 ```
 
-Compare the digest in `$SCRATCH/notetag-signer.txt` with the one recorded in `docs/design/phase-1a-evidence.md` (the pre-split key's record) **by eye or by `grep -F`**, write **only the word "matches" or "differs"** in the report and the evidence, and delete the scratch file. Never paste the digest. If it differs, stop: the wrong key was used.
+Write **only** the word (`matches` or `differs`) in the report and the evidence. If it prints `differs`, or either file was empty, stop and report BLOCKED: the wrong key or the wrong record was used. If `grep -m1 'SHA-256'` in the evidence file lands on a line that is not the certificate line, adjust the `grep` to the line that is — by line content, never by pasting the value.
 
 - [ ] **Step 2: The README, for the product**
 
 Replace the Task 1 README with a product README (keep the history section verbatim): what NoteTag is (share a Joplin note or a link, hold a tag, tap it later — it opens); the identity block (`com.loosecannon.notetag`, external type `com.loosecannon.notetag:tag`, no AAR, scheme `notetag` reserved and undeclared); the three kinds and the writer's automatic decision in two sentences; "tags written as a local reference only work on this phone"; what it does not do (no chooser, no ServiceTag tags, no export/import of the local map yet — roadmap #6/#36 under their NoteTag titles); Building (`./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug`; Phase G adds `--recurse-submodules`); Signing: `~/.config/notenfc/keystore.properties` with the four keys, the existing key, unsigned build when absent, the fingerprint recorded in the ServiceTag repository's `docs/design/phase-1a-evidence.md` and not reproduced here; History (the Task 1 paragraph); Related projects: ServiceTag, nfc-tag-core (the latter "not yet created").
 
-- [ ] **Step 3: The whole-phase verification**
+- [ ] **Step 3: The final NoteTag commit — before any proof**
+
+```bash
+git add README.md
+git commit -m "notetag readme: what it is, what it writes, and where its history came from"
+git status --short | wc -l        # expect: 0 — the tree below is exactly what the clone will see
+FINAL=$(git rev-parse --short HEAD)
+```
+
+- [ ] **Step 4: The whole-phase verification, at that HEAD**
 
 ```bash
 git grep -niIE 'notenfc|noteNFC|NoteNfc|md5_short|TECH_DISCOVERED|nfc_tech_filter|looseCannon' -- . ':!README.md' | cat
@@ -1566,22 +1612,32 @@ git ls-files | wc -l; git rev-list --merges --count HEAD; git log --oneline | ta
 ./gradlew clean :core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:compileDebugAndroidTestKotlin --console=plain
 ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain
 "$AAPT2" dump badging app/build/outputs/apk/debug/app-debug.apk | grep -E "^package:|application-label:|launchable-activity:"
+```
+
+- [ ] **Step 5: The clean clone, from that same HEAD**
+
+```bash
 CLEAN="$(mktemp -d -p "$SCRATCH")"
-git clone --no-local . "$CLEAN/NoteTag" && (cd "$CLEAN/NoteTag" && ANDROID_HOME=~/Android/Sdk ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain)
+git clone --no-local . "$CLEAN/NoteTag"
+test "$(git -C "$CLEAN/NoteTag" rev-parse --short HEAD)" = "$FINAL" && echo "clone is at $FINAL"
+(cd "$CLEAN/NoteTag" && ANDROID_HOME=~/Android/Sdk ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain)
 rm -rf "$CLEAN"
 ```
 
-Record: unit and connected counts per class; the badging lines; the tree and ancestry numbers; "signed: matches".
+- [ ] **Step 6: Collect the numbers**
 
-- [ ] **Step 4: The evidence section (in the ServiceTag worktree)**
+From Steps 3–5: `$FINAL`; the commit count and range `c84b881..$FINAL`; merges 0; root `5fb6aed`; the tree count; unit and connected counts per class; the badging lines; "signed: matches"; the clone result. Nothing is added to the NoteTag repository after Step 3 — if anything needs to change, fix it, commit, and **repeat Steps 4–6 at the new HEAD**.
 
-Append a `## Phase E — NoteTag reconstruction` section to `../ServiceTag-split/docs/architecture/product-split-evidence.md` following the Phase D section's shape: the repository and its commit range (`c84b881..<last>`, `<n>` commits, merges 0, root `5fb6aed`); the tree count after Task 1; the identity off the built APK; one filter, no AAR, no `notetag` scheme; the format's measured message sizes (49 B `JOPLIN_NOTE`, the `NdefSize` pin green on the emulator); the store and the three-case failure injection (test names); sibling isolation both ways now (cite ServiceTag's `NdefEnvelopeIsolationTest` and NoteTag's `NoteTagCodecTest.aServiceTagRecordIsForeignEvenWithAPlausibleBody`); the suites (counts, `emulator-5554`); the clean clone; "release signed with the existing key — fingerprint matches the record in `docs/design/phase-1a-evidence.md`, not reproduced"; the caveat (debug and emulator evidence; no physical tag; the interim adapter's `format(message)` shape is superseded by the library in Phase F/G); and the not-attempted list (row 10, CI on a runner, the physical session). Commit it on `product-split` as `evidence: phase e, notetag reconstructed on the emulator`.
+- [ ] **Step 7: The evidence section (in the ServiceTag worktree)**
 
-- [ ] **Step 5: Commit the NoteTag side**
+Append a `## Phase E — NoteTag reconstruction` section to `../ServiceTag-split/docs/architecture/product-split-evidence.md` following the Phase D section's shape: the repository and its commit range (`c84b881..$FINAL`, `<n>` commits, merges 0, root `5fb6aed`) — the same `$FINAL` the clone proved; the tree count after Task 1; the identity off the built APK; one filter, no AAR, no `notetag` scheme; the format's measured message sizes (49 B `JOPLIN_NOTE`, the `NdefSize` pin green on the emulator); the store, the retained-is-not-written rule and the three-case failure injection (test names); sibling isolation both ways now (cite ServiceTag's `NdefEnvelopeIsolationTest` and NoteTag's `NoteTagCodecTest.aServiceTagRecordIsForeignEvenWithAPlausibleBody`); the suites (counts, `emulator-5554`); the clean clone at `$FINAL`; "release signed with the existing key — fingerprint matches the record in `docs/design/phase-1a-evidence.md`, compared without printing, not reproduced"; the caveat (debug and emulator evidence; no physical tag; the interim adapter's `format(message)` shape is superseded by the library in Phase F/G); the not-attempted list (row 10, CI on a runner, the physical session); and the closing line **"Phase E local reconstruction complete; Gate 6 pending its deferred prerequisites (row 10 / Phase G, §B.4 CI, the physical session)."**
+
+- [ ] **Step 8: Commit the evidence, on `product-split`**
 
 ```bash
-git add README.md
-git commit -m "notetag readme: what it is, what it writes, and where its history came from"
+cd ../ServiceTag-split
+git add docs/architecture/product-split-evidence.md
+git commit -m "evidence: phase e, notetag reconstructed on the emulator"
 ```
 
 ---
@@ -1603,6 +1659,7 @@ git commit -m "notetag readme: what it is, what it writes, and where its history
 | target §4.8 C9 binding | 2 (mechanism), 10 (tests) |
 | §23 acceptance (local half) | 10 (device proof), 11 (clean clone; CI line) — the physical half is the later session |
 | P4 no `notetag://` filter | 2, 10 |
-| P19/P20 JSON store, Compose two screens | 6, 9 |
+| P19/P20 JSON store, Compose **exactly two** screens (List with its result card, Write) | 6, 9 |
+| Gate 6 | **not claimed**: the phase ends "local reconstruction complete; Gate 6 pending its deferred prerequisites" (11, Step 7) |
 
-**Placeholder scan:** none. **Type consistency:** `NoteTagContent.Writable` (Tasks 4, 5, 7), `WritePlan` (5, 7), `TagStore`/`TagEntry` (6, 7, 8, 9), `TapOutcome` (8, 10), `TagIo`/`TagInspection`/`WriteResult` (7 copies, 7 controller), `EXTRA_MESSAGE` (9, 10) — one definition each.
+**Placeholder scan:** none. **Type consistency:** `NoteTagContent.Writable` (Tasks 4, 5, 7), `WritePlan` (5, 7), `TagStore`/`TagEntry` with nullable `writtenAt` and `confirm` (6, 7, 8, 9), `TapOutcome` (8, 10), `TagIo`/`TagInspection`/`WriteResult` (7 copies, 7 controller), `Screen.List(message)`/`EXTRA_MESSAGE` (9, 10) — one definition each.
