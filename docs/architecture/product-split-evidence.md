@@ -429,11 +429,10 @@ unit suites, then `assembleDebug`) but has never run: there is no remote to push
 loop from Task 6 Step 2 against the finished tree — `git cat-file -e "$h^{commit}"` against every
 7-hex-digit hash the README quotes, in the ServiceTag worktree, falling back to the NoteTag
 repository — printed nothing: every hash in the table resolves in one of the two repositories.
-(The loop's basename companion still flags the same handful of cross-repository filenames Task 6's
-report already explained — `NdefCodec.kt`, `NdefCodecTest.kt`, `NdefEnvelopeIsolationTest.kt`,
-`NdefSizeDeviceTest.kt`, `TagWriteController.kt`, plus the regex artifacts `gradle.kt`/`Test.kt` —
-names the table cites by design, as the pre-extraction identity of files that were split or renamed
-on the way in; `NdefBridgeDeviceTest.kt` has dropped off that list since Task 8 landed it.)
+The file loop, as amended in the plan on 2026-09-17 to read only the table's NEW-file column (the
+"Copied from" columns name ServiceTag and NoteTag files by design, and are never in this tree),
+also printed nothing: every one of the 18 library files the table names exists, `NdefBridgeDeviceTest.kt`
+included since Task 8. The unscoped form of that loop, which Task 6's report explained, is retired.
 
 **The four amendments, as ruled.** F-1 **accepted**: `WriteResult.Failed(reason, cause: Throwable?
 = null)`. F-2 **accepted as amended**: `NdefSize` lives in `nfc-core`, refusing an empty record
