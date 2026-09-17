@@ -12,18 +12,20 @@
 
 ---
 
-## Owner decisions requested at this review (rule before RELEASE)
+## Owner decisions — ruled 2026-09-17 (HOLD → corrections → scoped re-review → RELEASE)
 
-| # | Proposal | Why | If refused |
+The target was silent or inconsistent on four points. The owner ruled on each; the amendment commit applies the rulings to target §4.2/§4.5/§4.6 and runbook §B.1 before Task 1.
+
+| # | Proposal, as ruled | Why | Ruling |
 |---|---|---|---|
-| **F-1** | `WriteResult.Failed(reason: String, cause: Throwable? = null)` — `TagWriter.write`/`format` fold tag I/O into `Failed` **and keep the exception** | Phase E residual R4: nothing in either consumer can log the underlying `TagLostException`/`IOException` once it has been folded into a sentence; `inspect` already propagates (invariant 8), `write` did not. Additive; the target's `Failed(reason)` call shape still compiles | drop the parameter in Task 4; R4 is then dispositioned by consumers logging at `inspect` only |
-| **F-2** | `NdefSize.serialisedSize(records: List<NdefRecordData>): Int` in **`nfc-core`** (pure arithmetic: per record `1 + 1 + (1 if payload < 256 else 4) + type + payload`, no TLV), lifted from NoteTag `b0ec89c`; `nfc-android` keeps target §4.2's `List<NdefRecordData>.serialisedSize()` as the platform figure; the emulator suite pins the two equal and equal to `toNdefMessage().toByteArray().size` | Target §4.2 puts `serialisedSize()` in `nfc-android` (it needs `NdefMessage`), but §4.5 lists "generic payload limits … `serialisedSize()` … asserted to be exactly `toNdefMessage().toByteArray().size`" under the **`nfc-core` JVM** suite, which cannot call Android. Two consumers need the JVM figure: NoteTag's `WritePlanner` decides off-device (Phase E, `b0ec89c`), and ServiceTag's design-time budget test currently sums `3 + type + payload` **plus a TLV allowance the target calls wrong** (§4.3 invariant 7) | keep the arithmetic in NoteTag; `nfc-core`'s limits test asserts the 51/95/49 B figures by hand-summing and the emulator pins only the `nfc-android` extension |
-| **F-3** | `TagInspection.route(needed: Int): WriteRoute` in `nfc-android` (pure Kotlin, no `android.*` import): `Format` when `needsFormat`, else `ReadOnly` when `!writable`, else `TooSmall(maxSize, needed)` when `needed > maxSize`, else `Write` | §4.5's `nfc-android` unit tier says "the `-1` formatable case **routes to `format` and computes no verdict** against a fake `TagIo`", which presupposes a routing function the API list does not name. Both consumers make exactly this decision today, in the same order (ServiceTag `TagWriteController`, NoteTag `NoteTagWriteController`), and it is the one place invariant 7's two paths and invariant 9's "format computes no verdict" are expressible on the JVM | the unit tier shrinks to `TagInspection` defaults and the two-tap fake; each consumer keeps its own routing |
-| **F-4** | The library's branch is **`master`**, pinned by `git init -b master` in Task 1, so all three repositories share one convention (noteNFC/ServiceTag and NoteTag are on `master`). Runbook §B.1's `git push -u origin main` becomes `master`, and its `gh repo create` line is struck: the empty remote already exists (owner, 2026-09-17) | The owner asked that the branch be chosen and pinned before the first push rather than inherited from GitHub's `default_branch` setting | `git init -b main` in Task 1; §B.1 unchanged |
+| **F-1** | `WriteResult.Failed(reason: String, cause: Throwable? = null)` — `TagWriter.write`/`format` fold tag I/O into `Failed` **and keep the exception**; `inspect` keeps propagating (invariant 8). The library neither logs the cause nor stringifies it into a second field; logging is the consumer's | Phase E residual R4: nothing in either consumer could log the underlying `TagLostException`/`IOException` once it had been folded into a sentence | **ACCEPTED** |
+| **F-2** | `NdefSize.serialisedSize(records: List<NdefRecordData>): Int` in **`nfc-core`** (pure arithmetic: per record `1 + 1 + (1 if payload < 256 else 4) + type + payload`, no TLV), lifted from NoteTag `b0ec89c`; **an empty list is refused** (`require`), because Android's `NdefMessage` is one or more records and the mirror models the same domain; `nfc-android` keeps target §4.2's `List<NdefRecordData>.serialisedSize()` as the platform figure; the emulator suite pins the two equal and equal to `toNdefMessage().toByteArray().size` for every representable message | Target §4.2 puts `serialisedSize()` in `nfc-android` (it needs `NdefMessage`), but §4.5 asserts it in the **`nfc-core` JVM** suite, which cannot call Android. Two consumers need the JVM figure: NoteTag's `WritePlanner` decides off-device, and ServiceTag's design-time budget test sums a TLV allowance the target calls wrong (§4.3 invariant 7) | **ACCEPTED as amended** (empty list refused; the zero-size test replaced by a failure test) |
+| **F-3** | Routing is owned by the library and is **two-stage**: `TagInspection.route(): WriteRoute` takes **no message size** and returns `Format` (when `needsFormat`), `ReadOnly` (when `!writable`) or `Writable(maxSize)`; only a `Writable` can be asked `fit(needed): CapacityVerdict` → `Write` or `TooSmall(maxSize, needed)`. The order `inspect → route → plan against maxSize → measure → fit → write` is the only order the types allow | §4.5's `nfc-android` unit tier presupposes a routing function. A single `route(needed)` would have demanded a message size before it could say "format first", which is backwards for a consumer whose planning depends on `maxSize` and may mint a `LOCAL_REF` (Phase E R1). The two-tap fake must prove the planning seam is **never invoked** on the Format path | **ACCEPTED as amended** (ownership yes; API two-stage) |
+| **F-4** | The library's branch is **`master`**, pinned by `git init -b master` in Task 1, so all three repositories share one convention. Runbook §B.1's `git push -u origin main` becomes `master`, its `gh repo create` line is struck (the empty remote exists since 2026-09-17), and §B.1 gains a **post-push verification** that GitHub's actual default branch is `master` — set it and verify again if GitHub did not switch it from the placeholder `main` | The owner asked that the branch be chosen and pinned before the first push rather than inherited from GitHub's `default_branch` setting | **ACCEPTED** (+ the post-push check) |
 
 One more small shape, **not** an amendment because the target already names the tokens: `OverwritePolicy.reason(existing, isSameIdentity): OverwriteReason` produces all six tokens (`EMPTY_TAG`, `SAME_TAG` included) and `decide(...)` maps the first two to `Proceed` and the rest to `Confirm(reason, detail)`. §4.5 asks for "the full matrix → the six tokens", which a `Proceed` that carries no reason could not satisfy.
 
-On RELEASE the controller amends target §4.2/§4.5 and runbook §B.1 to match the accepted rows (one docs commit on `product-split`, before Task 1), so the plan never argues against the design it implements.
+On RELEASE the controller amends target §4.2/§4.5/§4.6 and runbook §B.1 to match these rulings (one docs commit on `product-split`, before Task 1), so the plan never argues against the design it implements.
 
 ## Phase E residuals as design inputs (owner, 2026-09-17: "requirements Phase G must consciously disposition")
 
@@ -31,8 +33,8 @@ These are not Phase E reopeners. Each row says what **this phase** builds so the
 
 | Residual (Phase E ledger) | Phase F — the library | Phase G — the consumers |
 |---|---|---|
-| **R1** orphan unconfirmed `LOCAL_REF` row per `NdefFormatable` tag: the format tap persisted uuid A, the second tap planned uuid B | `TagWriter.format(tag)` calls `NdefFormatable.format(null)` and returns **`Formatted`**: no payload is ever offered on the format path, and `Written` exists only with a verified read-back (there is no `verified = false`; target §4.2). `TagIo.format` is a separate operation from `TagIo.write`, so a consumer cannot hand a message to the format path by accident. `route()` (F-3) returns `Format` **before** any capacity figure exists, so nothing downstream can plan against it | NoteTag: when `route()` is `Format`, call `format` and persist **nothing** — no uuid is planned, no mapping is written, so there is nothing to orphan; the second tap plans and persists as today. ServiceTag: the `Verifying`/`awaitingVerify` branch becomes "formatted, hold it again to write"; the provisioned row's lifetime rule (deleted unless a verified write claimed it) is unchanged |
-| **R2** the A1 test's fake kept the same `existing` across both taps, so its asserted `Confirm` shape was the fake's | Task 4's unit tier includes a **two-tap fake** whose inspection flips from `needsFormat = true, maxSize = -1` to `needsFormat = false, maxSize = N` after `format()`, proving the `Format` → `Formatted` → `Write` → `Written` sequence at the seam; the README documents the two-tap shape | each consumer's fake models the second tap's inspection (a formatted tag is `Empty`, not "our own content", because `format(null)` wrote nothing); NoteTag's controller test asserts the real `Confirm` shape |
+| **R1** orphan unconfirmed `LOCAL_REF` row per `NdefFormatable` tag: the format tap persisted uuid A, the second tap planned uuid B | `TagWriter.format(tag)` calls `NdefFormatable.format(null)` and returns **`Formatted`**: no payload is ever offered on the format path, and `Written` exists only with a verified read-back (there is no `verified = false`; target §4.2). `TagIo.format` is a separate operation from `TagIo.write`, so a consumer cannot hand a message to the format path by accident. `route()` (F-3) takes **no message size** and returns `Format` before any capacity figure or product plan exists; only a `Writable(maxSize)` route can be asked to `fit(needed)`, so nothing can be planned against a tag that has no capacity yet | NoteTag: when `route()` is `Format`, call `format` and persist **nothing** — no uuid is planned, no mapping is written, so there is nothing to orphan; the second tap plans and persists as today. ServiceTag: the `Verifying`/`awaitingVerify` branch becomes "formatted, hold it again to write"; the provisioned row's lifetime rule (deleted unless a verified write claimed it) is unchanged |
+| **R2** the A1 test's fake kept the same `existing` across both taps, so its asserted `Confirm` shape was the fake's | Task 4's unit tier includes a **two-tap fake** whose inspection flips from `needsFormat = true, maxSize = -1` to `needsFormat = false, maxSize = N` after `format()`, proving the `Format` → `Formatted` → `Writable(maxSize)` → plan → `fit` → `Written` sequence at the seam, and that the planning/sizing seam is **never invoked** on the Format path; the README documents the two-tap shape | each consumer's fake models the second tap's inspection (a formatted tag is `Empty`, not "our own content", because `format(null)` wrote nothing); NoteTag's controller test asserts the real `Confirm` shape |
 | **R3** "finish writing the link" overstated what remained | `Formatted` carries no bytes, so the honest sentence is available | NoteTag's sentence becomes "Formatted the tag. Hold it to the phone again to write the link." (consumer wording, ratified at the Phase G review); ServiceTag's "Formatted and written (N bytes)…" is retired with the branch that produced it |
 | **R4** the underlying read exception was swallowed and never logged | `Failed.cause` (F-1); `inspect` keeps propagating `IOException` (invariant 8) so the consumer sees the exception itself | both consumers `Log.w` the exception at the catch that turns it into a sentence, and rethrow `CancellationException` first (NoteTag's `onTag` catch is widened to match its A4/A12 siblings) |
 
@@ -93,7 +95,7 @@ nfc-tag-core/
       NfcReaderModeSession.kt  verbatim, doc comment intact (Task 4)
       TagWriter.kt             TagInspection, WriteResult, TagWriter: inspect / write / format / lock (Task 4)
       TagIo.kt                 TagHandle, NfcTagHandle, TagIo, RealTagIo (Task 4)
-      WriteRoute.kt            route(needed) (F-3) (Task 4)
+      WriteRoute.kt            route() → Writable(maxSize) → fit(needed) (F-3) (Task 4)
     src/test/kotlin/com/loosecannon/nfc/tagcore/android/
       WriteRouteTest.kt  TwoTapFakeTest.kt  FakeTagIo.kt  (Task 4)
     src/androidTest/AndroidManifest.xml  (TestActivity)                                    (Task 8)
@@ -121,7 +123,7 @@ Every "from" path is in the ServiceTag worktree (`product-split` at `63602d1`, c
 | `nfc-android/…/NfcReaderModeSession.kt` | `app/…/servicetag/nfc/NfcReaderModeSession.kt` (whole file, 39 lines) | same path | `dc1bb1c`, corrected `e2cf1d0` | package line only; the doc comment is carried verbatim |
 | `nfc-android/…/TagWriter.kt` | `app/…/servicetag/nfc/TagWriter.kt` (whole file, 126 lines) | same path | `dc1bb1c`; throw contracts `bdcc475`; lock-after-read-back and the unlocked format path `e2cf1d0` | the `codec.decode` call goes (the caller classifies); `TagInspection.existing` → `unreadable: String?`; `Written` loses `verified` (verified-only); `format(tag)` = `format(null)` → `Formatted`; `write` refuses a formatable-only tag; `Failed.cause` (F-1) |
 | `nfc-android/…/TagIo.kt` | `app/src/main/kotlin/com/loosecannon/servicetag/ui/scan/TagWriteController.kt:27-65` | same path `:32-65` | `c808b49` | moved out of a UI file; `RealTagIo` takes no codec; `format` added to the seam |
-| `nfc-android/…/WriteRoute.kt` | the routing both controllers do inline (`TagWriteController`, NoteTag `NoteTagWriteController`) | — | `c808b49`; NoteTag `840e6ba` | NEW (F-3) |
+| `nfc-android/…/WriteRoute.kt` | the routing both controllers do inline (`TagWriteController`, NoteTag `NoteTagWriteController`) | — | `c808b49`; NoteTag `840e6ba` | NEW (F-3): two-stage — `route()` without a message size, then `fit(needed)` on a `Writable(maxSize)` |
 | `nfc-core/src/test/…/NdefEnvelopeTest.kt` | `core/src/test/…/servicetag/core/nfc/NdefCodecTest.kt` (37 lines) + the sibling cases of `NdefEnvelopeIsolationTest.kt` (63 lines) + `NdefCodecV1Test.kt`'s envelope cases | `NdefCodecTest.kt`; `NdefCodecV1Test.kt` | `76b751a` (legacy cases trimmed `26ec9d0`); `6bf38e8` (isolation, Phase D); `f92a391` | product identities → neutral ones; `evernoteEraTypeIsForeign`/`aNoteTagRecordIsForeign` become the parameterised sibling-isolation case; the version/flags/`Malformed` cases stay with the app |
 | `nfc-core/src/test/…/TagIdentityTest.kt` | `core/src/test/…/servicetag/core/nfc/TagIdentityTest.kt` (29 lines) | — (Phase D) | `b4b016b` | package line; two cases added (`externalType`, `aarPackage` default) |
 | `nfc-core/src/test/…/UuidBytesTest.kt`, `EnvelopeLimitsTest.kt` | `NdefCodecV1Test.kt` (`refusesNonCanonicalIdOnEncode`, `decodedIdIsCanonicalLowercase`, `exactByteLayout`, `theWholeMessageIs95Bytes`, `fitsAnNtag213`) | `NdefCodecV1Test.kt` | `f92a391` | the helper and limit cases are extracted; totals reached with neutral identities of the same length; the TLV `+ 3` is dropped (invariant 7) |
@@ -825,6 +827,7 @@ package com.loosecannon.nfc.tagcore
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class NdefSizeTest {
     /** 23 characters, the length of the applicationId whose one-record message is 49 bytes with a 19-byte body. */
@@ -854,7 +857,10 @@ class NdefSizeTest {
         assertEquals(90, NdefSize.serialisedSize(listOf(a, b)))
     }
 
-    @Test fun theEmptyListIsZero() = assertEquals(0, NdefSize.serialisedSize(emptyList()))
+    /** An NDEF message has one or more records; the mirror refuses to size something Android would not call a message. */
+    @Test fun anEmptyListIsNotAMessage() {
+        assertFailsWith<IllegalArgumentException> { NdefSize.serialisedSize(emptyList()) }
+    }
 }
 ```
 
@@ -1026,7 +1032,7 @@ object OverwritePolicy {
 }
 ```
 
-- [ ] **Step 5: `NdefSize.kt`** — NoteTag's file (`b0ec89c`), package line changed, one word in the KDoc
+- [ ] **Step 5: `NdefSize.kt`** — NoteTag's file (`b0ec89c`), package line changed, one word in the KDoc, and the empty list refused (F-2 as ruled)
 
 ```kotlin
 package com.loosecannon.nfc.tagcore
@@ -1037,11 +1043,17 @@ package com.loosecannon.nfc.tagcore
  * Per record: 1 header byte + 1 type-length byte + 1 payload-length byte (short record, payload
  * < 256) or 4 (long record) + the type + the payload. No ID field (IL = 0), no TLV framing, no
  * terminator: the Type-2 framing belongs to Android and the tag, never to this arithmetic.
- * `nfc-android`'s `serialisedSize()` is the platform's own figure; the emulator suite pins the two equal.
+ * An empty list is refused rather than sized: Android's `NdefMessage` is one or more records, and
+ * this mirror models the same domain. `nfc-android`'s `serialisedSize()` is the platform's own
+ * figure; the emulator suite pins the two equal for every representable message.
  */
 object NdefSize {
-    fun serialisedSize(records: List<NdefRecordData>): Int = records.sumOf { r ->
-        1 + 1 + (if (r.payload.size < 256) 1 else 4) + r.type.size + r.payload.size
+    /** @throws IllegalArgumentException for an empty list — an NDEF message needs at least one record. */
+    fun serialisedSize(records: List<NdefRecordData>): Int {
+        require(records.isNotEmpty()) { "an NDEF message needs at least one record" }
+        return records.sumOf { r ->
+            1 + 1 + (if (r.payload.size < 256) 1 else 4) + r.type.size + r.payload.size
+        }
     }
 }
 ```
@@ -1074,7 +1086,7 @@ git commit -m "nfc-core: uuid bytes, the overwrite tokens and the size arithmeti
 
 **Interfaces:**
 - Consumes: `NdefRecordData`, `NdefSize` (Tasks 2–3).
-- Produces (target §4.2, plus F-1 and F-3): `NdefMessage?.toRecordData()`, `List<NdefRecordData>.toNdefMessage()`, `ByteArray?.toHexOrNull()`, `Intent.ndefRecords()`, `Intent.nfcTag()`, `List<NdefRecordData>.serialisedSize()`; `NfcReaderModeSession(activity, onTag)` with `available`, `enabled`, `start()`, `stop()`; `TagInspection(uid, existingRecords, maxSize, writable, needsFormat, canLock, unreadable = null)`; `WriteResult.Formatted` / `Written(readBack, bytes, locked)` / `TooSmall(maxSize, needed)` / `ReadOnly` / `Unsupported` / `VerifyMismatch(readBack)` / `Failed(reason, cause = null)`; `TagWriter.inspect(tag)`, `write(tag, records, lock)`, `format(tag)`, `lock(tag)`; `TagHandle`, `NfcTagHandle(tag)`, `TagIo { inspect; format; write; lock }`, `object RealTagIo`; `WriteRoute.Format` / `ReadOnly` / `TooSmall(maxSize, needed)` / `Write` and `TagInspection.route(needed)`.
+- Produces (target §4.2, plus F-1 and F-3): `NdefMessage?.toRecordData()`, `List<NdefRecordData>.toNdefMessage()`, `ByteArray?.toHexOrNull()`, `Intent.ndefRecords()`, `Intent.nfcTag()`, `List<NdefRecordData>.serialisedSize()`; `NfcReaderModeSession(activity, onTag)` with `available`, `enabled`, `start()`, `stop()`; `TagInspection(uid, existingRecords, maxSize, writable, needsFormat, canLock, unreadable = null)`; `WriteResult.Formatted` / `Written(readBack, bytes, locked)` / `TooSmall(maxSize, needed)` / `ReadOnly` / `Unsupported` / `VerifyMismatch(readBack)` / `Failed(reason, cause = null)`; `TagWriter.inspect(tag)`, `write(tag, records, lock)`, `format(tag)`, `lock(tag)`; `TagHandle`, `NfcTagHandle(tag)`, `TagIo { inspect; format; write; lock }`, `object RealTagIo`; `WriteRoute.Format` / `ReadOnly` / `Writable(maxSize)`, `CapacityVerdict.Write` / `TooSmall(maxSize, needed)`, `TagInspection.route()` (no message size) and `WriteRoute.Writable.fit(needed)`.
 
 - [ ] **Step 1: The two verbatim files, with only the package line and the import changed**
 
@@ -1311,34 +1323,47 @@ object RealTagIo : TagIo {
 }
 ```
 
-- [ ] **Step 4: `WriteRoute.kt`** (F-3) — pure Kotlin, no `android.*` import, so it is JVM-testable
+- [ ] **Step 4: `WriteRoute.kt`** (F-3 as ruled: two-stage) — pure Kotlin, no `android.*` import, so it is JVM-testable
 
 ```kotlin
 package com.loosecannon.nfc.tagcore.android
 
 /**
- * Where an inspected tag goes next, decided before any consent question and before any I/O.
- * The order is the platform's: a tag that still needs formatting has no capacity figure, so it is
- * routed to `format` and NO verdict is computed for it (invariant 9); a read-only tag is
- * `ReadOnly` before it can be `TooSmall` (invariant 7); the comparison is the exact serialised
- * message against `maxSize`, nothing added.
+ * Where an inspected tag goes next — decided WITHOUT a message size, before any consent question,
+ * before any product planning and before any I/O. A tag that still needs formatting has no
+ * capacity figure, so it is routed to `format` and nothing can be planned against it (invariant 9);
+ * a read-only tag is `ReadOnly` before capacity is even a question (invariant 7). Only a
+ * [Writable] route carries a `maxSize`, and only a [Writable] route can be asked whether a message
+ * [fit]s — so "inspect → route → plan against maxSize → measure → fit → write" is the only order
+ * the types allow.
  */
 sealed interface WriteRoute {
-    /** Call [TagIo.format]; measure, write, verify and lock on the next tap. */
+    /** Call [TagIo.format]; plan, measure, write, verify and lock on the next tap. */
     data object Format : WriteRoute
+
     data object ReadOnly : WriteRoute
-    data class TooSmall(val maxSize: Int, val needed: Int) : WriteRoute
-    /** Call [TagIo.write] with the message that measured [needed] bytes. */
-    data object Write : WriteRoute
+
+    /** The tag can take a message of up to [maxSize] serialised bytes: plan against it, then [fit]. */
+    data class Writable(val maxSize: Int) : WriteRoute
 }
 
-/** @param needed the exact serialised size of the intended message (`NdefSize.serialisedSize` or `serialisedSize()`). */
-fun TagInspection.route(needed: Int): WriteRoute = when {
+/** The capacity verdict for one exact message against one [WriteRoute.Writable] tag (invariant 7). */
+sealed interface CapacityVerdict {
+    /** Call [TagIo.write] with the message that measured `needed` bytes. */
+    data object Write : CapacityVerdict
+
+    data class TooSmall(val maxSize: Int, val needed: Int) : CapacityVerdict
+}
+
+fun TagInspection.route(): WriteRoute = when {
     needsFormat -> WriteRoute.Format
     !writable -> WriteRoute.ReadOnly
-    needed > maxSize -> WriteRoute.TooSmall(maxSize, needed)
-    else -> WriteRoute.Write
+    else -> WriteRoute.Writable(maxSize)
 }
+
+/** @param needed the exact serialised size of the intended message (`NdefSize.serialisedSize` or `serialisedSize()`); nothing is added to it. */
+fun WriteRoute.Writable.fit(needed: Int): CapacityVerdict =
+    if (needed > maxSize) CapacityVerdict.TooSmall(maxSize, needed) else CapacityVerdict.Write
 ```
 
 - [ ] **Step 5: Write the failing unit tests** (JUnit 4, plain JVM — nothing here touches `android.*` at runtime)
@@ -1382,6 +1407,7 @@ class FakeTagIo(
 package com.loosecannon.nfc.tagcore.android
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class WriteRouteTest {
@@ -1390,87 +1416,120 @@ class WriteRouteTest {
     private val formatable =
         TagInspection(uid = "04a1", existingRecords = emptyList(), maxSize = -1, writable = true, needsFormat = true, canLock = true)
 
-    @Test fun aTagThatNeedsFormattingIsRoutedToFormatWhateverTheMessageSize() {
-        assertEquals(WriteRoute.Format, formatable.route(needed = 0))
-        assertEquals(WriteRoute.Format, formatable.route(needed = 49))
-        assertEquals(WriteRoute.Format, formatable.route(needed = 10_000))
+    /** No message size is asked for, and none could be given: a formatable tag has no capacity. */
+    @Test fun aTagThatNeedsFormattingRoutesToFormatBeforeAnyMessageExists() {
+        assertEquals(WriteRoute.Format, formatable.route())
     }
 
-    @Test fun aReadOnlyTagIsReadOnlyBeforeItCanBeTooSmall() {
-        assertEquals(WriteRoute.ReadOnly, ndef(maxSize = 137, writable = false).route(needed = 49))
-        assertEquals(WriteRoute.ReadOnly, ndef(maxSize = 10, writable = false).route(needed = 49))
+    @Test fun aReadOnlyTagIsReadOnlyBeforeCapacityIsAQuestion() {
+        assertEquals(WriteRoute.ReadOnly, ndef(maxSize = 137, writable = false).route())
+        assertEquals(WriteRoute.ReadOnly, ndef(maxSize = 10, writable = false).route())
     }
 
-    @Test fun exactlyMaxSizeIsAcceptedAndOneMoreIsTooSmall() {
-        assertEquals(WriteRoute.Write, ndef(maxSize = 137).route(needed = 137))
-        assertEquals(WriteRoute.TooSmall(137, 138), ndef(maxSize = 137).route(needed = 138))
+    @Test fun aWritableTagCarriesItsMeasuredCapacity() {
+        assertEquals(WriteRoute.Writable(137), ndef(maxSize = 137).route())
     }
 
-    @Test fun aMessageThatFitsIsWritten() {
-        assertEquals(WriteRoute.Write, ndef(maxSize = 137).route(needed = 49))
+    @Test fun exactlyMaxSizeFitsAndOneMoreIsTooSmall() {
+        val tag = WriteRoute.Writable(137)
+        assertEquals(CapacityVerdict.Write, tag.fit(137))
+        assertEquals(CapacityVerdict.TooSmall(137, 138), tag.fit(138))
     }
 
-    @Test fun anUnreadableTagIsStillRoutedByCapacity() {
+    @Test fun aSmallerMessageFits() {
+        assertEquals(CapacityVerdict.Write, WriteRoute.Writable(137).fit(49))
+    }
+
+    @Test fun anUnreadableTagIsStillWritable() {
         val unreadable = TagInspection("04a1", emptyList(), maxSize = 137, writable = true, needsFormat = false, canLock = true, unreadable = "NDEF on tag could not be parsed")
-        assertEquals(WriteRoute.Write, unreadable.route(needed = 49))
+        assertEquals(WriteRoute.Writable(137), unreadable.route())
     }
 
     @Test fun theInspectionDefaultsToReadable() {
-        assertEquals(null, ndef(137).unreadable)
+        assertNull(ndef(137).unreadable)
     }
 }
 ```
 
-`TwoTapFakeTest.kt` — the two-tap shape (Phase E residual R2), at the seam:
+`TwoTapFakeTest.kt` — the two-tap shape (Phase E residuals R1 and R2), at the seam: the planning seam is provably not invoked on the Format path
 
 ```kotlin
 package com.loosecannon.nfc.tagcore.android
 
 import com.loosecannon.nfc.tagcore.NdefRecordData
+import com.loosecannon.nfc.tagcore.NdefSize
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * A formatable tag takes two taps. Tap one: `route` says Format, `format` returns Formatted, and
- * NOTHING is written. Tap two: the same chip comes back as Ndef with a real `maxSize`, `route`
- * says Write, and only then does a payload reach the tag. A consumer's fake must model the second
- * inspection, because the first one carries no capacity and no content.
+ * A formatable tag takes two taps. Tap one: `route()` says Format, `format` returns Formatted, and
+ * NOTHING is planned, sized or written — the planning seam is not even consulted. Tap two: the same
+ * chip comes back as Ndef with a real `maxSize`, `route()` says Writable(maxSize), the consumer
+ * plans against that figure, measures, `fit`s, and only then does a payload reach the tag. A
+ * consumer's fake must model the second inspection, because the first carries no capacity and no
+ * content.
  */
 class TwoTapFakeTest {
     private val handle = FakeHandle()
-    private val message = listOf(NdefRecordData(0x04, "com.example.app:tag".toByteArray(Charsets.US_ASCII), ByteArray(18)))
-    private val needed = 51
 
-    @Test fun tapOneFormatsAndWritesNothingTapTwoWrites() {
+    /** A 30-byte type with an 18-byte body: 51 serialised bytes. */
+    private val message = listOf(NdefRecordData(0x04, "com.example.twentysixchars:tag".toByteArray(Charsets.US_ASCII), ByteArray(18)))
+
+    /** Stands in for a consumer's planner + sizer — the only thing that may turn a capacity into a message. Counts its calls. */
+    private class PlanningSeam(private val message: List<NdefRecordData>) {
+        var calls = 0
+        var lastMaxSize: Int? = null
+        fun plan(maxSize: Int): Pair<List<NdefRecordData>, Int> {
+            calls++
+            lastMaxSize = maxSize
+            return message to NdefSize.serialisedSize(message)
+        }
+    }
+
+    /** One tap, driven the only way the types allow: route first; only a Writable route reaches the planner. */
+    private fun tap(io: FakeTagIo, seam: PlanningSeam): Any = when (val route = io.inspect(handle)!!.route()) {
+        WriteRoute.Format -> io.format(handle)
+        WriteRoute.ReadOnly -> route
+        is WriteRoute.Writable -> {
+            val (records, needed) = seam.plan(route.maxSize)
+            when (val verdict = route.fit(needed)) {
+                CapacityVerdict.Write -> io.write(handle, records, lock = false)
+                is CapacityVerdict.TooSmall -> verdict
+            }
+        }
+    }
+
+    @Test fun tapOneFormatsWithoutAskingThePlannerTapTwoPlansAgainstTheRealCapacityAndWrites() {
+        val seam = PlanningSeam(message)
         val io = FakeTagIo(
             inspection = TagInspection(handle.uid, emptyList(), maxSize = -1, writable = true, needsFormat = true, canLock = true),
-            writeResult = WriteResult.Written(message, needed, locked = false),
+            writeResult = WriteResult.Written(message, 51, locked = false),
         )
 
         // tap one
-        val first = io.inspect(handle)!!
-        assertEquals(WriteRoute.Format, first.route(needed))
-        assertEquals(WriteResult.Formatted, io.format(handle))
+        assertEquals(WriteResult.Formatted, tap(io, seam))
+        assertEquals("the planning seam is never consulted on the format path", 0, seam.calls)
         assertEquals(0, io.writeAttempts)
+        assertEquals(1, io.formatCount)
 
-        // the chip is rediscovered as Ndef: empty, with a measured capacity
+        // the chip is rediscovered as Ndef: empty (format(null) wrote nothing), with a measured capacity
         io.inspection = TagInspection(handle.uid, emptyList(), maxSize = 137, writable = true, needsFormat = false, canLock = true)
 
         // tap two
-        val second = io.inspect(handle)!!
-        assertTrue(second.existingRecords.isEmpty())          // format(null) wrote nothing
-        assertEquals(WriteRoute.Write, second.route(needed))
-        val r = io.write(handle, message, lock = false)
-        assertEquals(WriteResult.Written(message, needed, locked = false), r)
+        assertEquals(WriteResult.Written(message, 51, locked = false), tap(io, seam))
+        assertEquals(1, seam.calls)
+        assertEquals(137, seam.lastMaxSize)
+        assertEquals(message, io.lastWritten)
         assertEquals(1, io.writeAttempts)
         assertEquals(2, io.inspectCount)
-        assertEquals(1, io.formatCount)
     }
 
-    @Test fun aTagTooSmallOnTapTwoIsNeverWritten() {
+    @Test fun aTagTooSmallForWhatWasPlannedIsNeverWritten() {
+        val seam = PlanningSeam(message)   // 51 bytes
         val io = FakeTagIo(inspection = TagInspection(handle.uid, emptyList(), maxSize = 48, writable = true, needsFormat = false, canLock = true))
-        assertEquals(WriteRoute.TooSmall(48, needed), io.inspect(handle)!!.route(needed))
+        assertEquals(CapacityVerdict.TooSmall(48, 51), tap(io, seam))
+        assertEquals(1, seam.calls)
+        assertEquals(48, seam.lastMaxSize)
         assertEquals(0, io.writeAttempts)
     }
 }
@@ -1479,7 +1538,7 @@ class TwoTapFakeTest {
 - [ ] **Step 6: Run the unit tests to verify they fail, then pass**
 
 Run: `./gradlew :nfc-android:testDebugUnitTest --console=plain`
-Expected before Step 4's file exists: compilation failure naming `route`/`WriteRoute`. After: `BUILD SUCCESSFUL`; `nfc-android/build/test-results/testDebugUnitTest/` holds `TEST-…WriteRouteTest.xml` (6) and `TEST-…TwoTapFakeTest.xml` (2), `failures="0"`.
+Expected before Step 4's file exists: compilation failure naming `route`/`WriteRoute`. After: `BUILD SUCCESSFUL`; `nfc-android/build/test-results/testDebugUnitTest/` holds `TEST-…WriteRouteTest.xml` (7) and `TEST-…TwoTapFakeTest.xml` (2), `failures="0"`.
 
 Run: `./gradlew :nfc-android:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`; `nfc-android/build/outputs/aar/nfc-android-debug.aar` exists.
@@ -1609,8 +1668,8 @@ git commit -m "forbidden scan: the word list from the design, wired into check, 
 1. **`# nfc-tag-core`** — one paragraph: the product-neutral NFC tag mechanism shared by ServiceTag and NoteTag: an identity-parameterised external-record envelope, a byte↔UUID helper, the read-before-write policy as tokens, reader mode, and a blocking inspect / format / write / verify / lock adapter. Two modules, `nfc-core` (pure Kotlin/JVM, Kotlin stdlib only) and `nfc-android` (`com.android.library`, depends on `nfc-core` and nothing else). Consumed as a pinned git submodule at `libs/nfc-tag-core/`, included as ordinary subprojects `:nfc-core` and `:nfc-android`; no Maven, no publication (target §6). Versioned by annotated tags `nfc-tag-core-v<major>.<minor>.<patch>`; the first, `nfc-tag-core-v0.1.0`, is cut when the standalone build is green and is final only when both consumers are green against it (target §10.3).
 2. **`## Provenance`** — the sentence "This repository has no inherited history; this table is its provenance. Every trace starts with `git log --follow -- <path>` in the ServiceTag repository (the renamed continuation of noteNFC), or in the NoteTag repository where marked." followed by **the table from this plan's "Provenance" section, all 18 rows, verbatim in content** (the implementer may reflow columns), and the "Deliberately not moved" line.
 3. **`## Public API`** — the signatures of Tasks 2–4 exactly as the "Produces" blocks list them, grouped by module, each with its one-line KDoc summary.
-4. **`## Invariants`** — target §4.3's 1–9 and 13, each in one or two sentences, each naming the test that proves it: 1 `NdefEnvelopeTest.aSiblingRecordCarryingOurOwnBodyIsStillForeign`; 2 `anIdentityWithAnAarWritesOursFirstThenTheAar`, `anIdentityWithoutAnAarWritesExactlyOneRecord`; 3 the structural comparison in `TagWriter.write` (records, not bytes; id outside) — proven on a physical tag, runbook §D; 4 `NfcReaderModeSessionDeviceTest` + the grep in Task 4 Step 1; 5 `TagIdentityTest.anUpperCaseExternalTypeIsRefused`; 6 the consumer's binding test (target §4.8) — not the library's; 7 `WriteRouteTest.exactlyMaxSizeIsAcceptedAndOneMoreIsTooSmall`, `aReadOnlyTagIsReadOnlyBeforeItCanBeTooSmall`, `NdefBridgeDeviceTest` (the platform pin), `EnvelopeLimitsTest.theSizeIsTheMessageAndNothingElse`; 8 `TagWriter`'s KDoc contract (inspect throws, write/format fold) — physical row; 9 `WriteRouteTest.aTagThatNeedsFormattingIsRoutedToFormatWhateverTheMessageSize`, `TwoTapFakeTest`; 13 `OverwritePolicyTest.theDetailIsTheEvidenceVerbatim` and the scan. State that 10–12 are protocol invariants each consumer implements.
-5. **`## The two-tap shape`** — a formatable tag is formatted with `format(null)` on tap one (`Formatted`, nothing written, no capacity known, nothing to persist) and measured, written, verified and optionally locked on tap two; a consumer's fake must model the second inspection (`existingRecords` empty, a real `maxSize`). Sentence for the consumer's UI is the consumer's.
+4. **`## Invariants`** — target §4.3's 1–9 and 13, each in one or two sentences, each naming the test that proves it: 1 `NdefEnvelopeTest.aSiblingRecordCarryingOurOwnBodyIsStillForeign`; 2 `anIdentityWithAnAarWritesOursFirstThenTheAar`, `anIdentityWithoutAnAarWritesExactlyOneRecord`; 3 the structural comparison in `TagWriter.write` (records, not bytes; id outside) — proven on a physical tag, runbook §D; 4 `NfcReaderModeSessionDeviceTest` + the grep in Task 4 Step 1; 5 `TagIdentityTest.anUpperCaseExternalTypeIsRefused`; 6 the consumer's binding test (target §4.8) — not the library's; 7 `WriteRouteTest.exactlyMaxSizeFitsAndOneMoreIsTooSmall`, `aReadOnlyTagIsReadOnlyBeforeCapacityIsAQuestion`, `NdefBridgeDeviceTest` (the platform pin), `EnvelopeLimitsTest.theSizeIsTheMessageAndNothingElse`; 8 `TagWriter`'s KDoc contract (inspect throws, write/format fold) — physical row; 9 `WriteRouteTest.aTagThatNeedsFormattingRoutesToFormatBeforeAnyMessageExists`, `TwoTapFakeTest`; 13 `OverwritePolicyTest.theDetailIsTheEvidenceVerbatim` and the scan. State that 10–12 are protocol invariants each consumer implements.
+5. **`## The two-tap shape`** — a formatable tag is formatted with `format(null)` on tap one (`route()` says `Format` with no message size asked; `Formatted`; nothing planned, sized, persisted or written) and on tap two comes back as `Writable(maxSize)`: the consumer plans against that figure, measures the exact message, asks `fit(needed)`, writes, verifies and optionally locks. The consumer's fake must model the second inspection (`existingRecords` empty, a real `maxSize`), and its test must show the planning seam is not consulted on tap one. The sentence for the consumer's UI is the consumer's.
 6. **`## Two patterns the library does not own`** — (a) the reader-mode lifecycle idiom `LifecycleResumeEffect { session.start(); onPauseOrDispose { session.stop() } }` with `onTag` on a binder thread; (b) the mint → write → verify → complete-else-abandon provisioning protocol (single-flight, one confirmation remembered against content, abandon on close). Both live in the consumers today; the second is `TagWriteSession`, **deferred**, promoted as `v0.2.0` only if, after NoteTag's writer is diffed against ServiceTag's, both need identical *decisions* (target §4.7, verbatim criterion).
 7. **`## Consumer obligations carried from Phase E`** — the four rows of this plan's residual table, Phase G column, one bullet each (R1 nothing persisted on a format tap; R2 fakes model the second inspection; R3 the consumer's own honest sentence; R4 log the `Failed.cause` / the propagated `IOException`, rethrow cancellation first).
 8. **`## Building`** — `./gradlew build` standalone; the CI task list `tools/forbidden-scan.sh && ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :nfc-android:assembleDebug`; the emulator suite `ANDROID_SERIAL=emulator-5554 ./gradlew :nfc-android:connectedDebugAndroidTest` (local only, never CI); the alias-name rule and the "repositories only in the root settings file" rule (target §6.1); the same `agp`/`kotlin` pins as the consumers, with the one-line `diff` from target §6.1.
@@ -1921,7 +1980,7 @@ export ANDROID_HOME=~/Android/Sdk                            # a fresh clone has
 bash tools/forbidden-scan.sh                                 # expected: forbidden-scan: clean
 for x in nfc-core/build/test-results/test/*.xml nfc-android/build/test-results/testDebugUnitTest/*.xml; do
   grep -o 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' "$x" | head -1
-done                                                          # expected: 49 across six nfc-core files, 8 across two nfc-android files, failures="0" everywhere
+done                                                          # expected: 49 across six nfc-core files, 9 across two nfc-android files, failures="0" everywhere
 cd - >/dev/null && rm -rf "$SCRATCH"
 ```
 
@@ -1932,7 +1991,7 @@ cd - >/dev/null && rm -rf "$SCRATCH"
 - [ ] **Step 5: The evidence section** — append to `docs/architecture/product-split-evidence.md` in the ServiceTag worktree, headed `## Phase F — nfc-tag-core extraction (§A.3)`, same header discipline as Phases D and E ("Fingerprints only — no secrets, no physical-device ids, no owner paths"; nothing to fingerprint here, so say so). It carries, as fact lines and one table:
   - repository `~/Documents/Projects/AndroidStudioProjects/nfc-tag-core`, branch `master` (F-4), FINAL `<hash>`, `<n>` commits, `<n>` tracked files, no remote, no tag, no push; `GonzRon/nfc-tag-core` exists empty on GitHub since 2026-09-17 and was not touched.
   - the layout as built (two modules, plugins, namespace, SDK levels, packages); `nfc-core` runtime classpath = kotlin-stdlib only (the `dependencies` line quoted); `nfc-core/src/main` imports = `java.nio.ByteBuffer`, `java.util.UUID`.
-  - suites at FINAL: `nfc-core` 49 (six classes named with counts), `nfc-android` unit 8 (two classes), connected 10 on `emulator-5554` (two classes); 0 failures everywhere; the clean-clone assertion (`--no-build-cache`, no FROM-CACHE).
+  - suites at FINAL: `nfc-core` 49 (six classes named with counts), `nfc-android` unit 9 (two classes), connected 10 on `emulator-5554` (two classes); 0 failures everywhere; the clean-clone assertion (`--no-build-cache`, no FROM-CACHE).
   - the scan: word list = target §4.4 verbatim; allow entries = 0; wired as `check` in the root script only; CI file authored, **not run** (no remote).
   - provenance: 18 rows, every hash resolved in the ServiceTag or NoteTag repository (loop quoted, no output).
   - the four amendments as **ruled** at the plan review (F-1 … F-4, accepted or refused), and the Phase E residual dispositions carried into the README's consumer-obligations section.
@@ -1956,4 +2015,8 @@ Phase G (§A.4) is where both apps consume the library, and it needs §B.1 first
 
 ## Amendments the controller applies on RELEASE (one docs commit on `product-split`, before Task 1)
 
-For each accepted row of the owner's ruling: **target §4.2** gains `Failed(reason, cause: Throwable? = null)` (F-1), `NdefSize` in the `nfc-core` block and the sentence "`nfc-android`'s `serialisedSize()` is the platform figure; the emulator suite pins the two equal" (F-2), `WriteRoute` + `TagInspection.route(needed)` in the `nfc-android` block (F-3), and `OverwritePolicy.reason(...)` beside `decide(...)`; **target §4.5** names `WriteRouteTest`/`TwoTapFakeTest` as the `nfc-android` unit tier and `NdefSize` as the JVM figure the limits group asserts; **target §4.6** gains the `TagIdentity` (`5c075ea`), `NdefSize` (NoteTag `b0ec89c`) and `WriteRoute` rows and the note that extraction happened from product-split `63602d1`; **runbook §B.1** strikes its `gh repo create` line (the repository exists, empty, since 2026-09-17), changes `git push -u origin main` to `master` (F-4), and keeps the tag step. A refused row leaves the design text as it is and removes the matching lines from Tasks 3–4 and 8 of this plan.
+All four rulings were accepted (F-2 and F-3 as amended above), so the design text changes as follows. **Target §4.2**: `Failed(reason, cause: Throwable? = null)` (F-1); `NdefSize` in the `nfc-core` block, refusing an empty list, with the sentence "`nfc-android`'s `serialisedSize()` is the platform figure; the emulator suite pins the two equal for every representable message" (F-2); `WriteRoute { Format, ReadOnly, Writable(maxSize) }`, `CapacityVerdict { Write, TooSmall(maxSize, needed) }`, `TagInspection.route()` and `WriteRoute.Writable.fit(needed)` in the `nfc-android` block, with the binding order `inspect → route → plan against maxSize → measure → fit → write` (F-3); `OverwritePolicy.reason(...)` beside `decide(...)`. **Target §4.5**: the `nfc-android` unit tier is named as `WriteRouteTest` and `TwoTapFakeTest` (the latter proving the planning seam is not invoked on the Format path), and `NdefSize` is the JVM figure the limits group asserts. **Target §4.6**: the `TagIdentity` (`5c075ea`), `NdefSize` (NoteTag `b0ec89c`) and `WriteRoute` rows, and the note that extraction happened from product-split `63602d1`. **Runbook §B.1**: the `gh repo create` line is struck (the repository exists, empty, since 2026-09-17); `git push -u origin main` becomes `git push -u origin master` (F-4); the tag step stays; and a post-push verification is added — `gh api repos/GonzRon/nfc-tag-core --jq .default_branch` must print `master`, and if GitHub kept the placeholder `main`, `gh api -X PATCH repos/GonzRon/nfc-tag-core -f default_branch=master` followed by the same check — so that ServiceTag, NoteTag and nfc-tag-core all end on `master`. The Phase G plan inherits the two-stage route contract; changing it after Phase G would be a three-repository migration.
+
+## Review status
+
+- 2026-09-17: plan committed (`de60c63`) → owner **HOLD** with rulings F-1 ACCEPT, F-2 ACCEPT as amended (empty list refused), F-3 ownership accepted with the two-stage API, F-4 ACCEPT plus the post-push branch check → the three scoped corrections applied in this revision → scoped re-review of those three changes → on "internally consistent", the owner's stated verdict: **Phase F plan RELEASED. F-1 through F-4 are ratified as amended. Apply the design/runbook amendment commit first, then begin Task 1 under the existing per-task implement → independent review → close discipline. No remote, tag, push, consumer mutation, phone work, or physical NFC is authorized by this release.**
