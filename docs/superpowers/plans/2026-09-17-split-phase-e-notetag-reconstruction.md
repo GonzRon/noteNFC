@@ -163,7 +163,7 @@ name/email on all 30 preserved commits stay reachable. none of it is secret."
 ```bash
 git ls-files | wc -l                                     # expect: 45
 git ls-files | grep -c '\.apk$'                          # expect: 0
-git grep -lE 'GonzRon|github\.com/|SHA-?256:' | cat      # expect: no output
+git grep -lE 'GonzRon|github\.com/|SHA-?256:' | cat      # expect: only `gradlew` — the wrapper's upstream github.com/gradle/gradle comments, present at c84b881; nothing else
 git log --oneline | tail -1                              # expect: 5fb6aed …
 git rev-list --merges --count HEAD                       # expect: 0
 git rev-list --count HEAD                                # expect: 31
