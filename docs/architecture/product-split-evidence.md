@@ -6,7 +6,8 @@ no secrets, no device ids, no owner paths.
 ## Phase D — ServiceTag identity conversion (§A.1)
 
 **Commits.** Phase D runs from `1a93b55` through this commit on `product-split` — twenty-four
-commits, printed in order by `git log --oneline 1a93b55^..HEAD`. Of those, **six are the
+commits, printed in order by `git log --oneline 1a93b55^..4c79418` (this fix round and the
+controller's plan amendments follow that endpoint). Of those, **six are the
 controller's plan work** (`1a93b55` added the 2,418-line phase plan; `d17355c`, `4bbf9b4`,
 `8241d07`, `8e83a36` and `094b023` amended it as runs contradicted it) and **eighteen are
 implementation**. Of those eighteen, fifteen are §A.1's task commits, two are review fix rounds
@@ -44,19 +45,35 @@ the manifest carries only the placeholder, and `queryIntentActivities` for
 `vnd.android.nfc://ext/com.loosecannon.servicetag:tag` resolves to exactly one activity — this
 package's `NfcDispatchActivity`. The retired external type resolves to nothing of ours.
 
-**Ambient NFC as the normal read path.** `NfcIdentityDeviceProofTest` (emulator, 4 tests) drives
-the whole ambient chain — synthetic `NDEF_DISCOVERED` intent → `NfcDispatchActivity` → real
-`NdefCodec` → `ResolveTag` → real Room database → `MainActivity`'s `TagResultSheet`:
+**Ambient NFC as the normal read path.** `NfcIdentityDeviceProofTest` (emulator, 4 tests). The
+intent is **implicit** — action, `EXTRA_NDEF_MESSAGES` and the data URI
+`vnd.android.nfc://ext/<externalType>` built from `BuildConfig.NDEF_EXTERNAL_DOMAIN` and
+`BuildConfig.NDEF_TYPE_NAME`, with no component and no class — so the chain that actually ran is:
+
+> `startActivity` → **the merged manifest's one `NDEF_DISCOVERED` filter** resolves it →
+> `NfcDispatchActivity` → real `NdefCodec` → `ResolveTag` → real Room database → hand-off extras →
+> `MainActivity` → `TagResultSheet`.
+
+The filter link is therefore exercised here as well as asserted by `TagIdentityDispatchTest`. Two
+limits of the model, stated plainly: the data URI is what the *filter* matches while the *records*
+are what the codec judges (`NfcDispatchActivity.payloadOf` reads only `EXTRA_NDEF_MESSAGES` for
+this action), so the two not-ours rows arrive **through our own filter carrying somebody else's
+record** — the untrusted-input shape the trampoline is written for, not a claim that a sibling
+*tag* can reach us. That a sibling tag cannot is `TagIdentityDispatchTest`'s claim.
 
 | Test | What it proves |
 |---|---|
-| `ourTagOpensTheAssetItIsBoundTo` | a bound ServiceTag tag opens its asset, no chooser, no sheet |
-| `ourTagWithNoRowSaysSo` | a ServiceTag tag with no row is named, not treated as damage |
-| `aNoteTagRecordIsNotOurs` | a `com.loosecannon.notetag:tag` record is foreign **even carrying a valid v1 body** — the type gate runs before any body parse (C8, invariant 1) |
-| `ourTypeWithAShortBodyIsUnreadable` | our own type with an unparsable body is ours, and refused |
+| `ourTagOpensTheAssetItIsBoundTo` | a bound ServiceTag tag opens its asset with no chooser and no decision to make — there **is** a sheet: `TagResultSheet`'s `OpensAsset` branch names the asset and navigates in the same composition, and the nav root drops the sheet entry as it pushes the detail screen. The name alone would be satisfied by that transient sheet, so the row waits for the name **twice** (app-bar title + identity-plate model line), which only the detail screen carries |
+| `ourTagWithNoRowSaysSo` | a ServiceTag tag with no row is named (`UNREGISTERED TAG` / "This ServiceTag tag is not in this phone's records."), not treated as damage |
+| `aNoteTagRecordIsNotOurs` | a `com.loosecannon.notetag:tag` record is foreign **even carrying a byte-identical ServiceTag v1 body** (the body is our own `v1Record`'s payload, re-typed) — the type gate runs before any body parse (C8, invariant 1). Reason asserted: `not a ServiceTag tag: tnf=4 type=com.loosecannon.notetag:tag` |
+| `ourTypeWithAShortBodyIsUnreadable` | our own type with an unparsable body is **ours**, and refused as unreadable rather than foreign. Reason asserted: `unreadable ServiceTag record: payload is 3 bytes, expected 18` |
 
-The two not-ours rows assert the sheet's uppercased eyebrow (`NfcSheet` calls
-`eyebrow.uppercase()`, G1 §1.4) plus its sentence, because that is what the tree carries.
+Both not-ours rows assert the sheet's uppercased eyebrow (`NfcSheet` calls `eyebrow.uppercase()`,
+G1 §1.4) and its shared sentence, because that is what the tree carries — and then the distinct
+`QuietLine(result.reason)` prose, which is the only thing that tells "foreign" from "ours and
+malformed" apart on screen. The JVM halves of those two claims are
+`NdefEnvelopeIsolationTest.aSiblingRecordCarryingOurOwnPayloadIsStillForeign` and
+`NdefEnvelopeIsolationTest.ourTypeWithASiblingBodyIsOursAndMalformed`.
 
 **Record size (H2).** The `:tag` record is 51 B (3 + 30 + 18) and the AAR 44 B (3 + 15 + 26): a
 **95 B** NDEF message, pinned byte for byte by `NdefCodecV1Test`. Capacity is compared
@@ -128,6 +145,20 @@ external type `vnd.android.nfc://ext/com.loosecannon.notenfc:tag` inside
 `theRetiredExternalTypeResolvesToNothingOfOurs`, which asserts nothing of ours still claims it,
 O3). The only **binary** hit is the kept 2024 `app/release/app-release.apk`, untouched. There is
 no remaining live reference to the retired identity.
+
+**§21 regression — where every row is discharged.** §21's list, with the suite that answers it.
+All of the JVM and emulator suites named below ran green in this pass; the physical rows are named
+as not attempted and why.
+
+| §21 row | Discharged by |
+|---|---|
+| the core maintenance product (assets, journal, measurements, profiles, templates) | `:core:test` + `:app:testDebugUnitTest` + `AssetModelDeviceProofTest`, `JournalDeviceProofTest`, `EditorsDeviceProofTest` |
+| NFC asset binding, ambient resolution, standalone links | `NfcIdentityDeviceProofTest` + `TagUseCasesRoomTest` |
+| foreign / malformed safety | `NfcIdentityDeviceProofTest` + `NdefEnvelopeIsolationTest` + `NdefCodecTest` |
+| intentional write, capacity, read-back | `TagWriteControllerTest` off-device with the capacity seed; the physical rows are §D Session 1 |
+| attachments | `AttachmentsDeviceProofTest`, `SafTreeAttachmentStoreContractTest` |
+| backup: all-or-nothing export, data-only restore, artifacts restore, set mismatch, missing/hash drift | `BackupViewModelTest`, `RestoreProofTest`, `BackupUseCasesTest`, `AttachmentsDeviceProofTest` |
+| UX: Apollo theme, Dashboard, Assets, two-tab navigation, Read/inspect tag, ambient NFC as the normal read path | `NavigationSmokeTest`, `AppSmokeTest`, `ComponentsSmokeTest`, `ContrastTest`, and the ambient row by `NfcIdentityDeviceProofTest` |
 
 **Caveat, stated once.** Everything above is **debug-build evidence**. §12's signed-release
 requirement is discharged separately and only as a build-verified claim; no device row in this

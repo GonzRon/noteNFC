@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 
 /**
  * The one NFC-exported component (D3 §9, security doc "NFC dispatch"). Background scans arrive
- * here through the two `NDEF_DISCOVERED` filters; only `EXTRA_NDEF_MESSAGES`, `EXTRA_TAG` and the
+ * here through the one `NDEF_DISCOVERED` filter; only `EXTRA_NDEF_MESSAGES`, `EXTRA_TAG` and the
  * data URI are read — every other extra is ignored.
  *
  * It has no UI at all: a link tag launches straight away (R-7) and everything else is handed to
