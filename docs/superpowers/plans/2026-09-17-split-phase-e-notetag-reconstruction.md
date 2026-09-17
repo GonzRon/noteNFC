@@ -1209,6 +1209,7 @@ import com.loosecannon.notetag.core.write.WritePlanner
 import com.loosecannon.notetag.nfc.TagHandle
 import com.loosecannon.notetag.nfc.TagIo
 import com.loosecannon.notetag.nfc.WriteResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1270,7 +1271,9 @@ class NoteTagWriteController(
         if (done || !busy.compareAndSet(false, true)) return          // single-flight (invariant 11)
         scope.launch {
             try { handle(tag) }
-            catch (t: Throwable) { _state.value = WriteState.Error(t.message ?: "the tag could not be read") }
+            // One sentence, never the platform's: a TagLostException's message is not English
+            // and not the owner's business (review round, 2026-09-17).
+            catch (t: Throwable) { _state.value = WriteState.Error("Could not read the tag. Hold it still and try again.") }
             finally { busy.set(false) }
         }
     }
@@ -1314,10 +1317,19 @@ class NoteTagWriteController(
         val entry = entryFor(plan)                                       // writtenAt == null for every plan
         if (plan is WritePlan.DeviceBound) {
             try { store.put(entry) }                                     // (a) durably stored BEFORE the write
+            catch (t: CancellationException) { throw t }                  // a cancelled screen is not a store failure
             catch (t: Throwable) { _state.value = WriteState.Error("Could not save the link on this phone; nothing was written to the tag."); return }
         }
         when (val r = withContext(ioDispatcher) { tagIo.write(tag, plan.records, lock = false) }) {
-            is WriteResult.Written -> {
+            // An UNVERIFIED Written is a format, not a write. The interim adapter's
+            // NdefFormatable path returns Written(verified = false): `Ndef.get(tag)` stays null
+            // until the tag is rediscovered, so measuring, the capacity check, the write and the
+            // verify are all the NEXT tap's job. Nothing is confirmed, and `done` stays false so
+            // that tap is not dropped; a DeviceBound mapping stays persisted-unconfirmed, exactly
+            // as for any other ambiguous outcome (rule b).
+            is WriteResult.Written -> if (!r.verified) {
+                _state.value = WriteState.Waiting("Formatted the tag. Hold it to the phone again to finish writing the link.")
+            } else {
                 val at = clock()
                 // A verified write is recorded even if the screen is already leaving; a store
                 // failure still cannot escape.
@@ -1375,7 +1387,9 @@ class NoteTagWriteController(
 }
 ```
 
-This block is the controller as hardened after the Task 7 and Task 9 reviews (`c8d4dbf`, `1be0a1f`): the two seam calls run under `withContext(ioDispatcher)` (default `Dispatchers.IO` — the main-thread contract of `TagIo`), `abandon()`/`cancel()` launch their cleanup on `cleanupScope` (the graph's process-lived `appScope`), and, from `c8d4dbf`, `forget` and the `Written` branch's store calls run under `NonCancellable`, `done` is `@Volatile`, and `abandon()`/`cancel()` clear `pending` before launching the removal. Note the two design points the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write` with `writtenAt = null`. A `Written` result confirms it (`store.confirm`) and never removes it; `VerifyMismatch` and `Failed` never remove it **and never confirm it** — retained, resolvable, hidden from the list; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` remove it.
+> **Review round (NoteTag `9ff1d65`, 2026-09-17).** The block above is the committed controller after the whole-branch review's fix round, not the Task 7 draft: an unverified `Written` (the interim adapter's `NdefFormatable` path) is a format, not a write — nothing is confirmed, `done` stays false, the state is `Waiting("Formatted the tag. Hold it to the phone again to finish writing the link.")` and a `DeviceBound` mapping stays persisted-unconfirmed; the `onTag` catch emits the fixed sentence `Could not read the tag. Hold it still and try again.` instead of the platform's message; the pre-write persist rethrows `CancellationException` before the catch-all. The companion tests (`anUnverifiedFormatIsNotAWriteAndDoesNotEndTheTask`, `aTagThatCannotBeReadIsOneFixedSentenceAndTheNextTapIsStillHandled`) sit in `NoteTagWriteControllerTest`; `FakeTagIo` gained `inspectFailure`. Known residual parked to Phase G (ledger R1): on that format path the second tap plans a fresh uuid, so the format tap's unconfirmed row is never confirmed nor forgotten — invisible, harmless to resolution, and owned by the adapter nfc-tag-core replaces.
+
+This block is the controller as hardened after the Task 7 and Task 9 reviews and the whole-branch review round (`c8d4dbf`, `1be0a1f`, `9ff1d65`; the review-round note above lists what that last round changed): the two seam calls run under `withContext(ioDispatcher)` (default `Dispatchers.IO` — the main-thread contract of `TagIo`), `abandon()`/`cancel()` launch their cleanup on `cleanupScope` (the graph's process-lived `appScope`), and, from `c8d4dbf`, `forget` and the `Written` branch's store calls run under `NonCancellable`, `done` is `@Volatile`, and `abandon()`/`cancel()` clear `pending` before launching the removal. Note the two design points the reviewer must check: for a `DeviceBound` plan the `LOCAL_REF` uuid is the entry's uuid **and** the tag body, and the mapping is stored before `tagIo.write` with `writtenAt = null`. A `Written` result confirms it (`store.confirm`) and never removes it; `VerifyMismatch` and `Failed` never remove it **and never confirm it** — retained, resolvable, hidden from the list; `TooSmall`/`ReadOnly`/`Unsupported` and `abandon()`/`cancel()` remove it.
 
 - [ ] **Step 4: `FakeTagIo` and the controller tests (JUnit 4, `runTest`)**
 

@@ -215,6 +215,12 @@ them: the toast removed from the copied `LinkLauncher` (NoteTag speaks on the ca
 platform theme so a dark cold start does not flash the light ground, and the two list chips made
 non-interactive labels so a screen reader does not announce them as buttons — the words unchanged.
 
+The scoped re-review of that round found every item addressed and one residual worth recording:
+on the interim adapter's `NdefFormatable` path the format tap persists a `LOCAL_REF` row that the
+second tap never confirms or forgets, because that tap plans a fresh uuid. The row is unconfirmed,
+so it is invisible in the list and irrelevant to resolution; it is parked to Phase G, which
+replaces that adapter (ledger ruling R1).
+
 **Identity, read off the built debug APK** (`aapt2 dump badging`, build-tools 36.0.0):
 `package: name='com.loosecannon.notetag' versionCode='3' versionName='2.0'`,
 `application-label:'NoteTag'`, and **one** launchable activity,
