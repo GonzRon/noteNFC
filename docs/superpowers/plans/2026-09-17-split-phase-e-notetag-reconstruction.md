@@ -504,7 +504,7 @@ class BuildSanityTest {
 ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain
 AAPT2=~/Android/Sdk/build-tools/36.0.0/aapt2
 "$AAPT2" dump badging app/build/outputs/apk/debug/app-debug.apk | grep -E "^package:|application-label:|launchable-activity:"
-git grep -c 'nfc_tech_filter\|TECH_DISCOVERED\|looseCannon\|notenfc' -- app core | cat   # expect: no output
+git grep -n 'nfc_tech_filter\|TECH_DISCOVERED\|looseCannon\|notenfc' -- app core | cat   # expect: exactly one line — the ~/.config/notenfc keystore path in app/build.gradle.kts
 grep -c NDEF_DISCOVERED app/src/main/AndroidManifest.xml                                   # expect: 1
 ```
 
