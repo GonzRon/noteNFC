@@ -1312,7 +1312,7 @@ jobs:
       APP_DIR: servicetag                   # NoteTag: notenfc  (the historical directory the build script reads)
       APK_BASENAME: ServiceTag              # NoteTag: NoteTag
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
           fetch-depth: 0
@@ -1320,17 +1320,17 @@ jobs:
         run: |
           set -euo pipefail
           [ "${GITHUB_REF_TYPE}" = "tag" ] || { echo "not a tag push"; exit 1; }
-          git describe --exact-match --tags HEAD | grep -qx "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} is not exactly at HEAD"; exit 1; }
+          git tag --points-at HEAD --format='%(refname:short)' | grep -Fxq -- "$GITHUB_REF_NAME" || { echo "pushed tag is not exactly at HEAD"; exit 1; }
           bash tools/check-submodule-pin.sh
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
           packages: platform-tools build-tools;36.0.0
           accept-android-sdk-licenses: true
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: the complete test gate
         run: ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest --console=plain
       - name: restore the release signing material (never echoed)
@@ -1378,6 +1378,8 @@ jobs:
         if: always()
         run: rm -rf "$HOME/.config/$APP_DIR"
 ```
+
+Owner rulings 2026-09-17, applied to the block above and to ServiceTag's committed file: every external `uses:` is pinned to its full commit SHA with the version as a comment (checkout 11d5960a… v4.4.0, setup-java cf277c60… v4.9.1, setup-android 9fc6c4e9… v3.2.2, setup-gradle ed408507… v4.4.3 — resolved from the action repositories' tags on 2026-09-17; ordinary `ci.yml` is not pinned), and the tag-at-HEAD check is `git tag --points-at HEAD --format='%(refname:short)' | grep -Fxq -- "$GITHUB_REF_NAME"`, which handles a doubly-tagged commit and never treats the ref name as a pattern. The NoteTag copy carries both.
 
 Notes the implementer must keep: `apksigner verify` exits non-zero for an unsigned or badly signed APK, so "unsigned" cannot pass; the fingerprint compare prints neither value; `grep -c 'secrets\.' .github/workflows/ci.yml` must stay 0 while `release.yml` is the only file that names them; `gh` is preinstalled on `ubuntu-latest`.
 

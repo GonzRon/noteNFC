@@ -499,7 +499,9 @@ author; the second workstation is what proves no developer-local Gradle state wa
 `ci.yml`, no absolute home path, no developer-local Gradle state, no device id, no private signing
 material in any source tree** (§26). The `release` environment exists in both app repositories with
 its four secrets and the `RELEASE_CERT_SHA256` variable set (owner manual step; values never printed;
-target §8). **Only then**, and not before, may anyone consider the recovery refs
+target §8), and it is **protected** — required reviewers or an equivalent protection rule — so GitHub
+withholds its secrets until the rule passes; a tag-protection rule on `servicetag-v*` / `notetag-v*`
+limits who can push a release tag (owner ruling 2026-09-17). **Only then**, and not before, may anyone consider the recovery refs
 `pre-split-checkpoint` and `pre-split-master` retired — and this runbook does not retire them (§27
 step 12, §35). **Rollback.** Disable Actions on the affected repository; no code change.
 
