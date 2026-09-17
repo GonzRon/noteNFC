@@ -171,3 +171,155 @@ refusal, read-back and lock-last need a radio and a physical NTAG213: §D Sessio
 taps. Coexistence needs two installed products: §E Session 2's eight. The emulator has no NFC
 radio, so the ambient path is proved with synthetic `NDEF_DISCOVERED` intents through the real
 dispatch activity, codec and database (G4's reassignment).
+
+## Phase E — NoteTag reconstruction (§A.2)
+
+**Commits.** Phase E is the whole of the NoteTag repository's own work: `c84b881..7794e08` on `master`
+— **16 commits**, printed in order by `git log --oneline c84b881..7794e08`, **0 merges**
+(`git rev-list --merges --count HEAD` = 0). The ancestry is the original product's, not a fresh
+history: the root commit is `5fb6aed` "working!" and `git rev-list --count HEAD` is **46**, so the
+30 commits before `c84b881` are the noteNFC line, untouched. First commit of the phase: `8865990`
+"start the narrow product from its own history"; last: `7794e08` "notetag readme: what it is, what
+it writes, and where its history came from". The tree was **45 files** after that first commit (the
+deletion of the sibling's documents and the 2024 APK) and is **83** now (`git ls-files | wc -l`).
+This repository has no remote yet and nothing is pushed in this phase.
+
+**Identity, read off the built debug APK** (`aapt2 dump badging`, build-tools 36.0.0):
+`package: name='com.loosecannon.notetag' versionCode='3' versionName='2.0'`,
+`application-label:'NoteTag'`, and **one** launchable activity,
+`com.loosecannon.notetag.MainActivity`. The version numbers are past the 2024 app's 2 / "1.1", so
+an installed build updates rather than collides.
+
+**Merged manifest.** Read from
+`app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml`:
+exactly **one** `NDEF_DISCOVERED` filter, with `android:path="/com.loosecannon.notetag:tag"`
+resolved from the single Gradle-owned value; **no** `TECH_DISCOVERED` filter and no
+`nfc_tech_filter` resource; **no** `android:scheme="notetag"` anywhere (ratified P4 — the scheme is
+reserved for #6/#36 and declares nothing); zero occurrences of the retired identity. The only
+extra `uses-permission` is AGP's `com.loosecannon.notetag.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
+self-scoped to this applicationId.
+
+**The C9 binding.** `TagIdentityBindingTest` (JVM, 5 tests) and `TagIdentityDispatchTest` (emulator,
+4 tests) both green. The identity is typed once in `app/build.gradle.kts`, the manifest carries only
+the placeholder, and `BuildConfig.NDEF_AAR_PACKAGE` is **null** — NoteTag writes no Application
+Record (O13), asserted in the binding test and in the build script's own text.
+`queryIntentActivities` for `vnd.android.nfc://ext/com.loosecannon.notetag:tag` resolves to exactly
+one activity, this package's `NfcDispatchActivity`
+(`ourExternalTypeResolvesToOurDispatchActivity`); the retired
+`com.loosecannon.notenfc:md5_short` and the sibling `com.loosecannon.servicetag:tag` resolve to
+nothing of ours (`theRetiredExternalTypeResolvesToNothingOfOurs`,
+`theSiblingExternalTypeResolvesToNothingOfOurs`), and `notetag://` resolves to nothing of ours
+either (`thereIsNoNoteTagUrlSchemeToResolve`).
+
+**Ambient NFC as the normal read path.** `AmbientDispatchDeviceProofTest` (emulator, **6 tests**).
+The intent is **implicit** — the action, `EXTRA_NDEF_MESSAGES` and the data URI
+`vnd.android.nfc://ext/<externalType>` built from `BuildConfig`, with no component and no class —
+so the chain that actually ran is:
+
+> `startActivity` → **the merged manifest's one `NDEF_DISCOVERED` filter** resolves it →
+> `NfcDispatchActivity` → real `NoteTagCodec` → `ResolveTap` → real `JsonFileTagStore` →
+> `MainActivity`'s result card.
+
+The six rows, each asserting one sentence verbatim: a `JOPLIN_NOTE` tap reaches the launcher and is
+told no app can open `joplin://x-callback-url/openNote?id=…`, with the id in the 32 lower-case hex
+the codec re-renders; a sibling record carrying a plausible 18-byte ServiceTag body is answered
+"This tag belongs to ServiceTag, not NoteTag."; a `LOCAL_REF` with no mapping on a fresh install is
+answered "This tag was written on another phone, so this phone cannot open it."; a `javascript:`
+link is refused by `LinkLaunchPolicy` before the launcher, with an `ActivityMonitor` proving **no**
+`ACTION_VIEW` left the process (and the same monitor then counting a probe `ACTION_VIEW`, so the
+zero is a refusal and not a blind spot); our own type with a one-byte body is "This NoteTag tag is
+unreadable (payload is 1 bytes, header needs 3)."; and an intent through our own filter carrying
+**no** `EXTRA_NDEF_MESSAGES` is "Nothing to resolve." — the trampoline's null-records path, added
+with `26baa46`, the same commit that makes the outcome guard rethrow `CancellationException` so a
+cancelled tap stays cancelled instead of being reported as an unreadable tag.
+
+**Record size.** A `JOPLIN_NOTE` message is **49 B** — 3 B of record framing, the 27-byte external
+type `com.loosecannon.notetag:tag`, and a 19-byte body (`version | kind | flags` + the note's 16 id
+bytes) — pinned in `:core` by `NdefSizeTest` and `NoteTagCodecTest.aJoplinNoteRoundTripsAsOneRecordOf49Bytes`.
+`NdefSizeDeviceTest` (emulator, 4 tests) is the pin that matters: `NdefSize.serialisedSize` is
+compared against `NdefMessage.toByteArray().size` for the 49 B message, for a 255-byte payload and
+for a 300-byte payload — across the short-record boundary where the length field grows from one
+byte to four — and for a two-record message. Green on the emulator, so the planner's off-device
+arithmetic is the platform's. Capacity is message bytes against the tag's measured `Ndef.maxSize`:
+no TLV allowance, no character count.
+
+**The store and the LOCAL_REF invariant.** `JsonFileTagStore` is one JSON file rewritten whole
+behind a `Mutex` and replaced atomically (temp file → `fsync` → `ATOMIC_MOVE` rename, with the
+temp file deleted if any step fails); P19 holds — no Room. `TagEntry.writtenAt` is nullable and
+carries the invariant: a `LOCAL_REF` mapping is persisted **before** the write, so `get` resolves a
+retained entry (a live tag may exist), while `list` — the write history the UI shows — returns only
+confirmed entries. **Retained is not written.** The three failure injections, in
+`NoteTagWriteControllerTest` (JVM): `aFailedWriteRetainsTheLocalRefMappingUnconfirmed` (the write
+fails after the mapping was persisted: the entry stays, `writtenAt` stays null, and it is absent
+from the history), `aStoreThatCannotKeepTheMappingWritesNothingToTheTag` (the store refuses first:
+0 write attempts, nothing on the tag, no entry) and
+`aTooSmallTagRemovesTheMappingNoBytesCanHaveReachedIt` (the writer's own pre-write capacity check
+refuses: the mapping is removed, because no bytes can have reached the tag). Portable kinds —
+`JOPLIN_NOTE` and `URI` — never require the store at all.
+
+**Sibling isolation, both ways.** ServiceTag's direction is `NdefEnvelopeIsolationTest`
+(`core/src/test/kotlin/com/loosecannon/servicetag/core/nfc/NdefEnvelopeIsolationTest.kt`, Phase D).
+NoteTag's direction is `NoteTagCodecTest.aServiceTagRecordIsForeignEvenWithAPlausibleBody`: a
+`com.loosecannon.servicetag:tag` record whose body would parse perfectly as a ServiceTag body is
+`Foreign("tnf=4 type=com.loosecannon.servicetag:tag")` **before any body parse happens**, and the
+description names the type rather than guessing at damage. On the device the same claim is
+`AmbientDispatchDeviceProofTest.aServiceTagRecordIsNamedAsServiceTags`, whose sentence is "This tag
+belongs to ServiceTag, not NoteTag." (§23: named, not called damage), with
+`TagIdentityDispatchTest.theSiblingExternalTypeResolvesToNothingOfOurs` proving a sibling *tag*
+never reaches us through the filter in the first place.
+
+**Suites** (at `7794e08`, after `./gradlew clean`): `:core:test` **76** tests in 9 classes —
+`LinkLaunchPolicyTest` 11, `NdefEnvelopeTest` 7, `NdefSizeTest` 5, `OverwriteWordingTest` 9,
+`ResolveTapTest` 13, `JsonFileTagStoreTest` 12, `JoplinIdTest` 4, `NoteTagCodecTest` 10,
+`WritePlannerTest` 5; `:app:testDebugUnitTest` **23** in 3 classes — `TagIdentityBindingTest` 5,
+`MainViewModelTest` 4, `NoteTagWriteControllerTest` 14; `:app:connectedDebugAndroidTest` **19** in
+5 classes on the emulator (`ANDROID_SERIAL=emulator-5554`) — `AmbientDispatchDeviceProofTest` 6,
+`NdefSizeDeviceTest` 4, `TagIdentityDispatchTest` 4, `AppSmokeTest` 3,
+`WriteScreenDeviceBoundTest` 2. **0 failures, 0 errors, 0 skipped** in all three. The same command
+line also built `:app:assembleDebug`, `:app:assembleRelease` and `:app:compileDebugAndroidTestKotlin`.
+**No instrumented run touched the phone in this phase**: every connected task was pinned to
+`emulator-5554`.
+
+**Clean checkout.** `git clone --no-local` from the repository into a scratch directory that never
+held the project; the clone's `git rev-parse --short HEAD` is **`7794e08`**, the same commit every
+number above was measured at. Then, with the Gradle build cache disabled so the suites really ran
+there, `:core:test :app:testDebugUnitTest :app:assembleDebug` — 76 and 23 tests green in the clone
+and `app-debug.apk` produced. The clone was deleted afterwards. The Phase D caveat reproduces:
+`local.properties` is gitignored, so a fresh clone needs `ANDROID_HOME` supplied out of band.
+
+**Signing.** `:app:assembleRelease` produces `app-release.apk` — **signed**, not
+`app-release-unsigned.apk` — because the signing config's `~/.config/notenfc/keystore.properties`
+exists on this workstation with all four values. Release signed with the existing key —
+fingerprint **matches** the record in `docs/design/phase-1a-evidence.md`, compared without
+printing, not reproduced. The comparison wrote both digests to files, normalised them and returned
+one word; neither digest was printed, echoed or passed as an argument, and the NoteTag README points
+at that record rather than reprinting it.
+
+**The look.** The owner's blue palette, read off the finished icon pack and approved 2026-09-17
+(derived from Joplin's palette, not a copy of it). Seven tokens come off the pack — **Frost**
+`#F4F7FB`, **Paper** `#FFFFFF`, **Azure** `#1F5FA8`, **Navy** `#0B3A6E`, **Slate** `#2B3038`,
+**Mist** `#8A96A6` and **Sky** `#5DA6F5` — with four derived from them for contrast (`Steel`,
+`SkyTint`, `Ink`, `Haze`). Both Material 3 schemes, **light and dark**, are built from those
+tokens, with no dynamic colour; `res/values/colors.xml` names six of them for the platform side
+(the window background). The launcher mark itself appears as a **watermark**: the adaptive icon's
+foreground layer, at 7 % alpha, bottom-end aligned and clipped behind both screens, decorative
+only. The first attempt (`5687fae`, ivory/amber/umber) was replaced by the owner's revision
+(`9e30bb5`) in the same task; no screen and no sentence changed in either.
+
+**Caveat, stated once.** Everything above is **debug-build and emulator evidence** — the only
+release-build claim in this section is the signing one, and it is a build-and-verify claim, not a
+device row. **No physical tag was touched**: the emulator has no NFC radio, so every tap is a
+synthetic `NDEF_DISCOVERED` intent through the real filter, activity, codec, store and screens.
+The NDEF adapter under the codec (`NdefBridge`, `TagWriter`, including `NdefFormatable.format(message)`
+at `TagWriter.kt:98`) is an **interim copy of ServiceTag's**, and that shape is superseded by
+`nfc-tag-core` in Phase F/G. The two screens' visual check — palette, watermark, light and dark —
+was made by screenshot during Task 9b; the screenshots were deleted and are not evidence here.
+
+**Not attempted in this phase, and why.** Adopting `nfc-tag-core` is §A.2 row 10 and belongs to
+**Phase G**, so the format, the codec and the NDEF adapter live in this repository for now. CI on a
+runner is **§B.4** — there is no remote yet, and the same Gradle line that CI will run gated every
+task locally. The physical session is still owed: a real tap, the measured `Ndef.maxSize`, a
+capacity refusal, a read-back and a lock all need a radio and an NTAG213.
+
+**Phase E local reconstruction complete; Gate 6 pending its deferred prerequisites (row 10 /
+Phase G, §B.4 CI, the physical session).**
