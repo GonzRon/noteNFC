@@ -378,13 +378,19 @@ no owner paths. There is nothing to fingerprint in this phase: no release build 
 signing key was touched anywhere in it; the only device id below is `emulator-5554`.
 
 **Commits.** The library repository, `~/Documents/Projects/AndroidStudioProjects/nfc-tag-core`,
-branch `master` (F-4, re-read at FINAL), stands at FINAL `fb45aa0` — its whole history,
-**10 commits** (`git rev-list --count HEAD`). Composition: eight task commits (`d5b76f1`
+branch `master` (F-4, re-read at FINAL), stands at FINAL `4ca1a1e` — its whole history,
+**11 commits** (`git rev-list --count HEAD`). Composition: eight task commits (`d5b76f1`
 skeleton, `08e80a7` nfc-core envelope/identity/records, `cdb223d` nfc-core uuid bytes/overwrite/size
 arithmetic, `419a129` nfc-android bridge/reader mode/writer, `243cefd` the forbidden scan,
 `a24aded` the README, `3e4a5c1` CI, `cdd86c6` the emulator suite), one review-fix round that landed
 inside Task 6's own close (`8355d45`, correcting the README's invariant-proof overclaim), and one
-fix round after the whole-branch review of the finished library (`fb45aa0`), which is FINAL.
+fix round after the whole-branch review of the finished library (`fb45aa0`), and one README-only
+correction after the scoped re-review of that round (`4ca1a1e`, the two lines the re-reviewer named:
+the `TagWriter.kt` provenance row and invariant 8's proof line), which is FINAL. FINAL differs from
+`fb45aa0` by that one commit alone — `git diff --stat fb45aa0..4ca1a1e` prints `README.md | 7 ++++---`
+and nothing else — so the suites, the clean clone and the connected run recorded below, all measured
+at `fb45aa0`, stand for `4ca1a1e`; the in-repo gates (`./gradlew build` with lint, the scan, both
+provenance loops) were re-run at `4ca1a1e` and are green.
 `git ls-files | wc -l` is **43**. No remote, no tag: `git remote | wc -l` and `git tag | wc -l` are
 both `0`; nothing has ever been pushed. `GonzRon/nfc-tag-core` exists on GitHub, empty and public,
 created 2026-09-17 by owner authorization, and was not touched in this phase.
@@ -443,7 +449,7 @@ Re-running the hash-resolution loop from Task 6 Step 2 against the finished tree
 worktree, falling back to the NoteTag repository — printed nothing: every hash in the table resolves
 in one of the two repositories. The file loop, as amended in the plan on 2026-09-17 to read only the
 table's NEW-file column (the "Copied from" columns name ServiceTag and NoteTag files by design, and
-are never in this tree), also printed nothing: every one of the 24 library files the table names
+are never in this tree), also printed nothing: every library file the table's 24 rows name (25 files; one row carries two)
 exists. The unscoped form of that loop, which Task 6's report explained, is retired.
 
 **The four amendments, as ruled — and as verified at FINAL.** F-1 **accepted**: `WriteResult.Failed`
@@ -458,7 +464,9 @@ the post-push default-branch verification is recorded at runbook §B.1. The desi
 landed on `product-split` as `9d92ffd`; a later docs correction, `5300f1d`, brought target §2 into
 agreement that the branch is `master`.
 
-**After the whole-branch review.** One fix round, `fb45aa0`, closed the review's actionable findings;
+**After the whole-branch review.** One fix round, `fb45aa0`, closed the review's actionable findings
+(its scoped re-review passed every item and named two README lines, corrected in `4ca1a1e`; an
+empty-fragment allow entry that would blanket-suppress a file is parked to v0.2.0 in the README);
 it is FINAL and every number above is measured at it. **A1 (C1 + I8)** replaced `TagInspection`'s
 `existingRecords: List<NdefRecordData>` plus `unreadable: String?` with one field, `read: TagRead`,
 a sealed interface of `Readable(records)` and `Unreadable(reason, cause)`, so a consumer's `when`
