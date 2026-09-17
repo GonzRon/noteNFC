@@ -93,6 +93,7 @@ room3 {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":nfc-android"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.documentfile)
     implementation(libs.room3.runtime)
