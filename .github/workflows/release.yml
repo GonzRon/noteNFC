@@ -1,0 +1,80 @@
+name: release
+'on':                                       # quoted: PyYAML's YAML-1.1 loader reads a bare `on` as the boolean True (owner correction 4)
+  push:
+    tags:
+      - 'servicetag-v*'                     # NoteTag: 'notetag-v*'
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      APP_DIR: servicetag                   # NoteTag: notenfc  (the historical directory the build script reads)
+      APK_BASENAME: ServiceTag              # NoteTag: NoteTag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: the tag is on this commit, and the shared library is pinned at an exact tag
+        run: |
+          set -euo pipefail
+          [ "${GITHUB_REF_TYPE}" = "tag" ] || { echo "not a tag push"; exit 1; }
+          git describe --exact-match --tags HEAD | grep -qx "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} is not exactly at HEAD"; exit 1; }
+          bash tools/check-submodule-pin.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools build-tools;36.0.0
+          accept-android-sdk-licenses: true
+      - uses: gradle/actions/setup-gradle@v4
+      - name: the complete test gate
+        run: ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest --console=plain
+      - name: restore the release signing material (never echoed)
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in RELEASE_KEYSTORE_BASE64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
+            [ -n "${!v:-}" ] || { echo "release secret $v is missing; refusing to build a release"; exit 1; }
+          done
+          umask 077                                   # BEFORE any key file exists (owner correction 3)
+          d="$HOME/.config/$APP_DIR"; mkdir -p "$d"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$d/release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$d/release.jks" "$RELEASE_STORE_PASSWORD" "$RELEASE_KEY_ALIAS" "$RELEASE_KEY_PASSWORD" > "$d/keystore.properties"
+          chmod 700 "$d"
+          chmod 600 "$d/release.jks" "$d/keystore.properties"
+      - name: build the signed release
+        run: ./gradlew :app:assembleRelease --console=plain
+      - name: the APK is signed by the expected certificate, and its version is the tag's
+        env:
+          RELEASE_CERT_SHA256: ${{ vars.RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/release/app-release.apk
+          [ -f "$apk" ] || { echo "no release APK was produced (unsigned builds are named differently and are refused)"; exit 1; }
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/apksigner" verify --print-certs "$apk" > certs.txt
+          actual=$(grep -m1 'SHA-256 digest' certs.txt | awk '{print $NF}' | tr -d ':' | tr 'a-f' 'A-F')
+          expected=$(printf '%s' "${RELEASE_CERT_SHA256:-}" | tr -d ':' | tr 'a-f' 'A-F')
+          [ -n "$expected" ] || { echo "RELEASE_CERT_SHA256 is not set; refusing to publish"; exit 1; }
+          [ "$actual" = "$expected" ] || { echo "certificate fingerprint differs from RELEASE_CERT_SHA256; refusing to publish"; exit 1; }
+          built=$("$bt/aapt2" dump badging "$apk" | grep -o "versionName='[^']*'" | cut -d"'" -f2)
+          want="${GITHUB_REF_NAME#*-v}"
+          [ "$built" = "$want" ] || { echo "tag says $want but the APK says versionName $built; refusing to publish"; exit 1; }
+          out="${APK_BASENAME}-${built}.apk"; cp "$apk" "$out"; sha256sum "$out" > "$out.sha256"
+          echo "OUT=$out" >> "$GITHUB_ENV"
+      - name: create the GitHub Release for this exact tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$OUT" "$OUT.sha256" --title "$GITHUB_REF_NAME" --notes "Signed release build of $GITHUB_REF_NAME. Verify with sha256sum -c $OUT.sha256; the signing certificate's SHA-256 fingerprint is the repository variable RELEASE_CERT_SHA256."
+      - name: remove the signing material
+        if: always()
+        run: rm -rf "$HOME/.config/$APP_DIR"

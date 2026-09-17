@@ -121,6 +121,21 @@ public key, but a repository's front page is not where a signer's identity belon
 Back the keystore up somewhere outside the repo. Lose it and the app can never be updated
 in place again — a new key means a new install for every user.
 
+## Releases
+
+A release is a tag of the form `servicetag-v<versionName>` (e.g. `servicetag-v2.5`) pushed to
+GitHub. That tag alone triggers `.github/workflows/release.yml`, which checks out the exact
+commit under the `release` environment, runs the full test gate, builds the signed APK from that
+environment's four secrets (`RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`,
+`RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`), verifies the built APK's certificate against the
+public repository variable `RELEASE_CERT_SHA256` and its `versionName` against the tag, and only
+then publishes the signed APK and its SHA-256 checksum as a GitHub Release. Ordinary CI
+(`.github/workflows/ci.yml`) never sees any of that signing material — it stays unprivileged and
+runs on every push. `tools/release-dry-run.sh` is the local, no-secrets equivalent: it runs the
+same checks against whatever signing material is on this machine and reports `PASS`, `PARTIAL —
+signing identity not independently checked`, or `BLOCKED` without ever printing a fingerprint,
+password or keystore path.
+
 ## Where this app came from
 
 This repository was a combined note-utility and maintenance product before the 2026 product
