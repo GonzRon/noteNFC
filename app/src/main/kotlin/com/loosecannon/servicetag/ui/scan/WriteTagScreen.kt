@@ -156,7 +156,7 @@ private fun WriteStatus(state: WriteState, targetName: String, onDone: () -> Uni
             accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
             border = ServiceTagTheme.semanticColors.dueSoon.foreground,
             glyph = ServiceTagIcons.NfcTag,
-            sentence = "Hold the tag to the phone while you answer.",
+            sentence = "Answer here, then hold the same tag to the phone again.",
         )
 
         is WriteState.Written -> NfcSheet(
@@ -234,7 +234,7 @@ private fun OverwriteSheet(
             }
             Text(
                 text = "Replacing it will make the tag identify $target. The old content is lost. " +
-                    "Hold the tag to the phone while confirming.",
+                    "After you confirm, hold the same tag to the phone again to write.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

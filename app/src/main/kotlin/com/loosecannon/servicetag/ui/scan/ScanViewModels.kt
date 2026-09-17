@@ -1,5 +1,6 @@
 package com.loosecannon.servicetag.ui.scan
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.loosecannon.nfc.tagcore.android.RealTagIo
@@ -129,7 +130,10 @@ class ScanViewModel(
      */
     private fun classify(inspection: TagInspection): TagPayload = when (val read = inspection.read) {
         is TagRead.Readable -> codec.decode(read.records)
-        is TagRead.Unreadable -> TagPayload.Malformed(read.reason)
+        is TagRead.Unreadable -> {
+            read.cause?.let { Log.w(TAG, "tag NDEF unreadable: ${read.reason}", it) }
+            TagPayload.Malformed(read.reason)
+        }
     }
 
     private suspend fun launch(id: LinkId) {
@@ -140,6 +144,10 @@ class ScanViewModel(
             is OpenLink.Outcome.Missing ->
                 _events.tryEmit(ScanEvent.Show(Route.TagResult(TagResultWire.FORMAT_NONE, "the link this tag pointed at no longer exists")))
         }
+    }
+
+    private companion object {
+        const val TAG = "ScanViewModel"
     }
 }
 

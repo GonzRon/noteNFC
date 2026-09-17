@@ -18,7 +18,6 @@ import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagId
 import com.loosecannon.servicetag.core.model.TagTarget
-import com.loosecannon.servicetag.core.nfc.NdefCodec
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule

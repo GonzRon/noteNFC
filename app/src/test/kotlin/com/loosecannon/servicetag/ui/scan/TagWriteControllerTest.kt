@@ -19,7 +19,7 @@ import java.io.IOException
 import kotlin.test.assertIs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -49,7 +49,6 @@ class TagWriteControllerTest {
     private lateinit var graph: FakeGraph
     private lateinit var provision: CountingTags
     private lateinit var io: FakeTagIo
-    private lateinit var scope: CoroutineScope
     private lateinit var controller: TagWriteController
 
     @Before fun setUp() {
@@ -61,17 +60,19 @@ class TagWriteControllerTest {
         )
         provision = CountingTags(graph.tags)
         io = FakeTagIo()
-        scope = CoroutineScope(dispatcher)
-        controller = controller()
     }
 
-    @After fun tearDown() {
-        scope.cancel()
-        graph.close()
-    }
+    @After fun tearDown() = graph.close()
 
-    private fun controller(target: TagTarget = TagTarget.None, label: String? = null) =
-        TagWriteController(
+    /**
+     * Both scopes are children of `backgroundScope`, never a detached `CoroutineScope`: a throw
+     * that escapes `onTag`'s `scope.launch` then fails the test instead of being swallowed by a
+     * scope nobody is watching. Still the one dispatcher, so `advanceUntilIdle()` still settles
+     * provision, inspect, write and complete together.
+     */
+    private fun TestScope.controller(target: TagTarget = TagTarget.None, label: String? = null): TagWriteController {
+        val scope = CoroutineScope(backgroundScope.coroutineContext + dispatcher)
+        return TagWriteController(
             provisionTag = ProvisionTag(provision, graph.assets, graph.links, graph.uow, graph.ids, graph.clock),
             appScope = scope,
             io = io,
@@ -81,6 +82,7 @@ class TagWriteControllerTest {
             scope = scope,
             ioDispatcher = dispatcher,
         )
+    }
 
     /** The one row the controller provisions on its first writable tap. */
     private suspend fun theRow() = graph.tags.all().single()
@@ -88,6 +90,7 @@ class TagWriteControllerTest {
     // --- the cases that came over from the 1B controller, on the library's shapes ---------------
 
     @Test fun emptyTagIsWrittenWithoutAsking() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = writable137
         io.writeResult = WriteResult.Written(intended, 95, locked = false)
 
@@ -95,10 +98,12 @@ class TagWriteControllerTest {
 
         assertIs<WriteState.Written>(controller.state.value)
         assertEquals(1, io.writeAttempts)
+        assertEquals("the bytes that reach the seam are the ones the codec planned", intended, io.lastWriteRecords)
         assertNotNull("an empty tag must not raise a question", theRow().writtenAt)
     }
 
     @Test fun foreignContentAsksFirstAndKeepItWritesNothing() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = foreign137
 
         controller.onTag(handle); advanceUntilIdle()
@@ -115,6 +120,7 @@ class TagWriteControllerTest {
     }
 
     @Test fun confirmedOverwriteIsHonouredOnTheNextTapWithoutAskingAgain() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = foreign137
         controller.onTag(handle); advanceUntilIdle()
         assertIs<WriteState.Confirm>(controller.state.value)
@@ -130,6 +136,7 @@ class TagWriteControllerTest {
     }
 
     @Test fun readBackMismatchDoesNotCompleteTheRow() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = writable137
         io.writeResult = WriteResult.VerifyMismatch(emptyList())
 
@@ -144,6 +151,7 @@ class TagWriteControllerTest {
 
     /** The old format path's two claims on the new route: the uid is recorded, nothing is locked blind. */
     @Test fun formatThenWriteRecordsTheUidAndNeverLocksBlind() = runTest(dispatcher) {
+        controller = controller()
         controller.setLock(true)
         io.inspection = formatable
 
@@ -163,6 +171,7 @@ class TagWriteControllerTest {
     }
 
     @Test fun abandonDeletesOnlyAnUnwrittenRow() = runTest(dispatcher) {
+        controller = controller()
         // A tap that provisions a row and writes nothing: the question is still up.
         io.inspection = foreign137
         controller.onTag(handle); advanceUntilIdle()
@@ -184,6 +193,7 @@ class TagWriteControllerTest {
 
     /** Correction 2's other half: a tag that is not NDEF at all creates no product state either. */
     @Test fun aTagThatIsNotNdefAtAllIsRefusedAndProvisionsNothing() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = null
 
         controller.onTag(handle); advanceUntilIdle()
@@ -200,6 +210,7 @@ class TagWriteControllerTest {
 
     /** R1/R2 — a formatable tag: tap one formats and writes nothing; tap two writes. */
     @Test fun aFormatableTagIsFormattedOnTapOneAndWrittenOnTapTwo() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = TagInspection("04a1", TagRead.Readable(emptyList()), maxSize = -1, writable = true, needsFormat = true, canLock = true)
         controller.onTag(handle); advanceUntilIdle()
         assertEquals(1, io.formatCount); assertEquals(0, io.writeAttempts)
@@ -213,6 +224,7 @@ class TagWriteControllerTest {
 
     /** C1 — unreadable NDEF is never treated as an empty tag. */
     @Test fun anUnreadableTagAsksBeforeItIsOverwritten() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = TagInspection("04a1", TagRead.Unreadable("NDEF on tag could not be parsed", null), maxSize = 137, writable = true, needsFormat = false, canLock = true)
         controller.onTag(handle); advanceUntilIdle()
         assertEquals(WriteState.Confirm("unreadable NDEF content (NDEF on tag could not be parsed)"), controller.state.value)
@@ -221,6 +233,7 @@ class TagWriteControllerTest {
 
     /** Invariant 7 — the exact message against the measured capacity, before any consent question. */
     @Test fun aTagTooSmallForTheMessageIsRefusedWithoutWriting() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = TagInspection("04a1", TagRead.Readable(emptyList()), maxSize = 94, writable = true, needsFormat = false, canLock = true)
         controller.onTag(handle); advanceUntilIdle()
         assertEquals(WriteState.Error("Tag too small: it holds 94 bytes, the message needs 95."), controller.state.value)
@@ -229,6 +242,7 @@ class TagWriteControllerTest {
 
     /** I1 — attempted says which sentence, never the reason text. */
     @Test fun aRefusedWriteAndAnIndeterminateWriteAreWordedDifferently() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = writable137
         io.writeResult = WriteResult.Failed("tag still needs formatting", attempted = false)
         controller.onTag(handle); advanceUntilIdle()
@@ -240,6 +254,7 @@ class TagWriteControllerTest {
 
     /** G-6 — the lock rides on the write; the standalone lock is never called. */
     @Test fun lockIsAppliedByTheWriteItself() = runTest(dispatcher) {
+        controller = controller()
         controller.setLock(true)
         io.inspection = writable137
         io.writeResult = WriteResult.Written(intended, 95, locked = true)
@@ -250,6 +265,7 @@ class TagWriteControllerTest {
 
     /** Invariant 10 — consent is recorded, never written through the sheet's (stale) handle. */
     @Test fun confirmingRecordsConsentAndPerformsNoTagIo() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = holdingOtherTag                      // Readable(records of another ServiceTag id), writable, 137
         controller.onTag(handle); advanceUntilIdle()
         assertIs<WriteState.Confirm>(controller.state.value)
@@ -260,6 +276,7 @@ class TagWriteControllerTest {
 
     /** The fresh tap carrying the SAME content consumes the consent and writes through its own handle. */
     @Test fun theNextTapWithTheSameContentWritesThroughTheFreshHandle() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = holdingOtherTag
         controller.onTag(handle); advanceUntilIdle(); controller.confirmOverwrite(); advanceUntilIdle()
         io.writeResult = WriteResult.Written(intended, 95, locked = false)
@@ -271,6 +288,7 @@ class TagWriteControllerTest {
 
     /** A fresh tap carrying DIFFERENT content discards the consent and asks again. */
     @Test fun theNextTapWithDifferentContentAsksAgain() = runTest(dispatcher) {
+        controller = controller()
         io.inspection = holdingOtherTag
         controller.onTag(handle); advanceUntilIdle(); controller.confirmOverwrite(); advanceUntilIdle()
         io.inspection = holdingAThirdTag                     // a different ServiceTag id
@@ -286,6 +304,7 @@ class TagWriteControllerTest {
 
     /** R4 — a read failure is one fixed sentence and the next tap is still handled. */
     @Test fun aTagThatCannotBeReadIsOneSentenceAndTheNextTapStillWorks() = runTest(dispatcher) {
+        controller = controller()
         io.inspectFailure = IOException("lost")
         controller.onTag(handle); advanceUntilIdle()
         assertEquals(WriteState.Error("Could not read the tag. Hold it still and try again."), controller.state.value)
