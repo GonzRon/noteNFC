@@ -378,76 +378,136 @@ no owner paths. There is nothing to fingerprint in this phase: no release build 
 signing key was touched anywhere in it; the only device id below is `emulator-5554`.
 
 **Commits.** The library repository, `~/Documents/Projects/AndroidStudioProjects/nfc-tag-core`,
-branch `master` (F-4), stands at FINAL `cdd86c6` — its whole history, **9 commits**
-(`git rev-list --count HEAD`). Composition: eight task commits (`d5b76f1` skeleton, `08e80a7`
-nfc-core envelope/identity/records, `cdb223d` nfc-core uuid bytes/overwrite/size arithmetic,
-`419a129` nfc-android bridge/reader mode/writer, `243cefd` the forbidden scan, `a24aded` the
-README, `3e4a5c1` CI, `cdd86c6` the emulator suite) plus one review-fix round that landed inside
-Task 6's own close (`8355d45`, correcting the README's invariant-proof overclaim) — the fix the
-brief allowed for as "9 with one Step-1 fix" had already happened before this task began; this
-task's own Step 1 forced no further fix, so FINAL did not move. `git ls-files | wc -l` is **42**.
-No remote, no tag: `git remote | wc -l` and `git tag | wc -l` are both `0`; nothing has ever been
-pushed. `GonzRon/nfc-tag-core` exists on GitHub, empty and public, created 2026-09-17 by owner
-authorization, and was not touched in this phase.
+branch `master` (F-4, re-read at FINAL), stands at FINAL `fb45aa0` — its whole history,
+**10 commits** (`git rev-list --count HEAD`). Composition: eight task commits (`d5b76f1`
+skeleton, `08e80a7` nfc-core envelope/identity/records, `cdb223d` nfc-core uuid bytes/overwrite/size
+arithmetic, `419a129` nfc-android bridge/reader mode/writer, `243cefd` the forbidden scan,
+`a24aded` the README, `3e4a5c1` CI, `cdd86c6` the emulator suite), one review-fix round that landed
+inside Task 6's own close (`8355d45`, correcting the README's invariant-proof overclaim), and one
+fix round after the whole-branch review of the finished library (`fb45aa0`), which is FINAL.
+`git ls-files | wc -l` is **43**. No remote, no tag: `git remote | wc -l` and `git tag | wc -l` are
+both `0`; nothing has ever been pushed. `GonzRon/nfc-tag-core` exists on GitHub, empty and public,
+created 2026-09-17 by owner authorization, and was not touched in this phase.
 
 **Layout as built.** Two Gradle modules under one root (`rootProject.name = "nfc-tag-core"`):
 `nfc-core` — `org.jetbrains.kotlin.jvm`, package `com.loosecannon.nfc.tagcore`, toolchain 17, no
-Android plugin, 7 main files — and `nfc-android` — `com.android.library`,
-`namespace = "com.loosecannon.nfc.tagcore.android"`, `compileSdk = 37`, `minSdk = 26`, 5 main
-files, depending on `nfc-core` (`api(project(":nfc-core"))`) and nothing else. `nfc-core`'s runtime
-classpath is stdlib-only — `./gradlew :nfc-core:dependencies --configuration runtimeClasspath`
-prints exactly one leaf, `\--- org.jetbrains.kotlin:kotlin-stdlib:2.4.20` — and its `src/main`'s
-only imports, across all seven files, are `java.nio.ByteBuffer` and `java.util.UUID`.
+Android plugin, 7 main files — and `nfc-android` — `com.android.library` **only**, with no
+`kotlin-android` plugin declared anywhere in the build scripts or the catalog (AGP 9.4 carries
+Kotlin itself), `namespace = "com.loosecannon.nfc.tagcore.android"`, `compileSdk = 37`,
+`minSdk = 26`, 5 Kotlin files (6 tracked, with the manifest), taking `api(project(":nfc-core"))`
+and having no other runtime dependency. `nfc-core`'s runtime classpath is stdlib-only:
+`./gradlew :nfc-core:dependencies --configuration runtimeClasspath` prints one top-level entry,
+`\--- org.jetbrains.kotlin:kotlin-stdlib:2.4.20`, with nothing beneath it but the stdlib's own
+`org.jetbrains:annotations:13.0`. Its `src/main`'s only imports, across all seven files, are
+`java.nio.ByteBuffer` and `java.util.UUID`.
 
-**Suites at FINAL.** `nfc-core` — **49** tests across six JVM classes: `EnvelopeLimitsTest` 5,
-`NdefEnvelopeTest` 19, `NdefSizeTest` 5, `OverwritePolicyTest` 8, `TagIdentityTest` 5,
-`UuidBytesTest` 7. `nfc-android` unit — **9** across two classes: `TwoTapFakeTest` 2,
-`WriteRouteTest` 7. `nfc-android` connected — **10** on `emulator-5554` across two classes:
-`NdefBridgeDeviceTest` 9, `NfcReaderModeSessionDeviceTest` 1. **0 failures, 0 errors, 0 skipped**
-everywhere. The connected figure is Task 8's own run at this same FINAL — Step 1 forced no fix, so
-it was not repeated; its XML is
-`nfc-android/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 17.xml` (the
-file name carries a literal space), timestamped minutes before the `cdd86c6` commit itself.
+**Suites at FINAL.** `nfc-core` — **50** tests across six JVM classes: `EnvelopeLimitsTest` 5,
+`NdefEnvelopeTest` 20, `NdefSizeTest` 5, `OverwritePolicyTest` 8, `TagIdentityTest` 5,
+`UuidBytesTest` 7. `nfc-android` unit — **10** across three classes: `TagReadTest` 2,
+`TwoTapFakeTest` 2, `WriteRouteTest` 6. `nfc-android` connected — **10** on `emulator-5554` across
+two classes: `NdefBridgeDeviceTest` 9, `NfcReaderModeSessionDeviceTest` 1. **0 failures, 0 errors,
+0 skipped** everywhere. FINAL moved in this round, so the connected suite was re-run against it;
+its XML is `nfc-android/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 17.xml`
+(the file name carries a literal space), written 47 seconds after the `fb45aa0` commit itself.
 
 **Clean clone.** `git clone --no-local` into a throwaway scratch directory that had never held the
-project; `git rev-parse --short HEAD` there is `cdd86c6`, FINAL. `ANDROID_HOME` supplied out of
+project; `git rev-parse --short HEAD` there is `fb45aa0`, FINAL. `ANDROID_HOME` supplied out of
 band (a fresh clone has no `local.properties`). `./gradlew build --no-build-cache --console=plain`
 reports `BUILD SUCCESSFUL`, with no `FROM-CACHE` anywhere in the log — every task, the test tasks
 included, really ran there. `bash tools/forbidden-scan.sh` there reports `forbidden-scan: clean`.
-The clone's test-result XML reproduces the same 49-and-9 totals, `failures="0"` on every file. The
-clone was deleted afterwards.
+The clone's test-result XML reproduces the same 50-and-10 totals, class for class, `failures="0"`
+on every file. The clone was deleted afterwards.
 
 **The forbidden scan.** `tools/forbidden-scan.sh`'s `WORDS` pattern is target §4.4's list,
-verbatim, untouched since the commit that wrote it (Task 5). `tools/forbidden-scan.allow` carries
-**0** entries — nothing was ever allow-listed. The scan is wired into `check` only in the library's
-own root `build.gradle.kts` (a `forbiddenScan` task, `tasks.named("check") { dependsOn(forbiddenScan) }`,
+verbatim, with one word appended and nothing removed or loosened: `FLAG_READER_SKIP_NDEF_CHECK`,
+so invariant 4 is a standing build gate rather than a one-off grep. The scanned paths are now
+`nfc-core/src`, `nfc-android/src`, `settings.gradle.kts`, the root and both module
+`build.gradle.kts` files and `gradle/libs.versions.toml` — proven in scope by planting one
+forbidden word in each of the four newly covered files and watching the scan name it and exit 1.
+`tools/forbidden-scan.allow` carries **0** entries — nothing has ever been allow-listed — and its
+matching rule is now the `path:fragment` form its header always documented: an entry is split at
+its first colon, the path must match a hit's path exactly, and the fragment must appear in the hit's
+line as a fixed substring. Both halves were proven with throwaway fixtures (a hit; the entry
+suppressing it; a wrong path and an absent fragment both failing to suppress it) and the fixtures
+were deleted before the commit. The scan is wired into `check` only in the library's own root
+`build.gradle.kts` (a `forbiddenScan` task, `tasks.named("check") { dependsOn(forbiddenScan) }`,
 extended to subprojects) — invisible to a consumer app whose own root includes `:nfc-core` and
 `:nfc-android` as subprojects of itself. `.github/workflows/ci.yml` is authored (scan, then both
 unit suites, then `assembleDebug`) but has never run: there is no remote to push it to.
 
-**Provenance.** The README's provenance table carries **18 rows**. Re-running the hash-resolution
-loop from Task 6 Step 2 against the finished tree — `git cat-file -e "$h^{commit}"` against every
-7-hex-digit hash the README quotes, in the ServiceTag worktree, falling back to the NoteTag
-repository — printed nothing: every hash in the table resolves in one of the two repositories.
-The file loop, as amended in the plan on 2026-09-17 to read only the table's NEW-file column (the
-"Copied from" columns name ServiceTag and NoteTag files by design, and are never in this tree),
-also printed nothing: every one of the 18 library files the table names exists, `NdefBridgeDeviceTest.kt`
-included since Task 8. The unscoped form of that loop, which Task 6's report explained, is retired.
+**Provenance.** The README's provenance table carries **24 rows**: the eighteen files carried out of
+the two consumers, plus six with no antecedent — `WriteRouteTest.kt`, `TwoTapFakeTest.kt`,
+`FakeTagIo.kt`, `TagReadTest.kt`, `NfcReaderModeSessionDeviceTest.kt` and `TestActivity.kt`.
+Re-running the hash-resolution loop from Task 6 Step 2 against the finished tree —
+`git cat-file -e "$h^{commit}"` against every 7-hex-digit hash the README quotes, in the ServiceTag
+worktree, falling back to the NoteTag repository — printed nothing: every hash in the table resolves
+in one of the two repositories. The file loop, as amended in the plan on 2026-09-17 to read only the
+table's NEW-file column (the "Copied from" columns name ServiceTag and NoteTag files by design, and
+are never in this tree), also printed nothing: every one of the 24 library files the table names
+exists. The unscoped form of that loop, which Task 6's report explained, is retired.
 
-**The four amendments, as ruled.** F-1 **accepted**: `WriteResult.Failed(reason, cause: Throwable?
-= null)`. F-2 **accepted as amended**: `NdefSize` lives in `nfc-core`, refusing an empty record
-list. F-3 **ownership accepted, API revised to two-stage**: `TagInspection.route()` (no message
-size) → `WriteRoute.Format` / `ReadOnly` / `Writable(maxSize)`; `Writable.fit(needed)` →
-`CapacityVerdict.Write` / `TooSmall`. F-4 **accepted**: the library's branch is `master`, plus a
-post-push default-branch verification recorded at runbook §B.1. The design/runbook amendment
+**The four amendments, as ruled — and as verified at FINAL.** F-1 **accepted**: `WriteResult.Failed`
+carries the folded `cause`, read at FINAL as `Failed(reason: String, cause: Throwable? = null,
+attempted: Boolean = true)` — the third parameter is this round's A2, below. F-2 **accepted as
+amended**: `NdefSize` is in `nfc-core`, and its `require(records.isNotEmpty())` and refusal test both
+ran green at FINAL (`NdefSizeTest` 5). F-3 **ownership accepted, API revised to two-stage**:
+`TagInspection.route()` (no message size) → `WriteRoute.Format` / `ReadOnly` / `Writable(maxSize)`,
+then `Writable.fit(needed)` → `CapacityVerdict.Write` / `TooSmall`, all six cases green at FINAL
+(`WriteRouteTest` 6). F-4 **accepted**: `git rev-parse --abbrev-ref HEAD` at FINAL is `master`, and
+the post-push default-branch verification is recorded at runbook §B.1. The design/runbook amendment
 landed on `product-split` as `9d92ffd`; a later docs correction, `5300f1d`, brought target §2 into
-agreement that the branch is `master`. All four are built exactly as ruled — confirmed above and,
-task by task, by direct reading of the library's `WriteResult`, `NdefSize`, `WriteRoute` and
-`settings.gradle.kts`/branch facts during Tasks 4, 3, 4 and 1 respectively.
+agreement that the branch is `master`.
+
+**After the whole-branch review.** One fix round, `fb45aa0`, closed the review's actionable findings;
+it is FINAL and every number above is measured at it. **A1 (C1 + I8)** replaced `TagInspection`'s
+`existingRecords: List<NdefRecordData>` plus `unreadable: String?` with one field, `read: TagRead`,
+a sealed interface of `Readable(records)` and `Unreadable(reason, cause)`, so a consumer's `when`
+cannot read an unreadable tag as an empty one and the platform exception survives for its log; the
+new `TagReadTest` asserts that shape and `WriteRouteTest` shows an `Unreadable` inspection still
+routes `Writable(maxSize)`, since `route()` never consulted readability. **A2 (I1)** added
+`Failed.attempted`: `false` on the two pre-radio refusals (`write` on a tag that still needs
+formatting, `format` on one already formatted), meaning nothing on the tag can have changed; `true`
+— the default every folded exception keeps — meaning the radio was reached and the effect is
+indeterminate. **A3 (I2)** made the lock unblind: `TagWriter.lock(tag, expected)` re-reads the tag
+and compares it structurally before `makeReadOnly()` is reachable at all, which turns invariant 9
+from a KDoc promise into code; `TagIo.lock` and `RealTagIo` follow, and `FakeTagIo` now records
+`lastLockExpected` and `lastWriteLock`. **A4 (I4/P4, I5, I7)** strengthened the scan: the new word,
+the documented `path:fragment` allow matching, and the widened paths, all as described above.
+**A5 (M1)** gave `NdefRecordData` a `toString` that prints its type as text and its payload as a
+length instead of two array identities, with one JVM case asserting the exact string. **A6 (M4)**
+made `FakeTagIo`'s default `writeResult` a refusal no real writer returns
+(`Failed("fake: no write result configured", attempted = false)`) instead of a `Written` it could
+never produce. **A7 (M8)** states in `TagWriter.write`'s KDoc that an empty record list throws
+`IllegalArgumentException` out of `toNdefMessage()` before any tag I/O — "never throws" is about tag
+I/O only. **A8 (I3, I4, M5, M6)** rewrote the README: the invariants renumbered to target §4.3's
+1–9 and 13 exactly, with 9 restored to "lock last, never blind" and its proof now the code, 6 stated
+as a consumer-side invariant the library cannot test, 4 proven by the source flag set plus the scan's
+standing gate rather than by the device test, `TwoTapFakeTest` described as the template a consumer's
+fake follows rather than as a proof, the new API shapes and the `Failed`-as-map-key warning, the six
+NEW provenance rows, target §6.2's settings snippet, and a `Deferred to v0.2.0` section.
+
+**A1–A3 change ratified §4.2 API shapes.** `TagInspection`'s field list and constructor order,
+`WriteResult.Failed`'s parameter list, and `TagWriter.lock`/`TagIo.lock`'s signature are all
+ratified text in target §4.2, so the three are recorded here as **controller amendments pending the
+owner's ratification**, not as silent drift. **Zero consumers are affected**: neither app has taken
+the library yet (Phase G, §A.4), so the amendment lands before the first consumer compiles against
+any of the three.
+
+**Parked by the review, deferred to v0.2.0 and listed in the README.** I9 a `presenceCheckDelayMs`
+/ extras parameter on `NfcReaderModeSession`; M9 `check` and `lint` in the CI task list; M10
+`NfcAdapter.getDefaultAdapter`'s deprecation; I6 anchoring the prose-prone scan words such as
+`compose` and `navigation` (the design forbids weakening the pattern and names the allow file as the
+remedy, which is why A4 made that file's matching rule work as documented); M7 the root script's
+`subprojects { … }` configuration of sibling `check` tasks, against isolated projects; P6 the empty
+manifest's omission of the NFC permission; and P7 the two library-shaped needs underneath
+`TagWriteSession` — refusal-versus-indeterminate and a lock that captures what it verified — which
+A2 and A3 have now met, so the session that eventually arrives will not have to invent either.
 
 **Phase E residuals.** R1–R4 are dispositioned in the README's "Consumer obligations carried from
 Phase E" section — each made representable or visible by the library, with the acting on it still
-owed by each consumer.
+owed by each consumer. Its fifth bullet no longer asks a consumer's fake to capture what the
+library's own fake would not: `FakeTagIo` records `lastWriteLock` and `lastLockExpected`, and the
+bullet says a consumer's fake should record the same two.
 
 **Not attempted in this phase, and why.** No consumer repository was touched — ServiceTag-split and
 NoteTag are unchanged except this evidence commit. No tag was cut: `nfc-tag-core-v0.1.0` waits for
