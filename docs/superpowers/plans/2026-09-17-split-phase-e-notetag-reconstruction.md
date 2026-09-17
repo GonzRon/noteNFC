@@ -78,6 +78,7 @@ NoteTag/
       links/LinkLauncher.kt        copied, both catches (Task 10)
       write/NoteTagWriteController.kt   single-flight, read-before-write, the LOCAL_REF sequence (Task 7)
       ui/WriteScreen.kt, TagListScreen.kt (with its inline result card), NoteTagTheme.kt   (Task 9)
+      ui/Watermark.kt, res/values/colors.xml   the look, from the icon pack's palette (Task 9b)
     src/test/kotlin/...            controller, resolver wiring, identity binding
     src/androidTest/kotlin/...     NdefSize pin, smoke, ambient device proof (Tasks 9, 10)
   README.md                        rewritten twice: Task 1 (C6 statement) and Task 11 (the product)
@@ -1521,6 +1522,111 @@ git commit -m "notetag screens: share it, hold a tag, see what this phone has wr
 
 ---
 
+### Task 9b (owner request, 2026-09-17): the NoteTag look — its own colours, and the mark as a watermark
+
+**Files:**
+- Modify: `app/src/main/kotlin/com/loosecannon/notetag/ui/NoteTagTheme.kt` (the palette and type scale), `ui/TagListScreen.kt`, `ui/WriteScreen.kt`, `MainActivity.kt` (edge-to-edge and the top bar if it lives there)
+- Create: `app/src/main/kotlin/com/loosecannon/notetag/ui/Watermark.kt`, `app/src/main/res/values/colors.xml`
+- Modify: `app/src/main/res/values/themes.xml` (window background only)
+
+**Interfaces:**
+- Consumes: Task 9's screens and their tests. **Every sentence the tests assert stays byte-identical**; this task changes how the screens look, never what they say, and it adds no screen (P20 holds: still `List` and `Write`).
+- Produces: `NoteTagTheme` built from the pack's palette; `Watermarked(modifier, alpha, content)`; the styled result card, list rows, write sheet and empty state.
+
+**The palette, read off the icon pack** (`~/Documents/Projects/AndroidStudioProjects/split-assets/NoteTag/`, its README and the drawables): the six colours the mark is drawn with, and nothing invented beyond two derived tints, each labelled:
+
+| Token | Hex | Role (light) | Role (dark) |
+|---|---|---|---|
+| `Ivory` | `#F7F5EF` | `background`, `surface` | `onSurface`, `onBackground` |
+| `Paper` | `#FCFAF5` | `surfaceContainerHigh` (cards), `surfaceVariant` | — |
+| `Amber` | `#E2A633` | `primary`, `secondary` | `primary`, `secondary` |
+| `Umber` | `#4A3424` | `onPrimaryContainer`, `onSecondaryContainer`, `tertiary` | `primaryContainer` |
+| `Charcoal` | `#1B1F22` | `onBackground`, `onSurface`, `onPrimary` | `background`, `surface` |
+| `WarmGrey` | `#8C8B86` | `outline`, `onSurfaceVariant` | `outline`, `onSurfaceVariant` |
+| `AmberTint` *(derived: Amber at 30 % over Ivory)* | `#F5E3B8` | `primaryContainer`, `secondaryContainer` (chips) | `onPrimaryContainer` |
+| `Coal` *(derived: Charcoal lifted one step)* | `#262B2F` | — | `surfaceContainerHigh` (cards), `surfaceVariant` |
+
+Light and dark are both real: `NoteTagTheme(darkTheme: Boolean = isSystemInDarkTheme())` chooses `lightColorScheme(...)` / `darkColorScheme(...)` with exactly the roles above; every other role takes Material 3's default derived from these. `colors.xml` names the same six hex values (`notetag_ivory`, …) so `themes.xml` can set `android:windowBackground` to `@color/notetag_ivory` (light) — the only XML use; Compose reads the Kotlin tokens.
+
+**Type.** System fonts only (no network, no bundled font files). Material 3 `Typography()` with these overrides and no others: `headlineSmall` and `titleLarge` at `FontWeight.SemiBold`; `labelLarge` with `letterSpacing = 0.6.sp` (chips and buttons); `bodyLarge` `lineHeight = 24.sp`.
+
+**The watermark.** `ui/Watermark.kt`:
+
+```kotlin
+package com.loosecannon.notetag.ui
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import com.loosecannon.notetag.R
+
+/**
+ * The launcher mark, faint, behind [content]: the foreground layer of the adaptive icon (it already
+ * carries the 108 dp safe-zone padding, so it reads as a tag-and-note glyph, not a tile), scaled
+ * past the box's edge, bottom-end aligned, clipped. Decoration only: `contentDescription = null`.
+ */
+@Composable
+fun Watermarked(modifier: Modifier = Modifier, alpha: Float = 0.07f, content: @Composable () -> Unit) {
+    Box(modifier = modifier.clipToBounds()) {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.align(Alignment.BottomEnd).size(260.dp).alpha(alpha),
+        )
+        Box(Modifier.fillMaxSize()) { content() }
+    }
+}
+```
+
+In dark theme pass `alpha = 0.10f` (the mark is charcoal-on-amber; on Coal it needs a touch more). It appears in exactly four places: behind the list's **result card**, behind the list's **empty state** (`alpha = 0.09f`), behind the **write sheet**, and nowhere else — a watermark on every surface is wallpaper.
+
+- [ ] **Step 1: The theme and the colours**
+
+`NoteTagTheme.kt`: the eight tokens as `val` `Color`s, `LightScheme = lightColorScheme(primary = Amber, onPrimary = Charcoal, primaryContainer = AmberTint, onPrimaryContainer = Umber, secondary = Amber, onSecondary = Charcoal, secondaryContainer = AmberTint, onSecondaryContainer = Umber, tertiary = Umber, onTertiary = Ivory, background = Ivory, onBackground = Charcoal, surface = Ivory, onSurface = Charcoal, surfaceVariant = Paper, onSurfaceVariant = WarmGrey, surfaceContainerHigh = Paper, outline = WarmGrey)`, `DarkScheme = darkColorScheme(primary = Amber, onPrimary = Charcoal, primaryContainer = Umber, onPrimaryContainer = AmberTint, secondary = Amber, onSecondary = Charcoal, secondaryContainer = Umber, onSecondaryContainer = AmberTint, tertiary = AmberTint, onTertiary = Charcoal, background = Charcoal, onBackground = Ivory, surface = Charcoal, onSurface = Ivory, surfaceVariant = Coal, onSurfaceVariant = WarmGrey, surfaceContainerHigh = Coal, outline = WarmGrey)`, the `Typography` above, and `NoteTagTheme(darkTheme, content)` = `MaterialTheme(colorScheme, typography, content)`. `MainActivity` calls `enableEdgeToEdge()` before `setContent` so the ivory (or charcoal) runs under the system bars.
+
+`colors.xml`: the six named colours. `themes.xml`: add `<item name="android:windowBackground">@color/notetag_ivory</item>` inside `Theme.NoteTag` (its parent stays the light `NoActionBar` parent Task 9 set). Dark-mode window background is left to the theme parent; Compose paints the surface immediately, so the flash is a frame at most.
+
+- [ ] **Step 2: The list**
+
+`TagListScreen`: a `Scaffold` with a `CenterAlignedTopAppBar` titled with `stringResource(R.string.app_name)` in `titleLarge`, the mark as the navigation slot (`Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.size(40.dp))`), container colour `surface`. The **result card** (when `message != null`): `ElevatedCard` in `surfaceContainerHigh`, wrapped in `Watermarked`, a 4 dp amber rail on its leading edge (`Box(Modifier.fillMaxHeight().width(4.dp).background(primary))`), the sentence in `bodyLarge` on `onSurface`, **Dismiss** as a `TextButton` in `primary`. Rows: label in `titleMedium`, then a row of two chips — the kind word (`AssistChip`, outline colour) and, for `LOCAL_REF`, **This phone only** as an `AssistChip` with `containerColor = primaryContainer`, `labelColor = onPrimaryContainer` — then the date in `bodySmall` on `onSurfaceVariant`; a `HorizontalDivider` in `outline` at 40 % alpha between rows. The **empty state**: the sentence Task 9 wrote, centred in `bodyLarge`, inside `Watermarked(alpha = 0.09f)` filling the content area.
+
+- [ ] **Step 3: The write screen**
+
+`WriteScreen`: the same top bar; below it a single `ElevatedCard` in `surfaceContainerHigh` inside `Watermarked`, padded 20 dp, holding: the shared link in `titleMedium` (`maxLines = 3`, `overflow = Ellipsis`), a `HorizontalDivider`, then the state. `Waiting`: message in `bodyLarge`, the neutral line in `bodySmall` on `onSurfaceVariant`. `Confirm`: each reason on its own line in `bodyLarge`; when a reason is `OverwriteWording.DEVICE_BOUND` it gets the **This phone only** chip beneath it; the two buttons in a `Row` with `Arrangement.End`: `OutlinedButton` **Cancel**, then a filled `Button` for `action` (amber, `onPrimary` text). `Writing`: "Writing…" with a `LinearProgressIndicator` in `primary`. `Written(deviceBound = true)`: **"Written · This phone only"** in `headlineSmall`, the line "Saved as a this-phone-only tag." in `bodyMedium` on `onSurfaceVariant`, the chip, then a filled **Done**. `Written(deviceBound = false)`: "Written." in `headlineSmall` and **Done**. `Refused`/`Error`: the sentence in `bodyLarge` on `error`, then an `OutlinedButton` **Done**. The no-NFC / NFC-off lines: `bodyLarge` on `onSurfaceVariant`, above the card.
+
+- [ ] **Step 4: Prove nothing changed but the look**
+
+```bash
+./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin --console=plain
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:installDebug --console=plain
+adb -s emulator-5554 shell am start -W -n com.loosecannon.notetag/.MainActivity
+adb -s emulator-5554 exec-out screencap -p > "$SCRATCH/notetag-list.png"      # look, describe, delete
+adb -s emulator-5554 shell am start -W -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT 'https://example.org/a/rather/long/link/for/the/look' -n com.loosecannon.notetag/.MainActivity
+adb -s emulator-5554 exec-out screencap -p > "$SCRATCH/notetag-write.png"     # look, describe, delete
+```
+
+Expected: every test green with the same counts as Task 9 (no assertion text changed — `git diff --stat` must show no `androidTest`/`test` file); the two screenshots show ivory ground, amber accents, charcoal text and the faint mark behind the empty state and behind the write card. Describe both in the report; delete both.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/src/main build.gradle.kts
+git commit -m "notetag wears its own colours: ivory, amber, umber, and the mark as a watermark"
+```
+
+---
+
 ### Task 10 (§A.2 rows 5, 8, 9, and the C9 binding): ambient dispatch, the safe launcher, and the identity tests
 
 **Files:**
@@ -1706,6 +1812,7 @@ git commit -m "evidence: phase e, notetag reconstructed on the emulator"
 | §23 acceptance (local half) | 10 (device proof), 11 (clean clone; CI line) — the physical half is the later session |
 | P4 no `notetag://` filter | 2, 10 |
 | P19/P20 JSON store, Compose **exactly two** screens (List with its result card, Write) | 6, 9 |
+| Owner request 2026-09-17: a look derived from the icon pack (palette, type, the mark as a watermark), no new screen, no changed sentence | 9b |
 | Gate 6 | **not claimed**: the phase ends "local reconstruction complete; Gate 6 pending its deferred prerequisites" (11, Step 7) |
 
 **Placeholder scan:** none. **Type consistency:** `NoteTagContent.Writable` (Tasks 4, 5, 7), `WritePlan` (5, 7), `TagStore`/`TagEntry` with nullable `writtenAt` and `confirm` (6, 7, 8, 9), `TapOutcome` (8, 10), `TagIo`/`TagInspection`/`WriteResult` (7 copies, 7 controller), `Screen.List(message)`/`EXTRA_MESSAGE` (9, 10) — one definition each.
