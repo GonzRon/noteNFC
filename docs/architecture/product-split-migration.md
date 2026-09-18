@@ -1013,6 +1013,8 @@ issues still say "noteNFC". §10's rule: **use source semantics, not keywords.**
 | **New, in NoteTag** | — | one issue for the `LOCAL_REF` export/import of the local map (O14, explicitly not split scope). The `notetag://` `VIEW` filter is **not** a separate issue: ratified P4 reserves the scheme and defers any filter to #6/#36, where it belongs. The UI toolkit is **not** an issue either: ratified P20 settles it (Compose, one activity, two tiny screens) |
 | **New, in nfc-tag-core** | — | one issue for `TagWriteSession`'s promotion criterion (target §4.7), so the deferral is tracked rather than forgotten; one for any residue of the `NdefFormatable` capacity gap if ratified P8 — as corrected by G1's message-size arithmetic — does not fully close it |
 
+*Executed 2026-09-18 after the first releases, owner-approved: the two transfers (34 left), then the delivered-phase reconciliation — 15 issues closed with evidence comments (Phase 0: 2, Phase 1: 7, Phase 2: 5, Phase 4: 1; #31 closed as "payload v1 delivered, md5_short resolver intentionally withdrawn by the split"), #1 and #34 retitled under the ServiceTag name, #29 annotated with the new signing identity, milestones Phase 0/1/2/4 closed, and three new issues (ServiceTag #38 harness fold-in, NoteTag #3 LOCAL_REF map export/import, nfc-tag-core #1 TagWriteSession criterion evaluated and not met). Final: ServiceTag 36 issues, 20 open / 16 closed; NoteTag 3; nfc-tag-core 1.*
+
 **Verify.** `gh issue list --repo GonzRon/ServiceTag --state all` = 34;
 `gh issue list --repo GonzRon/NoteTag --state all` = 2 transferred + the new ones; every
 "stays with a note" issue has its note. **Rollback.** Transfers reverse (§B.5); notes and new issues
