@@ -511,6 +511,7 @@ import com.loosecannon.servicetag.core.nfc.OverwriteReasons
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.di.AppGraph
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -577,7 +578,7 @@ class TagWriteController(
      */
     @Volatile private var confirmedOverwrite: TagPayload? = null
     @Volatile private var done = false
-    @Volatile private var busy = false
+    private val busy = AtomicBoolean(false)
 
     /**
      * The content the confirmation sheet is asking about; it owns [busy] until it is answered. Only
@@ -590,8 +591,7 @@ class TagWriteController(
 
     /** Reader mode calls this from a binder thread; nothing here touches the main thread (invariant 11). */
     fun onTag(tag: TagHandle) {
-        if (busy || done) return
-        busy = true
+        if (done || !busy.compareAndSet(false, true)) return
         scope.launch {
             var sheetOwnsBusy = false
             try {
@@ -600,10 +600,10 @@ class TagWriteController(
                 throw e
             } catch (e: Exception) {
                 // The platform's message is not the user's business; the exception is the log's (R4).
-                Log.w(TAG, "inspect failed", e)
+                Log.w(TAG, "tap failed", e)
                 _state.value = WriteState.Error("Could not read the tag. Hold it still and try again.")
             } finally {
-                if (!sheetOwnsBusy) busy = false
+                if (!sheetOwnsBusy) busy.set(false)
             }
         }
     }
@@ -686,7 +686,7 @@ class TagWriteController(
         val asked = awaitingAnswer ?: return
         awaitingAnswer = null
         confirmedOverwrite = asked
-        busy = false
+        busy.set(false)
         _state.value = WriteState.Idle("Overwrite confirmed. Hold the same tag to the phone again to write.")
     }
 
@@ -695,7 +695,7 @@ class TagWriteController(
         if (awaitingAnswer == null) return
         awaitingAnswer = null
         confirmedOverwrite = null
-        busy = false
+        busy.set(false)
         _state.value = WriteState.Idle("Not written. The tag was left as it was.")
     }
 
@@ -1124,7 +1124,7 @@ class NoteTagWriteController(
             try { handle(tag) }
             catch (t: CancellationException) { throw t }
             // One sentence, never the platform's; the exception goes to the log, not the user (R4).
-            catch (t: Throwable) { Log.w(TAG, "inspect failed", t); _state.value = WriteState.Error("Could not read the tag. Hold it still and try again.") }
+            catch (e: Exception) { Log.w(TAG, "tap failed", e); _state.value = WriteState.Error("Could not read the tag. Hold it still and try again.") }
             finally { busy.set(false) }
         }
     }
@@ -1180,10 +1180,11 @@ class NoteTagWriteController(
 
     /** The user pressed Write / Write over it: remember it for the next tap of the same tag (the handle went stale under the sheet). */
     fun confirm() {
-        pending = pending?.let { Pending(it.plan, it.existing, consented = true) }
+        val p = pending ?: return
+        pending = Pending(p.plan, p.existing, consented = true)
         _state.value = WriteState.Waiting("Hold the same tag to the phone again to write it.")
     }
-    fun cancel() { val p = pending; pending = null; p?.let { cleanupScope.launch { forget(it.plan) } }; _state.value = WriteState.Waiting("Cancelled. Hold a tag to the phone to try again.") }
+    fun cancel() { val p = pending ?: return; pending = null; cleanupScope.launch { forget(p.plan) }; _state.value = WriteState.Waiting("Cancelled. Hold a tag to the phone to try again.") }
 
     /**
      * The LOCAL_REF sequence (target §4.9): persist first, UNCONFIRMED (writtenAt = null); confirm
@@ -1316,6 +1317,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          persist-credentials: false            # the job needs no git credentials after the checkout (M8)
       - name: the tag is on this commit, and the shared library is pinned at an exact tag
         run: |
           set -euo pipefail
@@ -1361,6 +1363,7 @@ jobs:
           [ -f "$apk" ] || { echo "no release APK was produced (unsigned builds are named differently and are refused)"; exit 1; }
           bt="$ANDROID_HOME/build-tools/36.0.0"
           "$bt/apksigner" verify --print-certs "$apk" > certs.txt
+          [ "$(grep -c 'SHA-256 digest' certs.txt)" = 1 ] || { echo "expected exactly one signer"; exit 1; }
           actual=$(grep -m1 'SHA-256 digest' certs.txt | awk '{print $NF}' | tr -d ':' | tr 'a-f' 'A-F')
           expected=$(printf '%s' "${RELEASE_CERT_SHA256:-}" | tr -d ':' | tr 'a-f' 'A-F')
           [ -n "$expected" ] || { echo "RELEASE_CERT_SHA256 is not set; refusing to publish"; exit 1; }
@@ -1376,7 +1379,9 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" "$OUT" "$OUT.sha256" --title "$GITHUB_REF_NAME" --notes "Signed release build of $GITHUB_REF_NAME. Verify with sha256sum -c $OUT.sha256; the signing certificate's SHA-256 fingerprint is the repository variable RELEASE_CERT_SHA256."
       - name: remove the signing material
         if: always()
-        run: rm -rf "$HOME/.config/$APP_DIR"
+        run: |
+          rm -rf "$HOME/.config/$APP_DIR"
+          rm -f certs.txt
 ```
 
 Owner rulings 2026-09-17, applied to the block above and to ServiceTag's committed file: every external `uses:` is pinned to its full commit SHA with the version as a comment (checkout 11d5960a… v4.4.0, setup-java cf277c60… v4.9.1, setup-android 9fc6c4e9… v3.2.2, setup-gradle ed408507… v4.4.3 — resolved from the action repositories' tags on 2026-09-17; ordinary `ci.yml` is not pinned), and the tag-at-HEAD check is `git tag --points-at HEAD --format='%(refname:short)' | grep -Fxq -- "$GITHUB_REF_NAME"`, which handles a doubly-tagged commit and never treats the ref name as a pattern. The NoteTag copy carries both.
@@ -1426,3 +1431,10 @@ The rename `noteNFC → ServiceTag` (§B.2), the `--no-ff` merge of `product-spl
 ## Review status
 
 - 2026-09-17: plan written (`5f4dac4`) → owner **HOLD with corrections**: G-1…G-7 accepted (G-2, G-6 as amended); correction 1 — ServiceTag's `confirmOverwrite` records consent only, never tag I/O through the sheet's stale handle, and the next fresh tap consumes consent only when the content still matches (three tests); correction 2 — the row is provisioned on the first writable tap, never on a format-only tap (prose and test); correction 3 — `umask 077` before any key file is created, and G-2's prose says missing secrets fail before the build; correction 4 — `release.yml` quotes `'on'` and the YAML assertion checks the string key; the dry run reports PARTIAL, never PASS, when the fingerprint compare is skipped → corrections applied in this revision → scoped review of exactly those items → scoped review (opus, `832d8be`): all seven checks PASS, internally consistent; four prose lags fixed by the controller (the hygiene word list, R1's proof cell, the sentence-exception clause, the `FakeHandle(uid)` fixture) → **Phase G plan RELEASED. Begin Task 1 under the existing implement → independent review → close discipline.** All prohibitions stand: no app push, no app tag, no rename, no secret provisioning, no phone, no physical NFC.
+- 2026-09-18: **whole-branch fix round** after the whole-branch review of the finished phase (verdict: the branch stands; a handful of correctness and hardening items, no user-facing sentence). Ruled and applied to the fenced blocks above, then re-derived into both apps' committed files:
+  - **A1 (I2)** ServiceTag `TagWriteController`: the single-flight flag is an `AtomicBoolean` claimed with `compareAndSet`, not a `@Volatile` read-then-write — two binder threads tapping at once can no longer both enter. `sheetOwnsBusy` semantics unchanged: the sheet still owns the flag until `confirmOverwrite`/`keepIt` releases it.
+  - **A2 (M2)** NoteTag `NoteTagWriteController`: `confirm()` and `cancel()` open with `val p = pending ?: return`, so a stray call after `Written` — or with nothing pending — is a no-op instead of an emission.
+  - **A3 (M3 + Task 7 Minor 7)** both controllers: the broad `onTag` catch is `catch (e: Exception)` (NoteTag's `Throwable` narrowed; the `CancellationException` rethrow stays first) and logs `Log.w(TAG, "tap failed", e)` — the catch covers the whole tap, not just the inspect.
+  - **A4 (M7)** `release.yml` (both apps): `apksigner verify --print-certs` must yield exactly one `SHA-256 digest` line before the fingerprint compare, so a multi-signer APK cannot pass on its first signer; `certs.txt` joins the `if: always()` cleanup. `tools/release-dry-run.sh` gains the same one-signer assertion.
+  - **A5 (M8)** `release.yml` (both apps): the checkout persists no git credentials (`persist-credentials: false`); `submodules: recursive` and `fetch-depth: 0` unchanged.
+  - Not changed here: every user-facing sentence, the library at `nfc-tag-core-v0.1.0`, and the items parked to the owner (M4, M11, M12, the Task 2 message, the Task 3 minor arms, the Task 6 test, the Task 10 fetch flag).
