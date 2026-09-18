@@ -153,10 +153,6 @@ class InMemoryTagRepository : TagRepository, Rollbackable, Witnessed {
     override fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>> = version.map {
         rows.values.filter { (it.target as? TagTarget.AssetTarget)?.assetId == assetId }
     }
-
-    override fun observeForLink(linkId: LinkId): Flow<List<TagBinding>> = version.map {
-        rows.values.filter { (it.target as? TagTarget.LinkTarget)?.linkId == linkId }
-    }
 }
 
 class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {

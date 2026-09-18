@@ -54,7 +54,7 @@ private const val BREATH_MILLIS = 3_200
 /**
  * Foreground reader-mode scanning (D3 §9, G1 §1.4). The only `tertiaryContainer` surface in the
  * app sits here and the halo is the app's only animation; what a tag turns out to be is decided by
- * `ResolveTag` and shown on the result sheet —
+ * `ResolveTag` and shown on the result sheet.
  *
  * Reached as a pushed destination (Settings' Read / inspect tag row, or the dashboard's empty-state
  * action), never a tab (D12 §16 correction), so it always needs a way back.

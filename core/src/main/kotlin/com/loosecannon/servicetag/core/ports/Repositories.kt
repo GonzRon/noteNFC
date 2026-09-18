@@ -45,7 +45,6 @@ interface TagRepository {
     suspend fun delete(id: TagId)
     suspend fun deleteAll()
     fun observeForAsset(assetId: AssetId): Flow<List<TagBinding>>
-    fun observeForLink(linkId: LinkId): Flow<List<TagBinding>>
 }
 
 /**

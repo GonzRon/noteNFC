@@ -6,7 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 
-/** Fires `ACTION_VIEW` for a URI that `OpenLink` has already checked; never crashes on a missing handler. */
+/** Fires `ACTION_VIEW` for a URI the caller has already checked; never crashes on a missing handler. */
 object LinkLauncher {
     fun open(activity: Activity, uri: String): Boolean = try {
         activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))

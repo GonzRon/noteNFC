@@ -224,7 +224,6 @@ class AppSmokeTest {
     }
 }
 
-
 /**
  * A deep link opened while the app is closed: the cold-start path through `MainActivity.onCreate`.
  *

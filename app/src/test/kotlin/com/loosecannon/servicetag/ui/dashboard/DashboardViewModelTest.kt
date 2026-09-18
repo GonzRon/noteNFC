@@ -62,10 +62,26 @@ class DashboardViewModelTest {
         assertEquals(9_000L, after.lastBackupAt)
     }
 
+    /**
+     * The nudge is computed, not defaulted. Asserting `state.value` with no collector would only
+     * ever read the `stateIn` seed — which is `DashboardState()`, `needsBackup = false` — and would
+     * pass even with the production rule inverted. So one collector stays up for the whole case and
+     * has to see both answers: no nudge while there is nothing to lose, and the flip the moment
+     * there is.
+     */
     @Test fun anInstallWithNothingInItIsNotNudged() = runTest {
-        val model = viewModel()
-        model.refresh()
-        assertFalse(model.state.value.needsBackup)
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        // Nothing has ever been backed up, and there is nothing to back up: no nudge. A fresh
+        // install is offered the empty state, not a chore.
+        assertNull(graph.prefs.lastBackupAt)
+        assertFalse(vm.state.first { it.assets.isEmpty() }.needsBackup)
+
+        // The same collector goes the other way the moment there is something to lose — which is
+        // also what proves the `false` above was computed and not just the initial state.
+        graph.createAsset.run("Pool pump", "Water")
+        assertTrue(vm.state.first { it.needsBackup }.assets.isNotEmpty())
     }
 
     @Test fun assetsListedActiveOnly() = runTest {

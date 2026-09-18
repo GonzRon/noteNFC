@@ -399,7 +399,7 @@ class AssetDetailViewModel(
         }
     }
 
-    /** The three journal flows as one value, so the outer `combine` stays inside its five slots. */
+    /** The three journal flows as one value, so the outer `combine` takes three slots, not five. */
     private data class Journal(
         val definitions: List<MeasurementDefinition>,
         val profiles: List<EventProfile>,

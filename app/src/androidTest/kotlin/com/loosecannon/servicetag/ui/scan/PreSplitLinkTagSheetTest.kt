@@ -53,7 +53,7 @@ class PreSplitLinkTagSheetTest {
                     format = PayloadFormat.V1.name,
                     key = key,
                     onDismiss = {},
-                    onWriteTag = {},
+                    onWriteTag = { error("a pre-split link tag must never offer a write") },
                     onOpenAsset = { error("a pre-split link tag must never open an asset") },
                     onNewAsset = {},
                 )
