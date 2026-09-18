@@ -33,39 +33,40 @@
     </queries>
 
     <application
-        android:name="com.loosecannon.notenfc.NoteNfcApp"
+        android:name="com.loosecannon.servicetag.ServiceTagApp"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name">
 
         <!-- The single activity: everything the app draws, and every deep link it answers. -->
         <activity
-            android:name="com.loosecannon.notenfc.MainActivity"
+            android:name="com.loosecannon.servicetag.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.NoteNfc">
+            android:theme="@style/Theme.ServiceTag">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- notenfc://asset|link|tag: navigation only, validated by shape then by existence. -->
+            <!-- servicetag://asset|link|tag: navigation only, validated by shape then by existence. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="notenfc" android:host="asset" />
-                <data android:scheme="notenfc" android:host="link" />
-                <data android:scheme="notenfc" android:host="tag" />
+                <data android:scheme="servicetag" android:host="asset" />
+                <data android:scheme="servicetag" android:host="link" />
+                <data android:scheme="servicetag" android:host="tag" />
             </intent-filter>
         </activity>
 
         <!-- Share a note link from a notes app: its own task, never in recents. -->
         <activity
-            android:name="com.loosecannon.notenfc.ShareActivity"
+            android:name="com.loosecannon.servicetag.ShareActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.NoteNfc">
+            android:theme="@style/Theme.ServiceTag">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -76,7 +77,7 @@
         <!-- The only NFC-exported component (D3 section 9). No tech-discovered catch-all filter.
              UI-less trampoline: translucent so no window flashes on the way to MainActivity. -->
         <activity
-            android:name="com.loosecannon.notenfc.nfc.NfcDispatchActivity"
+            android:name="com.loosecannon.servicetag.nfc.NfcDispatchActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:excludeFromRecents="true"
@@ -84,12 +85,7 @@
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="vnd.android.nfc" android:host="ext" android:path="/com.loosecannon.notenfc:tag" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="vnd.android.nfc" android:host="ext" android:path="/com.loosecannon.notenfc:md5_short" />
+                <data android:scheme="vnd.android.nfc" android:host="ext" android:path="${ndefTagPath}" />
             </intent-filter>
         </activity>
 

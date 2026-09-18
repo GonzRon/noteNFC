@@ -1,4 +1,4 @@
-# noteNFC
+# ServiceTag
 
 An open-source, local-first Android app that turns NFC tags into durable handles for the
 physical things you look after — the hot tub, the generator, the well pump, the bike — and for
@@ -41,7 +41,7 @@ deliberate look, lives under Settings.
   suggests, and a derived reading is computed from two of the asset's own readings on the same
   entry rather than entered.
 - **Write a tag** — share a note's external link (Joplin *Copy external link*, an Obsidian or
-  Logseq URI, or any `https://` page) to noteNFC and you get a card naming the kind of link and
+  Logseq URI, or any `https://` page) to ServiceTag and you get a card naming the kind of link and
   showing the URI; write it to a blank tag and you are back in the notes app. The writer reads
   the tag first, asks before overwriting anything, checks capacity, and reads the tag back to
   verify it. An asset's own screen can write a tag the same way.
@@ -65,10 +65,6 @@ deliberate look, lives under Settings.
 - **Settings** — appearance (system / light / dark), the palette's name, the build's version and
   a link to the project.
 
-Tags written by the pre-2.0 app (`md5_short` records) are still recognised as legacy tags and
-can be bound as-is or rewritten in the current payload format; there is no dependency on the
-old app or its data.
-
 ## Where it is going
 
 The design package under [`docs/design/`](docs/design/README.md) lays out the whole system and
@@ -86,7 +82,7 @@ Compose + Material 3 + Navigation 3). No DI framework, no plugin system.
 ## Building
 
 ```bash
-git clone <this repo> && cd noteNFC
+git clone <this repo> && cd ServiceTag
 ./gradlew :app:assembleDebug
 ```
 
@@ -102,7 +98,7 @@ Backup and restore are product features now: the dashboard's nudge, or the backu
 asset, opens a real screen that exports a ZIP and imports one back after you type `REPLACE`. What
 stays debug-only is the harness beside it.
 
-Debug builds only, from `app/src/debug/`: a second launcher icon, **noteNFC Backup (debug)**,
+Debug builds only, from `app/src/debug/`: a second launcher icon, **ServiceTag Backup (debug)**,
 with four buttons — Seed sample, Export, Import (replace), Wipe — and a live `assets / tags /
 links` count. **Wipe is the reason it still exists**: emptying the database without touching the
 tags is how the restore proof stands in for a second phone, and it is deliberately not offered
@@ -112,27 +108,38 @@ activity nor its manifest entry (see `docs/design/phase-1a-evidence.md` §7 and
 
 ## Signing
 
-Release builds pick up `~/.config/notenfc/keystore.properties` if it exists; when it is
+Release builds pick up `~/.config/servicetag/keystore.properties` if it exists; when it is
 absent the release build is simply unsigned and everything else still works. The file is
-plain `storeFile` / `storePassword` / `keyAlias` / `keyPassword` and points at
-`~/.config/notenfc/notenfc-release.jks`. Neither file is ever in the repo (`.gitignore`
-covers `keystore.properties`, `*.jks`, `*.keystore`).
+plain `storeFile` / `storePassword` / `keyAlias` / `keyPassword` and points at a keystore
+outside the repository. Neither file is ever in the repo (`.gitignore` covers
+`keystore.properties`, `*.jks`, `*.keystore`).
 
-Release key, alias `notenfc`, `CN=noteNFC, O=GonzRon`:
-
-```
-SHA-256: 09:02:D3:B0:F8:26:38:19:05:C6:D8:25:4F:DA:F3:67:56:92:4D:80:DA:7C:19:B9:0A:08:93:0B:33:27:7A:9F
-```
+The release certificate's SHA-256 fingerprint is recorded once, in
+`docs/design/phase-1a-evidence.md`. It is not reproduced here: a fingerprint is a
+public key, but a repository's front page is not where a signer's identity belongs.
 
 Back the keystore up somewhere outside the repo. Lose it and the app can never be updated
 in place again — a new key means a new install for every user.
 
-## Cutover from the old package
+## Releases
 
-From v2.0 the app ships as `com.loosecannon.notenfc`. The pre-2.0 builds were
-`com.looseCannon.noteNFC`, a different package as far as Android is concerned, so the two
-install side by side and both answer the legacy NFC tag filter. **Uninstall the old app
-before testing the new one on a device**, otherwise tag scans raise a disambiguation
-dialog and the wrong copy may win. There is no data migration path between the two: the
-old app kept its links in SharedPreferences and the old install is expected to be thrown
-away (see `docs/design/13-compatibility-policy.md` §4).
+A release is a tag of the form `servicetag-v<versionName>` (e.g. `servicetag-v2.5`) pushed to
+GitHub. That tag alone triggers `.github/workflows/release.yml`, which checks out the exact
+commit under the `release` environment, runs the full test gate, builds the signed APK from that
+environment's four secrets (`RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`,
+`RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`), verifies the built APK's certificate against the
+public repository variable `RELEASE_CERT_SHA256` and its `versionName` against the tag, and only
+then publishes the signed APK and its SHA-256 checksum as a GitHub Release. Ordinary CI
+(`.github/workflows/ci.yml`) never sees any of that signing material — it stays unprivileged and
+runs on every push. `tools/release-dry-run.sh` is the local, no-secrets equivalent: it runs the
+same checks against whatever signing material is on this machine and reports `PASS`, `PARTIAL —
+signing identity not independently checked`, or `BLOCKED` without ever printing a fingerprint,
+password or keystore path.
+
+## Where this app came from
+
+This repository was a combined note-utility and maintenance product before the 2026 product
+split; the maintenance product kept the history and became ServiceTag, and the note utility is to
+be reconstructed as its own project. What moved, what stayed, what the identities are now and how
+the data is to be migrated are all in `docs/architecture/product-split-migration.md`. Everything under
+`docs/design/` predates the split and is history.

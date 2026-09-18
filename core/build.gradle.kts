@@ -14,6 +14,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":nfc-core"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
 

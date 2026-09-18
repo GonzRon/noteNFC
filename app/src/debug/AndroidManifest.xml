@@ -7,9 +7,9 @@
     -->
     <application>
         <activity
-            android:name="com.loosecannon.notenfc.debug.DebugBackupActivity"
+            android:name="com.loosecannon.servicetag.debug.DebugBackupActivity"
             android:exported="true"
-            android:label="noteNFC Backup (debug)">
+            android:label="ServiceTag Backup (debug)">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

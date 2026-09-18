@@ -1,0 +1,3 @@
+[submodule "libs/nfc-tag-core"]
+	path = libs/nfc-tag-core
+	url = https://github.com/GonzRon/nfc-tag-core.git
