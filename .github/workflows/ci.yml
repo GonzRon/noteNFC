@@ -23,7 +23,7 @@ jobs:
         run: bash tools/check-submodule-pin.sh
       - name: unit tests and debug build
         run: ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug --console=plain
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
