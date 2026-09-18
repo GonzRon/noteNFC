@@ -24,7 +24,7 @@ place. Read / inspect tag, for the rare deliberate look, lives under Settings.
   coming up are drawn from schedules, which are Phase 3, so today the dashboard draws the current
   assets and the backup nudge.
 - **Assets** — a list you can filter to include archived ones, an asset screen built around the
-  identity plate (category, name, description, tags and links), a create/edit form, and archive
+  identity plate (category, name, description and tags), a create/edit form, and archive
   rather than delete.
 - **Describe equipment fully: make, model, serial, purchase and warranty, location, parts of a
   larger system, seasons** — a grouped asset editor behind the plate and a DETAILS section that
@@ -62,7 +62,7 @@ place. Read / inspect tag, for the rare deliberate look, lives under Settings.
   rename, re-kind, date or delete each one. Nothing is hidden inside the app.
 - **Back up and restore, identities intact** — a Backup screen (from the dashboard's nudge, or the
   backup action on any asset) exports a backup *set* into a folder you pick: one ZIP holding every
-  asset, tag binding, link and attachment record with its original id, and a second holding the
+  asset, tag binding and attachment record with its original id, and a second holding the
   attachment bytes. A restored phone resolves the same tags; restoring the data alone works and
   marks the files "not on this device" until you restore the second ZIP, which adds files and
   deletes nothing. Restoring the data replaces everything on the phone and makes you type `REPLACE`
@@ -70,21 +70,16 @@ place. Read / inspect tag, for the rare deliberate look, lives under Settings.
 - **Settings** — appearance (system / light / dark), the palette's name, the attachment folder and
   the provider behind it, Read / inspect tag, the build's version and a link to the project.
 
-### Carried over from before the split
+### Note links are NoteTag's
 
-The code and the build still contain the note-link functionality this repository had before the 2026
-product split, and it still works. Share a note's external link — a Joplin *Copy external link*, an
-Obsidian or Logseq URI, or any `https://` page — to ServiceTag and you get a card naming the kind of
-link and showing the URI; write it to a tag and you are back in the notes app. Scanning such a tag
-opens the note directly, with no screen in between. The Links screen lists what has been saved that
-way, with its kind and host, openable and deletable unless a tag still points at it. The allowlist
-that decides what may be launched is `joplin`, `obsidian`, `logseq`, `http` and `https`, and it is
-applied both when a link is saved and when it is launched.
+Sharing a note or a web link to an NFC tag is not part of ServiceTag. That utility lives in
+[NoteTag](https://github.com/GonzRon/NoteTag), and ServiceTag 2.6 removed it from this app: there is
+no Links screen, no share target, no way to point a tag at a link, and no outbound-link allowlist.
 
-None of that is ServiceTag's product direction any more. The note utility is NoteTag's, and NoteTag
-is where work on it continues — generic provider support, first-class deep links for more note apps.
-Here it is carried over: present because it always was, not removed, not developed further, and not
-what ServiceTag is for.
+Old data is kept, not discarded. A backup written by any earlier version still carries its
+`externalLinks` rows and restores them unchanged — the format is untouched at 5 — but nothing in
+ServiceTag creates, shows or opens one. A tag written by an older version to point at a link reads
+as a tag from before the split and does nothing else.
 
 ## Building
 
