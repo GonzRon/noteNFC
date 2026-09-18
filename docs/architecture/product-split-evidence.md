@@ -579,20 +579,22 @@ exit codes alone, which is all either script prints about signing identity by de
 **The two FINALs**, as of the end of the 2026-09-18 fix round. The plan's release `7cf0e1a` is the
 **base** of this phase, not one of its commits, so it is counted from and never counted in.
 ServiceTag stands on `product-split` in `~/Documents/Projects/AndroidStudioProjects/ServiceTag-split`
-at **the fix round's docs-and-evidence commit** — the one carrying this paragraph, which is the tip
-and so cannot name its own sha — **twenty commits after the base**; its **last code commit is
-`dee0ee5`**, and only plan, design, runbook and evidence text follows it, so every suite below
-stands for `dee0ee5` as well. NoteTag stands at **`0928422`** on `master` in
-`~/Documents/Projects/AndroidStudioProjects/NoteTag` — **seven commits after Phase E's FINAL
-(`9ff1d65`)**, all implementation. ServiceTag's ten implementation commits are `773e356` (wiring),
-`490e72e` (`:core`), `556b859` + `a9afc32` (`:app` and its review fix round), `1d5c27e` (CI and the
-pin script), `b7ca574` + `b596254` + `6896562` (the release workflow, its dry-run hardening, the
-action pins), `836f1b3` (WS-1, the consent-wording pin) and `dee0ee5` (the whole-branch fix round);
-its ten docs commits are five plan amendments (`1e5a6a9`, `82b059f`, `01f75e7`, `2064b19`,
-`4872f1c`), three design/runbook amendments (`753550b`, `1fc423f`, `08447d6`) and two evidence
-commits (`5a0998a` and this one). NoteTag's seven are `b055028` (wiring), `7458229` (`:core`),
-`804f560` + `32eaec1` (`:app` and its fix round), `62f6e37` (CI), `fb68a4c` (the release workflow)
-and `0928422` (the whole-branch fix round). ServiceTag's `origin` is
+at **the fix round's closing evidence commit** — the one carrying this paragraph, which is the tip
+and so cannot name its own sha — **twenty-three commits after the base**; its **last code commit is
+`2a19226`**, and only plan and evidence text follows it, so every suite below stands for `2a19226`
+as well. NoteTag stands at **`6749d0a`** on `master` in
+`~/Documents/Projects/AndroidStudioProjects/NoteTag` — **eight commits after Phase E's FINAL
+(`9ff1d65`)**, all implementation. ServiceTag's eleven implementation commits are `773e356`
+(wiring), `490e72e` (`:core`), `556b859` + `a9afc32` (`:app` and its review fix round), `1d5c27e`
+(CI and the pin script), `b7ca574` + `b596254` + `6896562` (the release workflow, its dry-run
+hardening, the action pins), `836f1b3` (WS-1, the consent-wording pin), `dee0ee5` (the whole-branch
+fix round) and `2a19226` (the owner's wording rulings); its twelve docs commits are six plan
+amendments (`1e5a6a9`, `82b059f`, `01f75e7`, `2064b19`, `4872f1c`, `9fe1756`), four design/runbook
+amendments (`753550b`, `1fc423f`, `08447d6`, `63f8d46` — the last also carrying the fix round's
+evidence) and two evidence commits (`5a0998a` and this one). NoteTag's eight are `b055028`
+(wiring), `7458229` (`:core`), `804f560` + `32eaec1` (`:app` and its fix round), `62f6e37` (CI),
+`fb68a4c` (the release workflow), `0928422` (the whole-branch fix round) and `6749d0a` (the
+UNREADABLE wording ruling). ServiceTag's `origin` is
 still `GonzRon/noteNFC` and nothing was pushed; NoteTag has **no remote at all** (`git remote |
 wc -l` is `0`) and no tags; ServiceTag's only tag is still `pre-split-checkpoint`.
 
@@ -888,7 +890,11 @@ reader-mode sessions across a nav transition — explicitly outside the 12-actio
 XML file. Every JVM figure in "Suites at the two FINALs" above was re-measured and stands unchanged
 except NoteTag's, where the new M2 case lifts `:app:testDebugUnitTest` **29 → 30** and
 `NoteTagWriteControllerTest` **19 → 20**; that case fails on the pre-fix controller (it is the one
-that proved A2 red before green) and passes after it. The connected suites were re-run on
+that proved A2 red before green) and passes after it. The wording rulings below then moved
+ServiceTag's `:app:testDebugUnitTest` **235 → 237** in **34 → 35** classes —
+`TagWriteControllerTest` **16 → 17** for E1 and a new one-case `ScanViewModelTest` for E2 — while
+`:core:test` stayed **349** in both apps' shared shape and NoteTag's `:core:test` stayed **70**
+(E3 rewrote an existing assertion rather than adding one). The connected suites were re-run on
 `emulator-5554` only, serial, ServiceTag first: ServiceTag **68 tests in 14 classes**
 (2026-09-18T09:39–09:40Z) and NoteTag **19 tests in 5 classes** (2026-09-18T09:43Z), both 0/0/0 and
 both equal to the figures above. The two dry runs are unchanged in verdict: ServiceTag exit **3**,
@@ -902,5 +908,23 @@ tag globs `servicetag-v*` and `notetag-v*`.
 **Parked to the owner, not done here** (each raised by the whole-branch review and each left exactly
 as it was): **M4**, **M11** and **M12**; the Task 2 message; the Task 3 minor arms; the Task 6 test;
 and the Task 10 fetch flag. They are recorded so nobody reads their absence as an oversight.
+
+**The owner's three wording rulings (2026-09-18), on the principle that user-facing text states what
+we know and what the user should do while technical diagnosis goes to the logs.** **E1**: ServiceTag's
+format failure said "Could not format the tag (${r.reason}). Hold it still and try again." and now
+says NoteTag's exact text, "Could not format the tag. Hold it still and try again.", with the library
+reason and the cause logged unconditionally as `Log.w(TAG, "format failed: ${r.reason}", r.cause)`
+(a null cause is fine). **E2**: ServiceTag's scanner said "Couldn't read that tag
+(${e.javaClass.simpleName}). Hold it still and try again." and now says "Couldn't read that tag.
+Hold it still and try again.", with `Log.w(TAG, "read failed", e)` beside it carrying the class name
+and the stack. **E3**: NoteTag's overwrite question said "This tag holds unreadable NoteTag content
+(${d.detail})." and now says "This tag holds unreadable NDEF content (${d.detail}).", because
+unparseable NDEF establishes nothing about whose content it is. Each is pinned by a JVM test — a new
+failed-format case, the new `ScanViewModelTest`, and `OverwriteWordingTest`'s updated assertion — and
+**no connected test asserts any of the three**, checked by grep over both apps' `androidTest` trees,
+so the device numbers above stand unchanged and no emulator run was repeated for E. The gates for
+these three commits were ServiceTag `:core:test :app:testDebugUnitTest :app:assembleDebug
+:app:compileDebugAndroidTestKotlin` and NoteTag `:core:test :app:testDebugUnitTest
+:app:assembleDebug`, both green with 0 failures, 0 errors and 0 skipped.
 
 **Phase G local consumption complete; both apps green on nfc-tag-core-v0.1.0; K/L pending owner authorization**
