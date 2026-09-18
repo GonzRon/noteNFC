@@ -60,13 +60,17 @@ fun ServiceTagRoot(
     // normal dispatch, and an inspect inside ServiceTag opened another app. A move between the two
     // tag screens is now no hand-over at all, which is runbook R1.
     //
-    // What this does *not* cover, and deliberately: a tag already bound to an asset auto-opens it
-    // from the result sheet, and `AssetDetail` reads no tags — so the hold is released one frame
-    // after that read and the platform may re-dispatch a tag still in the field to this app's own
-    // trampoline, exactly as it did before 2.7. Only tag-reading routes hold reader mode; that is
-    // ratified, because holding it over the route an auto-open lands on reopens the spin Decision 4
-    // rejected. #37 as filed — an inspect of a foreign tag, which auto-opens nothing — is the case
-    // this hold fixes, and the bound-tag case is a physical row for the runbook, not a code change.
+    // What this does *not* cover, and deliberately: the ambient trampoline. `Route.TagResult` —
+    // where `NfcDispatchActivity` lands — is not a tag-reading route, and the bound-tag auto-open
+    // it still performs goes to `AssetDetail`, which reads no tags either, so nothing on that path
+    // holds reader mode and the platform may re-dispatch a tag still in the field to this app's
+    // own trampoline, exactly as it did before 2.7. Only tag-reading routes hold reader mode; that
+    // is ratified, because holding it over the route an auto-open lands on reopens the spin
+    // Decision 4 rejected. #37 as filed — an inspect of a foreign tag, which auto-opens nothing —
+    // is the case this hold fixes; the inspect screen's bound tag is no longer an exception to it,
+    // because 2.8 (#41) has `Route.Scan`'s own sheet name that tag and wait for `Open asset`, so
+    // the answer stays on `Route.Scan`, the hold runs for the whole look, and it ends when the
+    // owner leaves. The bound-tag row left for the runbook is the ambient tap, not an inspect.
     val readsTags = current is Route && current.readsTags()
     LifecycleResumeEffect(readerMode, readsTags) {
         readerMode.hold(readsTags)

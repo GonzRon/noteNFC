@@ -118,7 +118,7 @@ class InspectNamesABoundTagTest {
         //
         // `sentence = result.asset.name` is the same in both arms, so "Hot tub" alone would pass
         // either way: the two assertions that actually tell the arms apart are the ratified eyebrow
-        // — `ServiceTag tag`, rendered uppercase by `NfcSheet` (`TagResultSheet.kt:256`) — and the
+        // — `ServiceTag tag`, rendered uppercase by `NfcSheet` (`TagResultSheet.kt:282`) — and the
         // absence of the other arm's `Opening asset…` status line.
         rule.awaitText("Hot tub")
         rule.onNodeWithText("SERVICETAG TAG").assertIsDisplayed()
@@ -176,7 +176,7 @@ class InspectNamesABoundTagTest {
         rule.onAllNodesWithText("Open asset").assertCountEquals(0)
     }
 
-    /** A handle the test can build; [ReadsABoundTag] never looks inside it. */
+    /** A handle the test can build; [ReadsABoundTag] only echoes its `uid` back. */
     private object Bound : TagHandle {
         override val uid: String = "04a1"
     }

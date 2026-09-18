@@ -145,7 +145,10 @@ class ScanViewModel(
 sealed interface TagResult {
     data object Loading : TagResult
 
-    /** Known and bound: the sheet says so and the screen moves on without a tap (G1 §1.4). */
+    /**
+     * Known and bound: the ambient sheet says so and moves on without a tap; a deliberate
+     * inspect names the asset and waits for `Open asset` instead (G1 §1.4, 2.8 #41).
+     */
     data class OpensAsset(val tag: TagBinding, val asset: Asset) : TagResult
 
     /** A tag bound to a pre-split note link: one sentence, and nothing to do (2.6). */
