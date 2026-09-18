@@ -567,3 +567,287 @@ and re-cut. Not done: no noteNFC rename, no app push, no issue migration, no pho
 The programme stops here at the **Phase G planning gate**.
 
 **Phase F local extraction complete; §B.1 done — `nfc-tag-core-v0.1.0` is cut and pushed, provisional until Phase G.**
+
+## Phase G — both apps consume nfc-tag-core (§A.4)
+
+Same header discipline as Phases D, E and F — fingerprints only, no secrets, no physical-device
+ids, no owner paths. Nothing is fingerprinted below: no release build was published, no signing key
+was generated, touched or rotated, and the only device id anywhere in this phase is
+`emulator-5554`. Two release **dry runs** ran locally; they are quoted by their verdict lines and
+exit codes alone, which is all either script prints about signing identity by design.
+
+**The two FINALs.** ServiceTag stands at **`08447d6`** on `product-split` in
+`~/Documents/Projects/AndroidStudioProjects/ServiceTag-split` — seventeen commits from the plan's
+release (`7cf0e1a`) — and its **last code commit is `836f1b3`**; `2064b19` and `08447d6` after it
+are the controller's plan and design text, so every suite below stands for `836f1b3` as well.
+NoteTag stands at **`fb68a4c`** on `master` in `~/Documents/Projects/AndroidStudioProjects/NoteTag`
+— six commits from Phase E's FINAL (`9ff1d65`), all implementation. ServiceTag's nine
+implementation commits are `773e356` (wiring), `490e72e` (`:core`), `556b859` + `a9afc32` (`:app`
+and its review fix round), `1d5c27e` (CI and the pin script), `b7ca574` + `b596254` + `6896562`
+(the release workflow, its dry-run hardening, the action pins) and `836f1b3` (WS-1, the
+consent-wording pin); its eight docs commits are five plan amendments (`7cf0e1a`, `1e5a6a9`,
+`82b059f`, `01f75e7`, `2064b19`) and three design/runbook amendments (`753550b`, `1fc423f`,
+`08447d6`). NoteTag's six are `b055028` (wiring), `7458229` (`:core`), `804f560` + `32eaec1` (`:app`
+and its fix round), `62f6e37` (CI) and `fb68a4c` (the release workflow). ServiceTag's `origin` is
+still `GonzRon/noteNFC` and nothing was pushed; NoteTag has **no remote at all** (`git remote |
+wc -l` is `0`) and no tags; ServiceTag's only tag is still `pre-split-checkpoint`.
+
+**One tag, two apps.** Both repositories pin the library at the same gitlink —
+`git ls-tree HEAD libs/nfc-tag-core` names `7e0377ac99d7a4fee95ca6b88551daaa6330e52f` in **both** —
+and that commit is `nfc-tag-core-v0.1.0`: `git describe --exact-match --match 'nfc-tag-core-v*'
+--tags HEAD` inside `libs/nfc-tag-core` resolves to the tag in both, and `git submodule status`
+prints ` 7e0377ac99d7a4fee95ca6b88551daaa6330e52f libs/nfc-tag-core (nfc-tag-core-v0.1.0)` with no
+`+`/`-` marker in both. Each `.gitmodules` names the read-only fetch URL
+`https://github.com/GonzRon/nfc-tag-core.git` and carries **no branch line**, so the working tree is
+detached at the tag and can never drift onto a branch. `bash tools/check-submodule-pin.sh` prints
+`nfc-tag-core-v0.1.0` then `submodule pin ok: nfc-tag-core-v0.1.0` and exits `0` in both apps and in
+both clean clones. The `agp`/`kotlin` catalog diff against the library's own catalog is empty in
+both. Nothing under `libs/` was modified in either app at any point in the phase, and
+`git -C libs/nfc-tag-core status --short` is empty in both even after four emulator builds wrote into
+`libs/nfc-tag-core/nfc-android/build/` — the submodule's own `.gitignore` covers it.
+
+**How the library is wired (G-1).** One settings block per app includes the two library modules as
+subprojects of the app build; `:core` takes `implementation(project(":nfc-core"))` and `:app` takes
+`implementation(project(":nfc-android"))` — never `api` — and the root build script declares
+`alias(libs.plugins.android.library) apply false` beside the application plugin, because AGP's
+application and library plugins must share the root plugin classpath. That root line is the one
+design defect this phase found: target §6.2 showed only the settings side, and §6.2 now carries both
+the `:core → :nfc-core` edge and the root declaration (`08447d6`). No `repositories { }` block and
+no `includeBuild` anywhere; the library is source, pinned by commit, not an artifact.
+
+**ServiceTag — what was deleted and what replaced it.** `:core` lost
+`core/…/core/nfc/TagIdentity.kt` and `core/…/core/nfc/OverwritePolicy.kt` (the library owns both
+types now) and two test classes, `TagIdentityTest.kt` and `OverwritePolicyTest.kt`, plus
+`NdefCodecTest.kt`, whose three envelope-gate cases are the library's own behaviour and whose two
+body cases (`onlyFirstRecordMatters`, `uriRecordIsForeign`) moved into `NdefCodecV1Test`.
+`NdefCodec.kt` was rebuilt over the library's `NdefEnvelope`/`UuidBytes` — it keeps the body layout
+(`version | flags | UUID`) and `TagPayload` with `V1`/`NewerVersion`/`Foreign`/`Malformed`/`Empty`,
+and no longer defines `NdefRecordData` or the type gate — and a new
+`core/…/core/nfc/OverwriteReasons.kt` carries the product's sentences over the library's
+`OverwritePolicy`. `:app` lost all three of its NFC adapter files —
+`app/…/servicetag/nfc/NdefBridge.kt`, `NfcReaderModeSession.kt` and `TagWriter.kt` — so
+`app/…/servicetag/nfc/` now holds exactly one file, `NfcDispatchActivity.kt`, and `:app` owns no NFC
+adapter code at all. `TagWriteController.kt` was rewritten onto the library's
+`TagIo`/`TagHandle`/`NfcTagHandle`/`RealTagIo` (an `object`, taking no codec) and its
+`TagInspection`/`TagRead`/`WriteResult`; `WriteState.Verifying`, `awaitingVerify`, the `PendingWrite`
+holder and `verify()` are gone with the unverified-format path that needed them. The constraint
+greps at FINAL: `git grep -nE 'class (NdefBridge|TagWriter|TagInspection|NfcReaderModeSession|RealTagIo)|interface (TagIo|TagHandle)|object (NdefSize|OverwritePolicy)' -- 'app/**' 'core/**'`
+→ **0**; `git grep -n 'servicetag.nfc.\(NdefBridge\|TagWriter\|NfcReaderModeSession\|TagInspection\|WriteResult\)' -- 'app/**' 'core/**'`
+→ **0**; `git grep -n 'Verifying\|awaitingVerify' -- 'app/**'` → **0**.
+
+**NoteTag — what was deleted and what replaced it.** `:core` lost the four interim copies
+`core/…/core/nfc/NdefEnvelope.kt`, `NdefRecordData.kt`, `NdefSize.kt` and `TagIdentity.kt` and two
+test classes, `NdefEnvelopeTest.kt` (7 cases) and `NdefSizeTest.kt` (5); `NoteTagCodec.kt` now calls
+the library's `NdefEnvelope.decode`/`encode` and moves `LocalRef` bytes through `UuidBytes`, dropping
+its `ByteBuffer` and `UUID` imports with its parse and body logic otherwise unchanged;
+`OverwriteWording.kt` keeps every sentence and routes the decision through the library's
+`OverwritePolicy.decide` via a new `existingContent(c: NoteTagContent): ExistingContent` mapping;
+`WritePlanner.kt` and `ResolveTap.kt` only retarget imports. `:app` lost all four interim adapter
+files — `app/…/notetag/nfc/TagIo.kt`, `TagWriter.kt`, `NdefBridge.kt` and
+`NfcReaderModeSession.kt`, each of which had carried the `Interim copy of ServiceTag's …; Phase G
+replaces it with nfc-tag-core` header — so `app/…/notetag/nfc/` also holds exactly one file,
+`NfcDispatchActivity.kt`. `NoteTagWriteController.kt` rides the library seam, and `SMALL` moved
+8 → 60 bytes because `fit()` now runs before consent rather than inside the writer. The constraint
+greps at FINAL: `git grep -n 'Interim copy'` → **0** (the interim era is over);
+`git grep -nE 'class (NdefBridge|TagWriter|TagInspection|NfcReaderModeSession|RealTagIo)|interface (TagIo|TagHandle)' -- 'app/**' 'core/**'`
+→ **0**; `git grep -n 'nfcTag()' -- 'app/src/main/**'` → **0**; `git grep -n 'UNMEASURED' -- 'app/**'`
+→ **0**. Every Phase E binding sentence is still in place, each in its own file — the device-bound
+warning, "Written · This phone only", "Saved as a this-phone-only tag.", "This phone only", and the
+two sibling refusals ("This tag belongs to ServiceTag, not NoteTag." in `ResolveTap`, "This tag
+belongs to ServiceTag." in `OverwriteWording`) — and retained is still not written.
+
+**The four Phase E residuals, dispositioned in code, with the test names as written.** **R1** (an
+orphan mapping per formatable tag) is closed by construction in both apps: the `WriteRoute.Format`
+branch returns before any planning or provisioning. NoteTag's
+`aFormatableTagIsFormattedAndNothingIsPlannedOrPersisted` asserts `formatCount == 1`,
+`writeAttempts == 0`, `minted == 0` and an untouched store on the format tap; ServiceTag's
+`aFormatableTagIsFormattedOnTapOneAndWrittenOnTapTwo` asserts `provision.begun == 0` then `1` — the
+row is provisioned on the **first writable tap**, never on a format-only tap (owner correction 2) —
+and `aTagThatIsNotNdefAtAllIsRefusedAndProvisionsNothing` asserts zero rows in the database. **R2**
+(the fakes model the second tap) is the same two cases' second halves, run over the library's own
+`FakeTagIo` with a mutable inspection flipped from `needsFormat` to `Writable(maxSize)`; NoteTag's
+second tap plans against `maxSize = 60`, falls to `LOCAL_REF`, mints exactly one uuid and stops at
+`Confirm([DEVICE_BOUND], "Write")`, and the case now runs on through `confirm()` and a third tap.
+**R3** (an honest sentence) is G-5's wording, asserted character for character as a whole
+`WriteState.Idle` value: NoteTag "Formatted the tag. Hold it to the phone again to write the link.",
+ServiceTag "Formatted. Lift the tag off and hold it again to write." **R4** (the read exception) is
+`catch (e: CancellationException) { throw e }` ahead of the broad catch in both controllers, with
+`Log.w` on the caught exception, on `WriteResult.Failed.cause` on both the write and the format path
+and on `TagRead.Unreadable.cause` — five such sites in NoteTag — pinned by
+`aTagThatCannotBeReadIsOneFixedSentenceAndTheNextTapIsStillHandled` (NoteTag) and
+`aTagThatCannotBeReadIsOneSentenceAndTheNextTapStillWorks` (ServiceTag). The library's two
+Phase F amendments are consumed as intended: **C1** — `existingOn()` maps `TagRead.Unreadable` to
+the product's `Malformed(reason)`, never `Empty`, so an unreadable tag is a question
+(`anUnreadableTagIsAQuestionNotAnEmptyTag` in NoteTag, `anUnreadableTagAsksBeforeItIsOverwritten` in
+ServiceTag, both with `writeAttempts == 0`), and ServiceTag applied the same mapping to
+`ScanViewModel.classify` so the read path cannot call an unreadable tag empty either; **I1** —
+`Failed.attempted`, never the reason text or the exception class, decides retain-versus-remove in
+NoteTag and the wording in both, pinned by `aRefusedWriteRemovesTheMappingAnIndeterminateOneRetainsIt`
+(NoteTag) and `aRefusedWriteAndAnIndeterminateWriteAreWordedDifferently` (ServiceTag), whose two rows
+differ **only** in `attempted` and whose `attempted = false` reason text is deliberately one a reader
+might have pattern-matched on.
+
+**Suites at the two FINALs — JVM, per module.** ServiceTag: `:nfc-core:test` **50**,
+`:nfc-android:testDebugUnitTest` **10**, `:core:test` **349** in 33 classes,
+`:app:testDebugUnitTest` **235** in 34 classes, of which `TagWriteControllerTest` is **16**. NoteTag:
+`:nfc-core:test` **50**, `:nfc-android:testDebugUnitTest` **10**, `:core:test` **70** in 7 classes
+(`LinkLaunchPolicyTest` 11, `OverwriteWordingTest` 11, `ResolveTapTest` 14, `JsonFileTagStoreTest`
+12, `JoplinIdTest` 4, `NoteTagCodecTest` 11, `WritePlannerTest` 7), `:app:testDebugUnitTest` **29**
+in 3 classes (`TagIdentityBindingTest` 6, `MainViewModelTest` 4, `NoteTagWriteControllerTest` 19).
+**0 failures, 0 errors, 0 skipped** in every XML file in both apps. Against the baselines:
+ServiceTag's `:core` moved 354 → 349 and its `:app` unit suite 225 → 235 (Phase D at `b4b016b`);
+NoteTag's `:core` moved 78 → 70 (`78 - 12 + 4`: the two deleted library-owned classes' 12 cases out,
+four new cases in) and its `:app` unit suite 26 → 29 with the controller class 16 → 19 (Phase E at
+`9ff1d65`). The library's own **50 + 10** run identically under each app's catalog, which is what
+"one tag, two apps" means at the suite level.
+
+**Suites at the two FINALs — connected, on `emulator-5554` only.** ServiceTag
+`:app:connectedDebugAndroidTest` is **68 tests in 14 classes** against the **Phase D baseline of 66
+in 13** — the difference is exactly WS-1's new 2-test class. NoteTag is **19 tests in 5 classes**,
+**equal to the Phase E baseline of 19 in 5** (`AmbientDispatchDeviceProofTest` 6,
+`NdefSizeDeviceTest` 4, `TagIdentityDispatchTest` 4, `AppSmokeTest` 3,
+`WriteScreenDeviceBoundTest` 2). The library's own emulator suite ran under **each** app root as
+well: `:nfc-android:connectedDebugAndroidTest` is **10 tests in 2 classes**
+(`NdefBridgeDeviceTest` 9, `NfcReaderModeSessionDeviceTest` 1) under ServiceTag and the same 10
+under NoteTag. All four runs were serial, ServiceTag first, at the final commits, with 0 failures,
+0 errors and 0 skipped everywhere; the XML timestamps are 2026-09-18T00:22–00:23Z. G-7 kept
+NoteTag's `NdefSizeDeviceTest` as the product's own 49-byte pin rather than leaning on the library's
+generic one, and it is 4 of the 19 above.
+
+**The ratified sentences are asserted on the device (WS-1).** Correction 1 made ServiceTag's
+`confirmOverwrite()` record consent and perform no tag I/O, which made two screen strings wrong:
+they still told the user to keep holding the tag while answering. The owner ratified their
+replacements exactly as written — "Answer here, then hold the same tag to the phone again." and
+"After you confirm, hold the same tag to the phone again to write." — and, on the owner's
+recommendation, `836f1b3` added `WriteTagScreenConsentWordingTest`, an emulator Compose class whose
+two cases (`theConfirmStateTellsTheUserToLiftAndRetap`,
+`theConfirmStateNeverAsksTheUserToKeepHoldingTheTag`) assert both production strings are rendered in
+the Confirm state and that "Hold the tag to the phone while" is rendered **zero** times. Its only
+production change was two `private` → `internal` words on sibling composables; the sentences
+themselves were not touched by the test. At FINAL, `git grep` finds each ratified sentence in
+`WriteTagScreen.kt` and in that test, and the superseded string nowhere under `app/src/main/`.
+Consent itself is pinned by three JVM cases: `confirmingRecordsConsentAndPerformsNoTagIo`
+(`writeAttempts == 0`), `theNextTapWithTheSameContentWritesThroughTheFreshHandle`
+(`io.lastWriteHandle === fresh`) and `theNextTapWithDifferentContentAsksAgain` (consent consumed and
+discarded, the question re-asked, then honoured on the next matching tap).
+
+**G-6 in code: the lock rides the write.** ServiceTag's only lock is `io.write(tag, intended,
+wantLock)`; there is no `io.lock` call site in `:app` at all. `lockIsAppliedByTheWriteItself`
+asserts `lastWriteLock == true` **and** `lastLockExpected == null`, and
+`formatThenWriteRecordsTheUidAndNeverLocksBlind` asserts `lockCalls == 0` across a format tap and a
+locking write tap. NoteTag proves the same negative in `aWrittenLocalRefIsRetainedAndConfirmed`
+(`io.lockCalls == 0`, `lastLockExpected` null). The library's `lock(tag, expected)` stays available
+and unused by either app. Invariant 7 is `writable.fit(NdefSize.serialisedSize(records))` before any
+consent, pinned by `aTagTooSmallEvenForTheLocalRefIsRefusedBeforeAnything` (NoteTag) and
+`aTagTooSmallForTheMessageIsRefusedWithoutWriting` (ServiceTag); single flight by
+`twoTapsBeforeTheFirstCompletesInspectOnce` and `aThirdTapAfterAWrittenResultIsDropped`.
+
+**The pin script, proven by four negative tests in each app.** `tools/check-submodule-pin.sh` is
+byte-identical in both repositories and each app demonstrated all four failures and restored the
+tree afterwards. **(a) missing submodule**: `libs/nfc-tag-core is missing or uninitialised.` /
+`Clone with --recurse-submodules, or run:  git submodule update --init --recursive`, from
+`./gradlew projects` with one library build script moved aside. **(b) wrong commit**: with the
+submodule at `HEAD~1`, `submodule is at 15f1cd5b0327bbb8cee4212ffbf497c3711d981f but this commit
+pins 7e0377ac99d7a4fee95ca6b88551daaa6330e52f`, exit `1` — the sha-equality check speaks before the
+tag-exactness check, which is the plan's amended expectation (`82b059f`) rather than the message its
+first draft named. **(c) dirty submodule**: `submodule working tree is dirty`, exit `1`, after one
+stray file. **(d) catalog alias removed**: a configuration-time script compilation error naming the
+alias, `Line 3:     alias(libs.plugins.android.library) apply false` / `Unresolved reference
+'library'`. After all four, in both apps, `git -C libs/nfc-tag-core status --porcelain` was empty and
+`git submodule status` was back at ` 7e0377ac99d7a4fee95ca6b88551daaa6330e52f libs/nfc-tag-core
+(nfc-tag-core-v0.1.0)`, every time.
+
+**Clean clones — twice, in each app.** At Tasks 4 and 8, `git clone --recurse-submodules` of each app
+into a session scratch directory fetched the submodule from its GitHub URL, checked it out at
+`7e0377ac…` = `nfc-tag-core-v0.1.0`, passed the pin script, and ran the CI task list with
+`--no-build-cache`: ServiceTag `BUILD SUCCESSFUL`, `78 actionable tasks: 78 executed`; NoteTag
+`BUILD SUCCESSFUL`, `76 actionable tasks: 76 executed`; `grep -c 'FROM-CACHE'` **0** in both, so
+every task, tests included, really ran there, and the clones' XML sums reproduced the in-place
+totals module for module (ServiceTag 50/10/349/235; NoteTag 50/10/70/29, `159` in total).
+**Repeated at this phase's close, at the two FINALs**: the same clone of `08447d6` and of `fb68a4c`
+into `<scratch>/task12/`, `submodule pin ok: nfc-tag-core-v0.1.0` in each, then
+`./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest
+:app:assembleDebug --no-build-cache --console=plain` → ServiceTag `BUILD SUCCESSFUL`, `78 actionable
+tasks: 78 executed`; NoteTag `BUILD SUCCESSFUL`, `76 actionable tasks: 76 executed`; `FROM-CACHE` **0**
+in both; XML sums again 50/10/349/235 and 50/10/70/29 with 0 failures, 0 errors, 0 skipped; a debug
+APK built in each. A fresh clone of either app, plus `ANDROID_HOME`, is a working build.
+
+**The release workflows: authored, validated, dry-run, never triggered.** Both apps now carry
+`.github/workflows/release.yml` beside the unprivileged `ci.yml`. Each runs **only** on its product
+tag namespace — `'servicetag-v*'` in ServiceTag, `'notetag-v*'` in NoteTag — under the `release`
+environment, with `contents: write` and nothing more, and the two files differ in exactly three
+marked lines (the tag pattern, `APP_DIR`, `APK_BASENAME`). Re-validated at the two FINALs by loading
+each file with a YAML parser: the top-level keys are `name`, `on`, `permissions`, `jobs`, the `on`
+key is the **string** `on` and not the boolean YAML 1.1 would make of a bare `on:` (owner
+correction 4 quotes it as `'on':`), `on.push.tags` is `['servicetag-v*']` and `['notetag-v*']`
+respectively, and the job's `environment` is `release` in both. All four external actions are
+**pinned to commit shas** with their version in a trailing comment (`actions/checkout@11d5960a…`
+v4.4.0, `actions/setup-java@cf277c60…` v4.9.1, `android-actions/setup-android@9fc6c4e9…` v3.2.2,
+`gradle/actions/setup-gradle@ed408507…` v4.4.3), on the owner's ruling that a privileged workflow
+must not ride mutable tags; `ci.yml` was deliberately left on its tags. The tag-at-HEAD check is the
+robust form the owner ruled, `git tag --points-at HEAD --format='%(refname:short)' | grep -Fxq --
+"$GITHUB_REF_NAME"`, not `describe --exact-match`, so a doubly-tagged HEAD cannot slip past it. The
+job fails closed before the release build on missing signing material, and after it on an unsigned
+APK, a certificate that differs from the expected fingerprint, a submodule not at an exact
+`nfc-tag-core-v*` tag, a failing gate, or a tag whose version differs from the built `versionName`
+(G-4: NoteTag ships `versionName = "2.0"`, so its product tag is **`notetag-v2.0`**, not the
+runbook's earlier `notetag-v1.0`, amended everywhere in Task 11). `umask 077` runs before any key
+file is created, and the keystore is written outside every cached path and removed in an
+`if: always()` cleanup. **Neither workflow has ever run**: no product tag exists in either
+repository — ServiceTag's only tag is `pre-split-checkpoint` and NoteTag has none — and neither app
+has been pushed.
+
+**The two dry runs, as the scripts printed them.** `tools/release-dry-run.sh` is the local,
+no-secrets equivalent, and it prints `matches`/`differs`/`BLOCKED` and never a fingerprint, a
+password or a keystore path on any path. NoteTag, at `fb68a4c`: exit **0**, `version: 2.0 matches
+2.0`, and the verdict line `RELEASE DRY RUN: PARTIAL — signing identity not independently checked` —
+**PARTIAL, never PASS** (owner correction 4), because no expected fingerprint is configured on this
+machine, so the compare was skipped rather than passed. ServiceTag, at `08447d6`: exit **3**, verdict
+`BLOCKED: no signing material (target §8)` — the expected result, since the ServiceTag signing key
+does not exist yet; generating, backing up and restore-testing it is the owner's manual task 1 and
+the only thing standing between ServiceTag and the same PARTIAL. Both verdicts are what the plan
+predicted for this phase; neither is a finding.
+
+**What the owner still has to provision, and when.** G-3 fixes the names now so the workflows can be
+written before the secrets exist: the GitHub environment **`release`**, holding the four secrets
+`RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS` and `RELEASE_KEY_PASSWORD`,
+plus the **public repository variable** (not a secret) `RELEASE_CERT_SHA256`, the certificate
+fingerprint the post-build identity check compares against. None of the five was provisioned in this
+phase, in either repository. They are the owner's manual task 2, **at K/L**, and by a later owner
+ruling that `release` environment is **protected** — required reviewers and a tag-protection rule —
+so its secrets stay withheld until the protection rule passes (runbook §B.6, target §8, amended in
+`1fc423f`).
+
+**The seven rulings, as ruled.** **G-1 ACCEPT**: each app's `:core` takes `:nfc-core` as well as
+`:app` taking `:nfc-android`, since both body codecs, the overwrite consumers, `WritePlanner` and
+`ResolveTap` live in the pure-JVM `:core` modules — real in both apps' `core/build.gradle.kts` and
+now in target §6.2. **G-2 ACCEPT as amended**: the release job materialises the existing local
+signing mechanism on the runner rather than changing Gradle, and a runner without the secrets
+**fails before the release build starts**. **G-3 ACCEPT, provisioned at K/L**: the names above.
+**G-4 ACCEPT**: `notetag-v2.0`, with every target and runbook occurrence of `notetag-v1.0` amended
+and the historical Phase E/F evidence text annotated rather than rewritten. **G-5 ACCEPT, pinned by
+test**: the two formatted sentences quoted above. **G-6 ACCEPT in principle with correction 1**:
+ServiceTag locks only through `write(lock = true)`, and consent is recorded, never written through
+the sheet's stale handle. **G-7 ACCEPT**: NoteTag keeps its own 49-byte device pin. The four owner
+corrections that reshaped the plan before Task 1 are all in the code: consent-only
+`confirmOverwrite` (three tests), the row on the first writable tap and never on a format-only tap
+(prose and two tests), `umask 077` before any key file with missing secrets failing ahead of the
+build, and the quoted `'on':` with a YAML assertion on the string key — together with the rule that
+the dry run reports PARTIAL and never PASS when the fingerprint compare is skipped. The later owner
+rulings — sha-pinning the privileged workflow's actions, `git tag --points-at HEAD`, the two
+ServiceTag write-screen sentences ratified verbatim with an on-device assertion, and the protected
+`release` environment at K/L — are each in place as described above.
+
+**The caveat this phase shares with D, E and F.** Everything above is **debug-build, JVM and
+emulator evidence**. No physical tag was touched, no `adb` command addressed anything but
+`emulator-5554`, and the phone was never a target — the instrumented suites wipe app data, which is
+why. No release APK was built or published, no signing key was generated, and no GitHub secret or
+variable was set. Nothing was pushed: ServiceTag's `origin` still points at the pre-rename
+`GonzRon/noteNFC` and NoteTag has no remote at all. The rename (§B.2), the `--no-ff` merge of
+`product-split` into `master` (§B.3a), NoteTag's first push (§B.4), the issue moves (§B.5) and the
+URL clean clones with the second-workstation proof (§B.6) are owner-authorized steps after this
+phase, as is the first execution of either `release.yml`. **Gate 6 (NoteTag §23 end to end) and
+gate 10 are not claimed here**: both need K/L, the phone and the physical sessions, and nothing in
+this section should be read as evidence for either.
+
+**Phase G local consumption complete; both apps green on nfc-tag-core-v0.1.0; K/L pending owner authorization**
