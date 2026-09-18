@@ -65,12 +65,20 @@ import com.loosecannon.servicetag.ui.theme.SheetSentence
  *   wrote. When [format] is [TagResultWire.FORMAT_NONE] there is no identifier to show and `key`
  *   carries a prose reason the tag could not be read, so nothing may present it as an id or look
  *   it up as one.
+ * @param inspecting whether this sheet is answering a *deliberate* look at a tag (2.8, issue #41).
+ *   It changes one branch of seven: a tag already bound to an asset. The ambient trampoline exists
+ *   to open the right place from one tap, so with the default `false` a bound tag navigates by
+ *   itself, exactly as it always has. Read / inspect tag exists to *look* at a tag, so with `true`
+ *   the sheet names the asset and waits — which also means the inspect screen stays on top and the
+ *   activity's one reader-mode session stays held, instead of being released with the tag still
+ *   against the phone. Every other branch is identical either way.
  */
 @Composable
 fun TagResultSheet(
     graph: AppGraph,
     format: String,
     key: String,
+    inspecting: Boolean = false,
     onDismiss: () -> Unit,
     onWriteTag: (Route.WriteTag) -> Unit,
     onOpenAsset: (String) -> Unit,
@@ -97,7 +105,25 @@ fun TagResultSheet(
         when (val result = state) {
             TagResult.Loading -> NfcSheet(eyebrow = "Reading tag", sentence = "Looking this tag up…")
 
-            is TagResult.OpensAsset -> {
+            is TagResult.OpensAsset -> if (inspecting) {
+                // 2.8 (#41) — a deliberate inspect inspects. The tag is named and opening the
+                // asset is the owner's tap, so this screen stays on top: the activity's one
+                // reader-mode session is held for as long as a tag-reading route is the top entry,
+                // and auto-navigating away released it with the tag still in the field. "Open
+                // asset" goes through the same callback the screen already wires, which clears the
+                // answer and navigates — so the hold ends when the owner leaves, and not before.
+                NfcSheet(
+                    eyebrow = "ServiceTag tag",
+                    accent = ServiceTagTheme.semanticColors.maintenanceOkay.foreground,
+                    glyph = ServiceTagIcons.NfcTag,
+                    sentence = result.asset.name,
+                    identifier = result.tag.identityLine(),
+                    actions = {
+                        FilledAction("Open asset") { onOpenAsset(result.asset.id.value) }
+                        TextAction("Cancel", onDismiss)
+                    },
+                )
+            } else {
                 // A bound tag needs no decision: the sheet says what it is and the screen moves on.
                 LaunchedEffect(result) { onOpenAsset(result.asset.id.value) }
                 NfcSheet(

@@ -68,7 +68,9 @@ private const val BREATH_MILLIS = 3_200
  *
  * 2.7 (#37): the screen owns neither the reader-mode session — the nav shell holds one for the
  * whole tag flow — nor a route for its answer. The answer is drawn over this screen, so an inspect
- * never takes the screen out from under a tag that is still against the phone.
+ * never takes the screen out from under a tag that is still against the phone. 2.8 (#41) finishes
+ * the thought: a tag already bound to an asset is *named* here rather than opened, so the one case
+ * that still navigated by itself no longer does.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,6 +148,11 @@ fun ScanScreen(
     // resolve against the entry's store, which lives until the entry is popped — so binding a tag,
     // coming back and reading it again would be answered by the first read's model, which still
     // thinks the tag is unassigned. One store per read is what the pushed result entry used to give.
+    //
+    // 2.8 (#41): `inspecting = true` is what makes this screen an inspector rather than a second
+    // ambient trampoline. A tag already bound to an asset is named here and opened on a tap, so the
+    // screen is never taken out from under a tag that is still against the phone — which is also
+    // what keeps the activity's reader-mode hold alive for the whole look.
     format?.let { shown ->
         val owner = rememberReadScopedOwner(readId)
         CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
@@ -153,6 +160,7 @@ fun ScanScreen(
                 graph = graph,
                 format = shown,
                 key = answerKey,
+                inspecting = true,
                 onDismiss = clearAnswer,
                 onWriteTag = { route -> clearAnswer(); onWriteTag(route) },
                 onOpenAsset = { id -> clearAnswer(); onOpenAsset(id) },
