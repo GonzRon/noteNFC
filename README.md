@@ -19,8 +19,9 @@ A single-screen Compose app — Dashboard and Assets along the bottom, everythin
 around the one-tap flow that is still the spine: tap a tag anywhere and the phone opens the right
 place. Read / inspect tag, for the rare deliberate look, lives under Settings, and it keeps NFC for
 as long as you are on it: what a tag turns out to be is shown on the screen you are already on, so a
-tag left against the phone is not handed back to the system mid-look. A tag already bound to an
-asset opens that asset, and leaving the screen is what hands NFC back.
+tag left against the phone is not handed back to the system mid-look. An inspect inspects: a tag
+already bound to an asset is named there, with an Open asset action, and opening it is what hands
+NFC back — the ambient tap still opens a bound tag straight away.
 
 - **Dashboard** — the assets in service, and, until the first export succeeds, a card that says
   there is no backup yet and offers to take one. The list is the systems themselves: a component of
@@ -72,7 +73,8 @@ asset opens that asset, and leaving the screen is what hands NFC back.
   attachment bytes. A restored phone resolves the same tags; restoring the data alone works and
   marks the files "not on this device" until you restore the second ZIP, which adds files and
   deletes nothing. Restoring the data replaces everything on the phone and makes you type `REPLACE`
-  first.
+  first — unless the phone has no records yet, in which case there is nothing to replace and it only
+  asks you to confirm.
 - **Settings** — appearance (system / light / dark), the palette's name, the attachment folder and
   the provider behind it, Read / inspect tag, the build's version and a link to the project.
 
