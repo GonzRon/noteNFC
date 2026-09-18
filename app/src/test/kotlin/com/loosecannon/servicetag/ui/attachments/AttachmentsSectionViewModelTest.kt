@@ -25,6 +25,7 @@ import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateAttachmentCommand
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
+import kotlin.properties.Delegates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -32,7 +33,9 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
@@ -65,8 +68,15 @@ class AttachmentsSectionViewModelTest {
         const val SUBSCRIPTION_GRACE_MS = 5_000L
     }
 
+    private val scheduler = TestCoroutineScheduler()
     private lateinit var graph: FakeGraph
-    private lateinit var asset: Asset
+
+    /**
+     * Set by [hotTub], the first line of every case that needs one (all but the pure one).
+     * `AssetId` is a value class, so `lateinit` itself is not allowed on it — this delegate is the
+     * same "unset reads throw" contract without that restriction.
+     */
+    private var assetId: AssetId by Delegates.notNull()
 
     /**
      * Every model the test builds lives in here, so `tearDown` can clear it: `viewModelScope` is
@@ -75,19 +85,28 @@ class AttachmentsSectionViewModelTest {
      */
     private val store = ViewModelStore()
 
-    /** `AssetId` is a value class, so the seeded asset itself is what the test field holds. */
-    private val assetId: AssetId get() = asset.id
-
     @Before fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-        graph = FakeGraph()
-        runBlocking { asset = graph.createAsset.run(AssetCommand(name = "Hot tub")) }
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
     }
 
     @After fun tearDown() {
         store.clear()
         graph.close()
         Dispatchers.resetMain()
+    }
+
+    /**
+     * The one asset every case but the pure one needs, seeded inside the test's own scope rather
+     * than `@Before`: a `runBlocking` there would queue this write on [scheduler] and nothing
+     * outside a `TestScope` ever drives that scheduler forward, so it would never actually run.
+     * Called as the first line of each `runTest { }` body, the same way every other assertion in
+     * this class already awaits a state instead of reading one cold.
+     */
+    private suspend fun TestScope.hotTub(): Asset {
+        val asset = graph.createAsset.run(AssetCommand(name = "Hot tub"))
+        assetId = asset.id
+        return asset
     }
 
     private fun model(
@@ -130,6 +149,7 @@ class AttachmentsSectionViewModelTest {
         PickedFile(name, "application/pdf", 1L) { throw IOException("the provider went away") }
 
     @Test fun aFreshInstallSaysTheStoreIsNotConfiguredAndListsNothing() = runTest {
+        hotTub()
         graph.attachmentStorage.state = StoreState.NotConfigured
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
@@ -147,6 +167,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun withAFolderChosenAddedFilesAppearAsRowsOrderedByName() = runTest {
+        hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
 
@@ -174,6 +195,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun aScanThatCannotReachTheFolderSaysSoAndKeepsTheRowsAndTheCollectorAlive() = runTest {
+        hotTub()
         // Seed one row through a healthy model, drop that model (the provider caches by owner),
         // then watch the same owner through a storage whose presence check throws: the row
         // stays, the section says so, and once the store behaves a refresh recovers — so the
@@ -201,6 +223,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun addingSeveralFilesReportsProgressAndKeepsGoingPastAFailure() = runTest {
+        hotTub()
         val vm = model()
         val seen = mutableListOf<AttachmentsSectionState>()
         backgroundScope.launch { vm.state.collect { seen += it } }
@@ -235,6 +258,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun anAccessLostStoreRefusesAddAndSaysWhyOnce() = runTest {
+        hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("Guide.pdf")))
@@ -253,6 +277,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun aRowWhoseBytesAreGoneIsMarkedNotPresent() = runTest {
+        hotTub()
         val owner = AttachmentOwner.OfAsset(assetId)
         val added = graph.addAttachment.run(
             owner,
@@ -273,6 +298,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun savingRenamesTheRowAndLeavesTheLocatorAlone() = runTest {
+        hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("guide.pdf")))
@@ -293,6 +319,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun savingNothingIsSilent() = runTest {
+        hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("guide.pdf")))
@@ -315,6 +342,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun deletingRemovesTheRowAndTheBytes() = runTest {
+        hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("guide.pdf")))
@@ -331,6 +359,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun anEventOwnerSeesOnlyItsOwnFiles() = runTest {
+        hotTub()
         val event = graph.logEvent.run(
             EventCommand(
                 assetId = assetId,
@@ -362,6 +391,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun capturedOnDefaultsToTodayForAPickedFile() = runTest {
+        hotTub()
         val vm = model(today = { "2026-09-16" })
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("guide.pdf")))
@@ -369,6 +399,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun comingBackFromSettingsWithAFolderChosenFlipsTheSectionOver() = runTest {
+        hotTub()
         graph.attachmentStorage.state = StoreState.NotConfigured
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
@@ -382,6 +413,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun aResubscriptionAlsoReReadsTheFolder() = runTest {
+        hotTub()
         graph.attachmentStorage.state = StoreState.NotConfigured
         val vm = model()
         val watching = launch { vm.state.collect() }
@@ -397,6 +429,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun aSaveThatCannotBeWrittenSaysSoAndLeavesTheSheetOpen() = runTest {
+        hotTub()
         // The write throws rather than refusing: an escaping exception used to take the process.
         val vm = model(updateAttachment = UpdateAttachment(graph.attachments, brokenUow, graph.clock))
         backgroundScope.launch { vm.state.collect() }
@@ -418,6 +451,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun aRefusedSaveKeepsTheSheetOpenAndAGoodOneClosesIt() = runTest {
+        hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
         vm.add(listOf(picked("guide.pdf")))
@@ -438,6 +472,7 @@ class AttachmentsSectionViewModelTest {
     }
 
     @Test fun aDeleteThatCannotBeWrittenSaysSoInsteadOfCrashing() = runTest {
+        hotTub()
         val vm = model(
             deleteAttachment = DeleteAttachment(graph.attachments, graph.attachmentStorage, brokenUow),
         )
@@ -466,6 +501,7 @@ class AttachmentsSectionViewModelTest {
      * A JVM test cannot hold an image row anyway — the thumbnail pass needs `BitmapFactory`.
      */
     @Test fun aCameraCaptureIsAPhotoWhateverElseItLooksLike() = runTest {
+        hotTub()
         val vm = model()
         backgroundScope.launch { vm.state.collect() }
         vm.add(
