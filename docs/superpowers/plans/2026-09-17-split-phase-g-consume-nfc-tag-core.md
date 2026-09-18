@@ -667,8 +667,8 @@ class TagWriteController(
         when (val r = withContext(ioDispatcher) { io.format(tag) }) {
             WriteResult.Formatted -> _state.value = WriteState.Idle("Formatted. Lift the tag off and hold it again to write.")
             is WriteResult.Failed -> {
-                r.cause?.let { Log.w(TAG, "format failed: ${r.reason}", it) }
-                _state.value = WriteState.Error("Could not format the tag (${r.reason}). Hold it still and try again.")
+                Log.w(TAG, "format failed: ${r.reason}", r.cause)
+                _state.value = WriteState.Error("Could not format the tag. Hold it still and try again.")
             }
             WriteResult.Unsupported -> _state.value = WriteState.Error("This tag does not support NDEF.")
             is WriteResult.Written, is WriteResult.TooSmall, WriteResult.ReadOnly, is WriteResult.VerifyMismatch ->
@@ -916,7 +916,7 @@ class NoteTagCodec(private val identity: TagIdentity) {
 
 with `LocalRef` bytes via `UuidBytes.toBytes(content.uuid)` and `UuidBytes.fromBytes(kindBody)`; imports `com.loosecannon.nfc.tagcore.{NdefEnvelope, NdefRecordData, TagContent, TagIdentity, UuidBytes}`; `java.nio.ByteBuffer` no longer imported.
 
-- [ ] **Step 4: `OverwriteWording.kt`** — the sentences stay byte-identical to today's file; only the decision moves to the library:
+- [ ] **Step 4: `OverwriteWording.kt`** — the decision moves to the library, and the sentences stay byte-identical to today's file except the UNREADABLE one, which the owner re-ruled on 2026-09-18 (E3: nothing establishes that unparseable NDEF is *NoteTag's* content, so the sentence says NDEF):
 
 ```kotlin
 package com.loosecannon.notetag.core.nfc
@@ -963,14 +963,14 @@ object OverwriteWording {
                 OverwriteReason.FOREIGN ->
                     if (d.detail.contains("type=$SIBLING_DOMAIN:")) "This tag belongs to ServiceTag."
                     else "This tag holds something else (${d.detail})."
-                OverwriteReason.UNREADABLE -> "This tag holds unreadable NoteTag content (${d.detail})."
+                OverwriteReason.UNREADABLE -> "This tag holds unreadable NDEF content (${d.detail})."
                 OverwriteReason.EMPTY_TAG, OverwriteReason.SAME_TAG -> error("${d.reason} never asks")
             }
         }
 }
 ```
 
-`OverwriteWordingTest`'s existing assertions are the proof the sentences did not change; `d.detail` is the description/reason the classification handed in, verbatim (library invariant 13), so the sibling check and the parenthesised reasons read exactly as before.
+`OverwriteWordingTest`'s assertions are the proof the sentences did not change — all but the UNREADABLE one, whose assertion carries the 2026-09-18 wording; `d.detail` is the description/reason the classification handed in, verbatim (library invariant 13), so the sibling check and the parenthesised reasons read exactly as before.
 
 - [ ] **Step 5: `WritePlanner.kt`, `ResolveTap.kt`** — imports only (`NdefRecordData`, `NdefSize` from `com.loosecannon.nfc.tagcore`). `WritePlan.Refused.records` stays `emptyList()` and is never sized (the library's `NdefSize` refuses an empty list); `WritePlannerTest` gains one case asserting the planner never calls `serialisedSize` for a `Refused` plan (a refused plan is returned before any size is computed — assert by ordering: an unparseable share text yields `Refused` with no exception).
 
@@ -1438,3 +1438,7 @@ The rename `noteNFC → ServiceTag` (§B.2), the `--no-ff` merge of `product-spl
   - **A4 (M7)** `release.yml` (both apps): `apksigner verify --print-certs` must yield exactly one `SHA-256 digest` line before the fingerprint compare, so a multi-signer APK cannot pass on its first signer; `certs.txt` joins the `if: always()` cleanup. `tools/release-dry-run.sh` gains the same one-signer assertion.
   - **A5 (M8)** `release.yml` (both apps): the checkout persists no git credentials (`persist-credentials: false`); `submodules: recursive` and `fetch-depth: 0` unchanged.
   - Not changed here: every user-facing sentence, the library at `nfc-tag-core-v0.1.0`, and the items parked to the owner (M4, M11, M12, the Task 2 message, the Task 3 minor arms, the Task 6 test, the Task 10 fetch flag).
+- 2026-09-18: **owner wording rulings**, taken after A–C landed and ruled on the principle that *user-facing text states what we know and what the user should do; technical diagnosis goes to the logs*. Three sentences change, and the blocks above change with them:
+  - **E1 (Q1)** ServiceTag `TagWriteController`: the format-failure sentence loses the library's `reason` and becomes NoteTag's exact text, `Could not format the tag. Hold it still and try again.`; the reason and the cause go to the log unconditionally — `Log.w(TAG, "format failed: ${r.reason}", r.cause)`, where a null cause is fine.
+  - **E2 (Q2)** ServiceTag `ScanViewModels.kt` (not a pinned block): `Couldn't read that tag (${e.javaClass.simpleName}). Hold it still and try again.` → `Couldn't read that tag. Hold it still and try again.`, with `Log.w(TAG, "read failed", e)` beside it carrying the class name and the stack.
+  - **E3 (Q3)** NoteTag `OverwriteWording`: `This tag holds unreadable NoteTag content (${d.detail}).` → `This tag holds unreadable NDEF content (${d.detail}).` — unparseable NDEF establishes nothing about whose content it is. `OverwriteWordingTest` carries the new sentence.
