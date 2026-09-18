@@ -52,6 +52,10 @@ echo "inspecting: $apk"
 echo "== the APK is signed =="
 certs="$scratch/certs.txt"
 "$bt/apksigner" verify --print-certs "$apk" > "$certs"
+if [ "$(grep -c 'SHA-256 digest' "$certs")" != 1 ]; then
+  echo "RELEASE DRY RUN: FAIL — expected exactly one signer"
+  exit 1
+fi
 
 actual=$(grep -m1 'SHA-256 digest' "$certs" | awk '{print $NF}' | tr -d ':' | tr 'a-f' 'A-F')
 

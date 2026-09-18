@@ -17,6 +17,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          persist-credentials: false            # the job needs no git credentials after the checkout (M8)
       - name: the tag is on this commit, and the shared library is pinned at an exact tag
         run: |
           set -euo pipefail
@@ -62,6 +63,7 @@ jobs:
           [ -f "$apk" ] || { echo "no release APK was produced (unsigned builds are named differently and are refused)"; exit 1; }
           bt="$ANDROID_HOME/build-tools/36.0.0"
           "$bt/apksigner" verify --print-certs "$apk" > certs.txt
+          [ "$(grep -c 'SHA-256 digest' certs.txt)" = 1 ] || { echo "expected exactly one signer"; exit 1; }
           actual=$(grep -m1 'SHA-256 digest' certs.txt | awk '{print $NF}' | tr -d ':' | tr 'a-f' 'A-F')
           expected=$(printf '%s' "${RELEASE_CERT_SHA256:-}" | tr -d ':' | tr 'a-f' 'A-F')
           [ -n "$expected" ] || { echo "RELEASE_CERT_SHA256 is not set; refusing to publish"; exit 1; }
@@ -77,4 +79,6 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" "$OUT" "$OUT.sha256" --title "$GITHUB_REF_NAME" --notes "Signed release build of $GITHUB_REF_NAME. Verify with sha256sum -c $OUT.sha256; the signing certificate's SHA-256 fingerprint is the repository variable RELEASE_CERT_SHA256."
       - name: remove the signing material
         if: always()
-        run: rm -rf "$HOME/.config/$APP_DIR"
+        run: |
+          rm -rf "$HOME/.config/$APP_DIR"
+          rm -f certs.txt

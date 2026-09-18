@@ -20,6 +20,7 @@ import com.loosecannon.servicetag.core.nfc.OverwriteReasons
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.di.AppGraph
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -86,7 +87,7 @@ class TagWriteController(
      */
     @Volatile private var confirmedOverwrite: TagPayload? = null
     @Volatile private var done = false
-    @Volatile private var busy = false
+    private val busy = AtomicBoolean(false)
 
     /**
      * The content the confirmation sheet is asking about; it owns [busy] until it is answered. Only
@@ -99,8 +100,7 @@ class TagWriteController(
 
     /** Reader mode calls this from a binder thread; nothing here touches the main thread (invariant 11). */
     fun onTag(tag: TagHandle) {
-        if (busy || done) return
-        busy = true
+        if (done || !busy.compareAndSet(false, true)) return
         scope.launch {
             var sheetOwnsBusy = false
             try {
@@ -109,10 +109,10 @@ class TagWriteController(
                 throw e
             } catch (e: Exception) {
                 // The platform's message is not the user's business; the exception is the log's (R4).
-                Log.w(TAG, "inspect failed", e)
+                Log.w(TAG, "tap failed", e)
                 _state.value = WriteState.Error("Could not read the tag. Hold it still and try again.")
             } finally {
-                if (!sheetOwnsBusy) busy = false
+                if (!sheetOwnsBusy) busy.set(false)
             }
         }
     }
@@ -195,7 +195,7 @@ class TagWriteController(
         val asked = awaitingAnswer ?: return
         awaitingAnswer = null
         confirmedOverwrite = asked
-        busy = false
+        busy.set(false)
         _state.value = WriteState.Idle("Overwrite confirmed. Hold the same tag to the phone again to write.")
     }
 
@@ -204,7 +204,7 @@ class TagWriteController(
         if (awaitingAnswer == null) return
         awaitingAnswer = null
         confirmedOverwrite = null
-        busy = false
+        busy.set(false)
         _state.value = WriteState.Idle("Not written. The tag was left as it was.")
     }
 
