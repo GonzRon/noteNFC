@@ -1307,13 +1307,13 @@ permissions:
   contents: write
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: release
     env:
       APP_DIR: servicetag                   # NoteTag: notenfc  (the historical directory the build script reads)
       APK_BASENAME: ServiceTag              # NoteTag: NoteTag
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           submodules: recursive
           fetch-depth: 0
@@ -1324,15 +1324,15 @@ jobs:
           [ "${GITHUB_REF_TYPE}" = "tag" ] || { echo "not a tag push"; exit 1; }
           git tag --points-at HEAD --format='%(refname:short)' | grep -Fxq -- "$GITHUB_REF_NAME" || { echo "pushed tag is not exactly at HEAD"; exit 1; }
           bash tools/check-submodule-pin.sh
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools build-tools;36.0.0
           accept-android-sdk-licenses: true
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: the complete test gate
         run: ./gradlew :nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest --console=plain
       - name: restore the release signing material (never echoed)
@@ -1442,3 +1442,4 @@ The rename `noteNFC → ServiceTag` (§B.2), the `--no-ff` merge of `product-spl
   - **E1 (Q1)** ServiceTag `TagWriteController`: the format-failure sentence loses the library's `reason` and becomes NoteTag's exact text, `Could not format the tag. Hold it still and try again.`; the reason and the cause go to the log unconditionally — `Log.w(TAG, "format failed: ${r.reason}", r.cause)`, where a null cause is fine.
   - **E2 (Q2)** ServiceTag `ScanViewModels.kt` (not a pinned block): `Couldn't read that tag (${e.javaClass.simpleName}). Hold it still and try again.` → `Couldn't read that tag. Hold it still and try again.`, with `Log.w(TAG, "read failed", e)` beside it carrying the class name and the stack.
   - **E3 (Q3)** NoteTag `OverwriteWording`: `This tag holds unreadable NoteTag content (${d.detail}).` → `This tag holds unreadable NDEF content (${d.detail}).` — unparseable NDEF establishes nothing about whose content it is. `OverwriteWordingTest` carries the new sentence.
+- 2026-09-18: workflow maintenance — action majors moved to Node 24 releases (`actions/checkout` v4.4.0 → v5.1.0, `actions/setup-java` v4.9.1 → v5.7.0, `android-actions/setup-android` v3.2.2 → v4.0.4, `gradle/actions/setup-gradle` v4.4.3 → v6.3.0), runner pinned to ubuntu-24.04; owner-requested after the first release runs' annotations.
