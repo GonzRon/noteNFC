@@ -3,6 +3,7 @@ package com.loosecannon.servicetag.testing
 import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.BuildConfig
 import com.loosecannon.servicetag.attachments.Thumbnails
+import com.loosecannon.servicetag.core.model.EventProfile
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.AttachmentRepository
@@ -52,6 +53,7 @@ import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 
 /**
  * `AppGraph` without a `Context`: the same members, built on `inMemoryDb()` and the real Room
@@ -119,7 +121,21 @@ class FakeGraph(val db: AppDatabase = inMemoryDb()) {
     val archiveDefinition: ArchiveDefinition = ArchiveDefinition(definitions, uow, clock)
     val deleteDefinition: DeleteDefinition = DeleteDefinition(definitions, events, profiles, uow)
     val reorderDefinitions: ReorderDefinitions = ReorderDefinitions(definitions, uow, clock)
-    val saveProfile: SaveProfile = SaveProfile(profiles, definitions, assets, uow, ids, clock)
+    /**
+     * Set from a test to gate [saveProfile]'s write: while non-null, the row it upserts parks on
+     * this deferred before it reaches the table, so a test can prove a second `save()` call really
+     * lands while the first one is still in flight rather than assuming it from frame timing.
+     */
+    var saveGate: CompletableDeferred<Unit>? = null
+
+    private val gatedProfilesForSave: ProfileRepository = object : ProfileRepository by profiles {
+        override suspend fun upsert(p: EventProfile) {
+            saveGate?.await()
+            profiles.upsert(p)
+        }
+    }
+
+    val saveProfile: SaveProfile = SaveProfile(gatedProfilesForSave, definitions, assets, uow, ids, clock)
     val archiveProfile: ArchiveProfile = ArchiveProfile(profiles, uow, clock)
     val deleteProfile: DeleteProfile = DeleteProfile(profiles, uow)
     val reorderProfiles: ReorderProfiles = ReorderProfiles(profiles, uow, clock)

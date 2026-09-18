@@ -5,6 +5,7 @@ import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.ProfileId
 import com.loosecannon.servicetag.testing.FakeGraph
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -65,8 +66,6 @@ class ProfileEditViewModelTest {
         vm.onConsumable(0, name = "Sediment filter", quantity = "1", unit = "ea")
 
         vm.save()
-        // The second tap lands in the same frame: the in-flight guard drops it.
-        vm.save()
         vm.state.first { !it.saving && it.problems.isEmpty() }
 
         val stored = graph.profiles.forAsset(ro.id).single { it.name == "Membrane check" }
@@ -86,6 +85,35 @@ class ProfileEditViewModelTest {
         assertEquals(1.0, material.defaultQuantity!!, 1e-9)
         assertEquals("ea", material.unit)
         assertEquals(listOf(stored.id), saved)
+    }
+
+    /**
+     * The in-flight guard, proved rather than assumed from frame timing: [FakeGraph.saveGate]
+     * parks the write itself, so the second `save()` provably arrives while the first one is
+     * still suspended on it, not merely "probably" in the same frame.
+     */
+    @Test fun aSecondSaveWhileTheFirstIsStillInFlightIsDropped() = runTest {
+        val ro = graph.createAsset.run("RO unit", "Water", templateKey = "ro_water")
+        val vm = model(ro.id)
+        val saved = mutableListOf<ProfileId>()
+        backgroundScope.launch { vm.saved.collect { saved += it } }
+        vm.state.first { it.loaded }
+        vm.onName("Membrane check")
+
+        val gate = CompletableDeferred<Unit>()
+        graph.saveGate = gate
+
+        vm.save()
+        assertTrue(vm.state.value.saving)
+        // The write above is parked on `gate`, so this one provably lands while it is in flight.
+        vm.save()
+        assertTrue(vm.state.value.saving)
+
+        gate.complete(Unit)
+        vm.state.first { !it.saving && it.problems.isEmpty() }
+
+        assertEquals(1, graph.profiles.forAsset(ro.id).count { it.name == "Membrane check" })
+        assertEquals(1, saved.size)
     }
 
     @Test fun editingAnActionKeepsTheFieldAndMaterialIdsItLoaded() = runTest {
