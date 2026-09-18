@@ -1031,6 +1031,20 @@ dependencies {
 }
 ```
 
+And — added 2026-09-17 with Phase G ruling G-1, which this section's first draft did not show — in
+both apps' `core/build.gradle.kts`, because the app's body codec is built over the library's
+envelope (`NdefEnvelope`, `UuidBytes`) and its overwrite wording over `OverwritePolicy`:
+
+```kotlin
+dependencies {
+    implementation(project(":nfc-core"))
+}
+```
+
+The dependency order is therefore `:app → :nfc-android → :nfc-core` and `:app → :core → :nfc-core`;
+`:core` never reaches `:nfc-android` (it stays JVM-only), and the library's forbidden-knowledge scan
+(§4.4) is the standing proof that no edge runs the other way.
+
 ### 6.3 The CI snippet, and what CI/settings must change (review addition 4)
 
 ```yaml

@@ -291,6 +291,14 @@ string behind in the app (target §4.7).
 settings and dependency commits. Each app's own NFC layer is still in its history and can be
 un-deleted.
 
+**Closing note (Phase G, 2026-09-17).** Phase G ended with the four verifications above done in
+both apps (evidence file, Phase G section), both apps pinned to the same `nfc-tag-core-v0.1.0`
+gitlink, the two tag-only `release.yml` workflows and their `tools/release-dry-run.sh` installed
+and dry-run locally — never triggered, since no product tag exists (target §8) — and one
+structural fact recorded in target §6.2 as amended: in both apps **`:core` depends on `:nfc-core`**
+(Phase G ruling G-1), so the dependency order is `:app → :nfc-android → :nfc-core` and
+`:app → :core → :nfc-core`.
+
 ---
 
 ## B. Remote transition (sequence K → L)
