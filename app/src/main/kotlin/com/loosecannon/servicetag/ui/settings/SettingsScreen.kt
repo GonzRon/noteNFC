@@ -83,6 +83,7 @@ fun SettingsScreen(
     graph: AppGraph,
     onBack: () -> Unit,
     onReadTag: () -> Unit,
+    onBackup: () -> Unit,
 ) {
     val activity = LocalActivity.current
     val prefs = graph.prefs
@@ -229,6 +230,11 @@ fun SettingsScreen(
             }
 
             SectionHeader(title = "Utilities")
+            UtilityRow(
+                icon = ServiceTagIcons.Backup,
+                label = "Backup and restore",
+                onClick = onBackup,
+            )
             UtilityRow(
                 icon = ServiceTagIcons.Contactless,
                 label = "Read / inspect tag",

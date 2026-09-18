@@ -232,6 +232,7 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
                         graph = graph,
                         onBack = { backStack.removeLastOrNull() },
                         onReadTag = { backStack.add(Route.Scan) },
+                        onBackup = { backStack.add(Route.Backup) },
                     )
                 }
             },
