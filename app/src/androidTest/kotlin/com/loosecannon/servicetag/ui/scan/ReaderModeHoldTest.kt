@@ -89,21 +89,25 @@ class ReaderModeHoldTest {
     }
 
     /**
-     * 2.7 (#37) — a completed read keeps reader mode, because it no longer moves the back stack.
+     * 2.7 (#37) — a tag the app cannot read leaves the back stack and the hold alone.
      *
-     * This is the transition the issue is named for and the one the hold test above walks past: the
-     * scan screen used to hand its answer to `backStack.add(...)`, which took the screen — and with
-     * it the session — out from under a tag still against the phone. Re-introducing that push makes
-     * the scan entry leave composition, so the sink count falls to 0, `readsTags` goes false and
-     * `stops` becomes 1; all three assertions below fail on exactly that regression.
+     * Read what this does and does not prove, because the two are easy to confuse. The emulator has
+     * no NFC, so the handle is synthetic; `RealTagIo` refuses any handle reader mode did not deliver
+     * and throws while the argument is being evaluated, so `ScanViewModel.onTag` catches it, sets
+     * its "couldn't read" line and never emits `ScanEvent.Show`. So the delivery here is a *failed*
+     * read, and what is pinned is a real but narrower invariant: a delivery that resolves to nothing
+     * still does not move the back stack and still does not hand NFC back — the screen stays, its
+     * sink stays installed, `stops` stays 0.
      *
-     * The emulator has no NFC, so the handle is synthetic and `RealTagIo` refuses it — the screen
-     * shows its "couldn't read" line rather than a result sheet. What is proved here is the half
-     * that regressed: a delivery does not move the back stack and does not release reader mode.
-     * Proving the sheet itself needs a `TagIo` seam reachable from the screen, which this release
-     * does not add.
+     * It is **not** a guard on the transition #37 is named for. A *resolved* read never reaches this
+     * case, so reintroducing a `backStack.add(...)` in the `ScanEvent.Show` branch would leave this
+     * test green. That the resolved path draws its answer instead of pushing a route rests on
+     * inspection of `ScanScreen` — the `Show` branch assigns `format`/`key` and bumps `readId`, and
+     * there is no navigation call in it — and on the runbook's physical row. Catching it by test
+     * needs a `TagIo` seam reachable from the screen (it takes only `AppGraph`, and `ScanViewModels`
+     * and `AppGraph` are untouched this release), which is a follow-up, not something to invent here.
      */
-    @Test fun aReadDoesNotMoveTheBackStackAndDoesNotReleaseTheHold() {
+    @Test fun aTagThatCannotBeReadDoesNotMoveTheBackStackOrReleaseTheHold() {
         rule.setContent {
             ServiceTagTheme {
                 ServiceTagRoot(
@@ -127,7 +131,7 @@ class ReaderModeHoldTest {
         // one installed and the session was never handed back.
         rule.onNodeWithText("READY TO SCAN").assertIsDisplayed()
         rule.onAllNodesWithText("Read / inspect tag").assertCountEquals(1)
-        assertEquals("a read is not a navigation", 1, readerMode.sinkCount)
+        assertEquals("a delivery is not a navigation", 1, readerMode.sinkCount)
         assertEquals("and never a stop", 0, control.stops)
         assertEquals(1, control.starts)
     }
