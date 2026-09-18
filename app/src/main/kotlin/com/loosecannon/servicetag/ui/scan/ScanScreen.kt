@@ -1,7 +1,6 @@
 package com.loosecannon.servicetag.ui.scan
 
 import android.provider.Settings
-import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -28,7 +27,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -36,15 +38,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.nfc.tagcore.android.NfcReaderModeSession
-import com.loosecannon.nfc.tagcore.android.NfcTagHandle
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
+import com.loosecannon.servicetag.ui.nfc.ReaderMode
+import com.loosecannon.servicetag.ui.nfc.TagSinkEffect
 import com.loosecannon.servicetag.ui.theme.PlateShape
 import com.loosecannon.servicetag.ui.theme.SheetSentence
 
@@ -58,32 +59,37 @@ private const val BREATH_MILLIS = 3_200
  *
  * Reached as a pushed destination (Settings' Read / inspect tag row, or the dashboard's empty-state
  * action), never a tab (D12 §16 correction), so it always needs a way back.
+ *
+ * 2.7 (#37): the screen owns neither the reader-mode session — the nav shell holds one for the
+ * whole tag flow — nor a route for its answer. The answer is drawn over this screen, so an inspect
+ * never takes the screen out from under a tag that is still against the phone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
     graph: AppGraph,
-    onResolved: (Route) -> Unit,
+    readerMode: ReaderMode,
+    onOpenAsset: (String) -> Unit,
+    onNewAsset: () -> Unit,
+    onWriteTag: (Route.WriteTag) -> Unit,
     onBack: () -> Unit,
 ) {
     val model: ScanViewModel = viewModel(key = "scan") { ScanViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
-    val activity = LocalActivity.current
 
-    val session = remember(activity) {
-        activity?.let { host -> NfcReaderModeSession(host) { tag -> model.onTag(NfcTagHandle(tag)) } }
-    }
-    // Reader mode belongs to the resumed screen and to nothing else: leaving this screen hands NFC
-    // back to the system, which is what lets the background trampoline keep working.
-    LifecycleResumeEffect(session) {
-        session?.start()
-        onPauseOrDispose { session?.stop() }
-    }
+    // The activity owns the one session; this screen only says where its tags land while it is
+    // resumed. Leaving it takes the sink away, and the nav shell decides about NFC itself.
+    TagSinkEffect(readerMode) { tag -> model.onTag(tag) }
+
+    // The answer, as the two strings the route used to carry — which is all it ever carried, and
+    // which `rememberSaveable` can keep through process death without a `Saver` of its own.
+    var format by rememberSaveable { mutableStateOf<String?>(null) }
+    var key by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(model) {
         model.events.collect { event ->
             when (event) {
-                is ScanEvent.Show -> onResolved(event.route)
+                is ScanEvent.Show -> { format = event.route.format; key = event.route.key }
             }
         }
     }
@@ -106,8 +112,22 @@ fun ScanScreen(
         ) {
             ReadyToScan(reading = state.reading)
             state.problem?.let { QuietLine(it) }
-            NfcAvailability(session)
+            NfcAvailability(readerMode)
         }
+    }
+
+    // Over this screen, not on top of it. Each way out clears the answer first, so coming back to
+    // the inspector shows READY TO SCAN and not the answer to a tag that is long gone.
+    format?.let { shown ->
+        TagResultSheet(
+            graph = graph,
+            format = shown,
+            key = key,
+            onDismiss = { format = null },
+            onWriteTag = { route -> format = null; onWriteTag(route) },
+            onOpenAsset = { id -> format = null; onOpenAsset(id) },
+            onNewAsset = { format = null; onNewAsset() },
+        )
     }
 }
 
@@ -179,11 +199,11 @@ private fun Halo() {
 
 /** What the phone can actually do, said once and quietly — never over the top of the card. */
 @Composable
-private fun NfcAvailability(session: NfcReaderModeSession?) {
+private fun NfcAvailability(readerMode: ReaderMode) {
     val line = when {
-        session == null -> "Scanning needs the app's own window."
-        !session.available -> "This phone has no NFC hardware."
-        !session.enabled -> "NFC is turned off. Enable it in system settings, then come back."
+        !readerMode.present -> "Scanning needs the app's own window."
+        !readerMode.available -> "This phone has no NFC hardware."
+        !readerMode.enabled -> "NFC is turned off. Enable it in system settings, then come back."
         else -> null
     }
     line?.let { QuietLine(it) }

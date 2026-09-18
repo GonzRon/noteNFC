@@ -1,6 +1,5 @@
 package com.loosecannon.servicetag.ui.scan
 
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,17 +28,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.loosecannon.nfc.tagcore.android.NfcReaderModeSession
-import com.loosecannon.nfc.tagcore.android.NfcTagHandle
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
+import com.loosecannon.servicetag.ui.nfc.ReaderMode
+import com.loosecannon.servicetag.ui.nfc.TagSinkEffect
 import com.loosecannon.servicetag.ui.theme.ControlShape
 import com.loosecannon.servicetag.ui.theme.ServiceTagTheme
 import com.loosecannon.servicetag.ui.theme.PlateShape
@@ -49,13 +47,14 @@ import com.loosecannon.servicetag.ui.theme.PlateShape
  * read first, ask before replacing anything, write off the main thread, read back and compare,
  * and lock — if the user armed it — only once the read-back has proved what is on the tag.
  *
- * The screen is hosted by the nav shell, so it owns nothing but its own reader-mode session;
- * every decision belongs to [TagWriteController].
+ * The screen is hosted by the nav shell, which owns the activity's one reader-mode session as of
+ * 2.7 (#37), so it owns nothing at all; every decision belongs to [TagWriteController].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WriteTagScreen(
     graph: AppGraph,
+    readerMode: ReaderMode,
     key: Route.WriteTag,
     onDone: () -> Unit,
 ) {
@@ -66,15 +65,10 @@ fun WriteTagScreen(
     val state by model.state.collectAsStateWithLifecycle()
     val lock by model.lock.collectAsStateWithLifecycle()
     val targetName by model.targetName.collectAsStateWithLifecycle()
-    val activity = LocalActivity.current
 
-    val session = remember(activity) {
-        activity?.let { host -> NfcReaderModeSession(host) { tag -> model.onTag(NfcTagHandle(tag)) } }
-    }
-    LifecycleResumeEffect(session) {
-        session?.start()
-        onPauseOrDispose { session?.stop() }
-    }
+    // The activity owns the one reader-mode session (#37, R1): arriving here from the inspect
+    // screen is a change of sink, not a hand-over of NFC, so nothing can land between the two.
+    TagSinkEffect(readerMode) { tag -> model.onTag(tag) }
 
     var warnAboutLock by remember { mutableStateOf(false) }
 
@@ -94,7 +88,7 @@ fun WriteTagScreen(
         ) {
             TargetLine(targetName)
             WriteStatus(state, targetName, onDone)
-            NfcAvailabilityLine(session)
+            NfcAvailabilityLine(readerMode)
             LockSwitch(
                 checked = lock,
                 onCheckedChange = { checked -> if (checked) warnAboutLock = true else model.setLock(false) },
@@ -271,11 +265,11 @@ private fun LockSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun NfcAvailabilityLine(session: NfcReaderModeSession?) {
+private fun NfcAvailabilityLine(readerMode: ReaderMode) {
     val line = when {
-        session == null -> "Writing needs the app's own window."
-        !session.available -> "This phone has no NFC hardware."
-        !session.enabled -> "NFC is turned off. Enable it in system settings, then come back."
+        !readerMode.present -> "Writing needs the app's own window."
+        !readerMode.available -> "This phone has no NFC hardware."
+        !readerMode.enabled -> "NFC is turned off. Enable it in system settings, then come back."
         else -> null
     }
     line?.let { QuietLine(it) }

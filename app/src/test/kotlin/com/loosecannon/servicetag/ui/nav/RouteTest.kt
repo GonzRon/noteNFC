@@ -27,4 +27,22 @@ class RouteTest {
         assertTrue(Route.WriteTag("asset", "a1", null).isSupported())
         assertTrue(Route.WriteTag("none", null, null).isSupported())
     }
+
+    /**
+     * 2.7 (#37) — reader mode belongs to the two screens that read tags, and is held while one of
+     * them is on top. `TagResult` is not one of them: it reads nothing, it is where the ambient
+     * trampoline lands, and the inspect screen no longer pushes it. Adding it here would put
+     * reader mode on over an ambient result and release it again the moment the sheet opened its
+     * asset — with the tag still on the phone, which is the dispatch this release removed.
+     */
+    @Test fun onlyTheTagScreensHoldReaderMode() {
+        assertTrue(Route.Scan.readsTags())
+        assertTrue(Route.WriteTag("asset", "a1", null).readsTags())
+        assertTrue(Route.WriteTag("none", null, null).readsTags())
+        assertFalse(Route.TagResult("V1", "k").readsTags())
+        assertFalse(Route.Dashboard.readsTags())
+        assertFalse(Route.Assets.readsTags())
+        assertFalse(Route.AssetDetail("a1").readsTags())
+        assertFalse(Route.Settings.readsTags())
+    }
 }

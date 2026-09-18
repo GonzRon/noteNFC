@@ -64,3 +64,19 @@ val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets)
 internal val SupportedWriteTargetKinds: Set<String> = setOf("asset", "none")
 
 internal fun Route.WriteTag.isSupported(): Boolean = targetKind in SupportedWriteTargetKinds
+
+/**
+ * The screens that read tags, and so the screens reader mode belongs to (2.7, #37). It is held
+ * while one of them is on top of the back stack, which makes a move between them — inspect to
+ * write, or back — no hand-over at all.
+ *
+ * `Route.TagResult` is deliberately absent. It reads nothing; it is where the ambient trampoline
+ * lands, with no reader mode, exactly as at 2.6; and the inspect screen no longer pushes it, since
+ * its result is drawn on the screen the user is already on. Adding it here would hold reader mode
+ * over an ambient result and release it again the instant the sheet opened its asset — with the tag
+ * still on the phone, which is the re-dispatch this release removed.
+ */
+internal fun Route.readsTags(): Boolean = when (this) {
+    Route.Scan, is Route.WriteTag -> true
+    else -> false
+}

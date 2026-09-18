@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -22,6 +23,8 @@ import com.loosecannon.servicetag.ui.backup.BackupScreen
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
+import com.loosecannon.servicetag.ui.nfc.ReaderMode
+import com.loosecannon.servicetag.ui.nfc.rememberReaderMode
 import com.loosecannon.servicetag.ui.scan.ScanScreen
 import com.loosecannon.servicetag.ui.scan.TagResultSheet
 import com.loosecannon.servicetag.ui.scan.WriteTagScreen
@@ -37,7 +40,12 @@ import kotlinx.coroutines.flow.SharedFlow
  * navigation lives here, so no screen ever has to know what an `Intent` is.
  */
 @Composable
-fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: SharedFlow<String>) {
+fun ServiceTagRoot(
+    graph: AppGraph,
+    deepLinks: SharedFlow<Route>,
+    snackbars: SharedFlow<String>,
+    readerMode: ReaderMode = rememberReaderMode(),
+) {
     val backStack = rememberNavBackStack(Route.Dashboard)
     val snackbarHost = remember { SnackbarHostState() }
 
@@ -45,6 +53,18 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
     LaunchedEffect(Unit) { snackbars.collect { snackbarHost.showSnackbar(it) } }
 
     val current = backStack.lastOrNull()
+
+    // #37 — one reader-mode session for the activity, held for as long as a tag-reading screen is
+    // on top. The inspect screen used to end its own session the moment it pushed a result, with
+    // the tag still against the phone: the platform re-discovered that tag, dispatched it under
+    // normal dispatch, and an inspect inside ServiceTag opened another app. A move between the two
+    // tag screens is now no hand-over at all, which is runbook R1.
+    val readsTags = current is Route && current.readsTags()
+    LifecycleResumeEffect(readerMode, readsTags) {
+        readerMode.hold(readsTags)
+        onPauseOrDispose { readerMode.hold(false) }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         bottomBar = {
@@ -185,7 +205,15 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
                 entry<Route.Scan> {
                     ScanScreen(
                         graph = graph,
-                        onResolved = { backStack.add(it) },
+                        readerMode = readerMode,
+                        // 2.7 (#37): the read's answer is drawn on this screen rather than pushed
+                        // as a `Route.TagResult` — pushing it took the screen, and with it the
+                        // reader mode, out from under the tag. What the answer decides still
+                        // navigates, exactly as the pushed sheet's entry did; the entry itself
+                        // stays for the ambient trampoline, which is the only thing that uses it.
+                        onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
+                        onNewAsset = { backStack.add(Route.AssetEdit(null)) },
+                        onWriteTag = { backStack.add(it) },
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
@@ -204,7 +232,12 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
                 }
                 entry<Route.WriteTag> { key ->
                     if (key.isSupported()) {
-                        WriteTagScreen(graph = graph, key = key, onDone = { backStack.removeLastOrNull() })
+                        WriteTagScreen(
+                            graph = graph,
+                            readerMode = readerMode,
+                            key = key,
+                            onDone = { backStack.removeLastOrNull() },
+                        )
                     } else {
                         // 2.6: a link-kinded route is pre-split navigation. No screen, nothing
                         // provisioned, nothing written — it simply leaves the stack.
