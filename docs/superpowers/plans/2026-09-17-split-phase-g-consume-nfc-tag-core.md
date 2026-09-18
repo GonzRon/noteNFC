@@ -1171,7 +1171,7 @@ class NoteTagWriteController(
     private suspend fun format(tag: TagHandle) {
         when (val r = withContext(ioDispatcher) { tagIo.format(tag) }) {
             WriteResult.Formatted -> _state.value = WriteState.Waiting("Formatted the tag. Hold it to the phone again to write the link.")
-            is WriteResult.Failed -> { r.cause?.let { Log.w(TAG, "format failed: ${r.reason}", it) }; _state.value = WriteState.Error("Could not format the tag. Hold it still and try again.") }
+            is WriteResult.Failed -> { Log.w(TAG, "format failed: ${r.reason}", r.cause); _state.value = WriteState.Error("Could not format the tag. Hold it still and try again.") }
             WriteResult.Unsupported -> _state.value = WriteState.Error("This tag type is not supported.")
             is WriteResult.Written, is WriteResult.TooSmall, WriteResult.ReadOnly, is WriteResult.VerifyMismatch ->
                 _state.value = WriteState.Error("Could not format the tag. Hold it still and try again.")
