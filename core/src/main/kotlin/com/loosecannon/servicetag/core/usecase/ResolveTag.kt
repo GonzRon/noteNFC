@@ -1,7 +1,6 @@
 package com.loosecannon.servicetag.core.usecase
 
 import com.loosecannon.servicetag.core.model.Asset
-import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -10,14 +9,19 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
-import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
 /** Every way a scan can end (D3 §9). The UI switches on this and nothing else. */
 sealed interface Resolution {
     data class OpenAsset(val tag: TagBinding, val asset: Asset) : Resolution
-    data class LaunchLink(val tag: TagBinding, val link: ExternalLink) : Resolution
+
+    /**
+     * 2.6 — the tag names a link from before the product split. ServiceTag does not read the link
+     * row, let alone launch it: the row is a tombstone and this outcome is the whole answer. It is
+     * deliberately not `Unbound`, which offers a bind, and not `NotOurs`, which it is not.
+     */
+    data class PreSplitLink(val tag: TagBinding) : Resolution
     data class Unbound(val tag: TagBinding) : Resolution
     data class Revoked(val tag: TagBinding) : Resolution
     data class UnknownV1(val tagId: TagId) : Resolution
@@ -28,7 +32,6 @@ sealed interface Resolution {
 class ResolveTag(
     private val tags: TagRepository,
     private val assets: AssetRepository,
-    private val links: LinkRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
 ) {
@@ -48,7 +51,7 @@ class ResolveTag(
             tag.status == TagStatus.UNBOUND -> Resolution.Unbound(tag)
             else -> when (val t = tag.target) {
                 is TagTarget.AssetTarget -> assets.get(t.assetId)?.let { Resolution.OpenAsset(tag, it) } ?: Resolution.Unbound(tag)
-                is TagTarget.LinkTarget -> links.get(t.linkId)?.let { Resolution.LaunchLink(tag, it) } ?: Resolution.Unbound(tag)
+                is TagTarget.LinkTarget -> Resolution.PreSplitLink(tag)
                 TagTarget.None -> Resolution.Unbound(tag)
             }
         }

@@ -261,8 +261,31 @@ class BackupUseCasesTest {
             assertEquals(TagTarget.LinkTarget(LinkId("l3")), target.tags.get(TagId("t2"))!!.target)
             assertEquals(TagTarget.None, target.tags.get(TagId("t3"))!!.target)
             assertEquals(PayloadFormat.V1, target.tags.get(TagId("t1"))!!.payloadFormat)
-            assertEquals(1, target.links.standalone().size)
+            assertEquals(1, target.links.rows.values.count { it.assetId == null })
         }
+    }
+
+    /**
+     * 2.6 — the `externalLinks` tombstone. Nothing in the app creates a link any more, so this is
+     * the only proof left that an old set's rows survive a replace-import intact and come back out
+     * of the next export unchanged.
+     */
+    @Test
+    fun `external link rows round-trip through export and replace-import unchanged`() {
+        val source = Fakes()
+        runBlocking {
+            source.assets.upsert(asset("a1", "Furnace"))
+            source.links.upsert(link("l1", "a1"))
+            source.links.upsert(link("l3", null))
+        }
+        val before = runBlocking { source.links.all().sortedBy { it.id.value } }
+        val target = Fakes()
+        importInto(target, exportOf(source))
+        runBlocking {
+            assertEquals(before, target.links.all().sortedBy { it.id.value })
+        }
+        val decoded = BackupCodec.decode(exportOf(target))
+        assertEquals(listOf("l1", "l3"), decoded.data.externalLinks.map { it.id })
     }
 
     @Test

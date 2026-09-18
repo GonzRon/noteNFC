@@ -163,45 +163,28 @@ class InMemoryLinkRepository : LinkRepository, Rollbackable, Witnessed {
     val rows = LinkedHashMap<String, ExternalLink>()
     override var witness: TransactionWitness? = null
     private val rig = UpsertRig("link")
-    private val version = MutableStateFlow(0)
     var failOnUpsert: Int?
         get() = rig.failOnUpsert
         set(value) { rig.failOnUpsert = value }
 
     override fun snapshot(): () -> Unit {
         val copy = LinkedHashMap(rows)
-        return { rows.clear(); rows.putAll(copy); version.value += 1 }
+        return { rows.clear(); rows.putAll(copy) }
     }
 
     override suspend fun upsert(link: ExternalLink) {
         rig.check()
         rows[link.id.value] = link
-        version.value += 1
     }
 
     override suspend fun get(id: LinkId): ExternalLink? = rows[id.value]
-
-    override suspend fun forAsset(assetId: AssetId): List<ExternalLink> =
-        rows.values.filter { it.assetId == assetId }
-
-    override suspend fun standalone(): List<ExternalLink> = rows.values.filter { it.assetId == null }
 
     override suspend fun all(): List<ExternalLink> {
         witness?.observeAll()
         return rows.values.toList()
     }
 
-    override suspend fun delete(id: LinkId) { rows.remove(id.value); version.value += 1 }
-
-    override suspend fun deleteAll() { rows.clear(); version.value += 1 }
-
-    override fun observeAll(): Flow<List<ExternalLink>> = version.map {
-        rows.values.sortedBy { it.label.lowercase() }
-    }
-
-    override fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>> = version.map {
-        rows.values.filter { it.assetId == assetId }.sortedBy { it.label.lowercase() }
-    }
+    override suspend fun deleteAll() { rows.clear() }
 }
 
 /** Open so a test can subclass it to rig a check on upsert order (e.g. FK-like checks). */

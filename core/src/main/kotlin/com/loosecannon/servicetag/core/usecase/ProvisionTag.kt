@@ -8,7 +8,6 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.IdGenerator
-import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -19,13 +18,12 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 class ProvisionTag(
     private val tags: TagRepository,
     private val assets: AssetRepository,
-    private val links: LinkRepository,
     private val uow: UnitOfWork,
     private val ids: IdGenerator,
     private val clock: Clock,
 ) {
     suspend fun begin(target: TagTarget, label: String?): TagBinding = uow.write {
-        requireTargetExists(target, assets, links)
+        requireTargetExists(target, assets)
         val now = clock.nowMillis()
         val id = ids.newId()
         val row = TagBinding(

@@ -3,9 +3,7 @@ package com.loosecannon.servicetag.core.usecase
 import com.loosecannon.nfc.tagcore.TagIdentity
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.LinkId
-import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -17,7 +15,6 @@ import com.loosecannon.servicetag.core.ports.IdGenerator
 import com.loosecannon.servicetag.core.testing.FakeUnitOfWork
 import com.loosecannon.servicetag.core.testing.InMemoryAssetRepository
 import com.loosecannon.servicetag.core.testing.InMemoryDefinitionRepository
-import com.loosecannon.servicetag.core.testing.InMemoryLinkRepository
 import com.loosecannon.servicetag.core.testing.InMemoryProfileRepository
 import com.loosecannon.servicetag.core.testing.InMemoryTagRepository
 import kotlinx.coroutines.test.runTest
@@ -32,13 +29,12 @@ class TagBindingUseCasesTest {
     private val ndefCodec = NdefCodec(TagIdentity("com.example.app", "tag", "com.example.app"))
     private val assets = InMemoryAssetRepository()
     private val tags = InMemoryTagRepository()
-    private val links = InMemoryLinkRepository()
-    private val uow = FakeUnitOfWork(assets, tags, links)
+    private val uow = FakeUnitOfWork(assets, tags)
     private var seq = 0
     private val ids = IdGenerator { "00000000-0000-4000-8000-%012d".format(++seq) }
     private val clock = Clock { 7_000L }
-    private val bind = BindTag(tags, assets, links, uow, clock)
-    private val provision = ProvisionTag(tags, assets, links, uow, ids, clock)
+    private val bind = BindTag(tags, assets, uow, clock)
+    private val provision = ProvisionTag(tags, assets, uow, ids, clock)
     private val defs = InMemoryDefinitionRepository()
     private val profiles = InMemoryProfileRepository()
     private val applyTemplate = ApplyTemplate(defs, profiles, assets, uow, ids, clock)
@@ -65,10 +61,10 @@ class TagBindingUseCasesTest {
     }
     @Test fun bindingAKnownRowRetargetsItAndReactivates() = runTest {
         seedAsset()
-        links.rows["l1"] = ExternalLink(LinkId("l1"), null, LinkKind.WEB, "m", "https://a.example/", 1L, null, 1L)
+        assets.rows["a2"] = Asset(AssetId("a2"), "Mower", createdAt = 1L, updatedAt = 1L)
         tags.rows[scanned.value] = TagBinding(scanned, PayloadFormat.V1, scanned.value, TagTarget.None, TagStatus.UNBOUND, label = "spare", createdAt = 1L, updatedAt = 1L)
-        val row = bind.run(PayloadFormat.V1, scanned.value, TagTarget.LinkTarget(LinkId("l1")))
-        assertEquals(TagTarget.LinkTarget(LinkId("l1")), row.target)
+        val row = bind.run(PayloadFormat.V1, scanned.value, TagTarget.AssetTarget(AssetId("a2")))
+        assertEquals(TagTarget.AssetTarget(AssetId("a2")), row.target)
         assertEquals(TagStatus.ACTIVE, row.status)
         assertEquals("spare", row.label)          // label kept when none is given
         assertEquals(1L, row.createdAt)
@@ -77,7 +73,6 @@ class TagBindingUseCasesTest {
     }
     @Test fun bindingToAMissingTargetFailsAndWritesNothing() = runTest {
         assertFailsWith<UnknownTarget> { bind.run(PayloadFormat.V1, scanned.value, a1) }
-        assertFailsWith<UnknownTarget> { bind.run(PayloadFormat.V1, scanned.value, TagTarget.LinkTarget(LinkId("nope"))) }
         assertTrue(tags.rows.isEmpty())
         assertEquals(0, uow.commits)
     }
@@ -88,6 +83,21 @@ class TagBindingUseCasesTest {
         seedAsset()
         assertFailsWith<IllegalArgumentException> { bind.run(PayloadFormat.V1, "NOT-A-UUID", a1) }
         assertTrue(tags.rows.isEmpty())
+    }
+    /** 2.6 — binding a link target is refused by type, and the refusal writes nothing. */
+    @Test fun bindingALinkTargetIsRefusedAndWritesNothing() = runTest {
+        assertFailsWith<LinkTargetUnsupported> {
+            bind.run(PayloadFormat.V1, scanned.value, TagTarget.LinkTarget(LinkId("l1")))
+        }
+        assertTrue(tags.rows.isEmpty())
+        assertEquals(0, uow.commits)
+    }
+
+    /** The same refusal on the provisioning side: no row is minted for a link. */
+    @Test fun provisioningALinkTargetIsRefusedAndWritesNothing() = runTest {
+        assertFailsWith<LinkTargetUnsupported> { provision.begin(TagTarget.LinkTarget(LinkId("l1")), "x") }
+        assertTrue(tags.rows.isEmpty())
+        assertEquals(0, uow.commits)
     }
 
     // --- ProvisionTag ----------------------------------------------------------------------

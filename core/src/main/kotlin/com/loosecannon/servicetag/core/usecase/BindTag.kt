@@ -8,7 +8,6 @@ import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
-import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.ports.UnitOfWork
 
@@ -20,16 +19,15 @@ import com.loosecannon.servicetag.core.ports.UnitOfWork
 class BindTag(
     private val tags: TagRepository,
     private val assets: AssetRepository,
-    private val links: LinkRepository,
     private val uow: UnitOfWork,
     private val clock: Clock,
 ) {
     // [format] is kept, not folded away to V1: `payload_format` is a persisted discriminator and a second format is planned.
     suspend fun run(format: PayloadFormat, key: String, target: TagTarget, label: String? = null): TagBinding {
-        require(target != TagTarget.None) { "bind needs an asset or a link" }
+        require(target != TagTarget.None) { "bind needs an asset" }
         NdefCodec.requireCanonicalUuid(TagId(key))
         return uow.write {
-            requireTargetExists(target, assets, links)
+            requireTargetExists(target, assets)
             val now = clock.nowMillis()
             val existing = tags.findByPayload(format, key)
             val bound = existing?.copy(target = target, status = TagStatus.ACTIVE, label = label ?: existing.label, updatedAt = now)

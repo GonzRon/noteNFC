@@ -48,16 +48,19 @@ interface TagRepository {
     fun observeForLink(linkId: LinkId): Flow<List<TagBinding>>
 }
 
+/**
+ * 2.6 — the tombstone port. `external_link` is still exported and restored byte-for-byte, so the
+ * three members the backup path uses stay; `get` stays because the round-trip proofs read a row
+ * back by id. Everything that *displayed* a link — `forAsset`, `standalone`, `observeAll`,
+ * `observeForAsset` — and `delete`, which only `DeleteLink` called, are gone: the queries still
+ * exist on `ExternalLinkDao` for the DAO-level tombstone tests, and nothing above the DAO can
+ * reach a link row to show it.
+ */
 interface LinkRepository {
     suspend fun upsert(link: ExternalLink)
     suspend fun get(id: LinkId): ExternalLink?
-    suspend fun forAsset(assetId: AssetId): List<ExternalLink>
-    suspend fun standalone(): List<ExternalLink>
     suspend fun all(): List<ExternalLink>
-    suspend fun delete(id: LinkId)
     suspend fun deleteAll()
-    fun observeAll(): Flow<List<ExternalLink>>
-    fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>>
 }
 
 interface DefinitionRepository {
