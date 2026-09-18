@@ -37,12 +37,10 @@ import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
 import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
-import com.loosecannon.servicetag.core.usecase.DeleteLink
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.LogEvent
-import com.loosecannon.servicetag.core.usecase.OpenLink
 import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.ReorderDefinitions
 import com.loosecannon.servicetag.core.usecase.ReorderProfiles
@@ -50,7 +48,6 @@ import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
 import com.loosecannon.servicetag.core.usecase.RetireAsset
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
-import com.loosecannon.servicetag.core.usecase.SaveLink
 import com.loosecannon.servicetag.core.usecase.SaveProfile
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
@@ -92,6 +89,7 @@ class AppGraph(private val context: Context) {
     val uow: UnitOfWork = RoomUnitOfWork(db)
     val assets: AssetRepository = RoomAssetRepository(db.assetDao())
     val tags: TagRepository = RoomTagRepository(db.nfcTagDao())
+    // The tombstone port: backup export and restore, and nothing else (2.6).
     val links: LinkRepository = RoomLinkRepository(db.externalLinkDao())
     val definitions: DefinitionRepository = RoomDefinitionRepository(db.definitionDao())
     val profiles: ProfileRepository = RoomProfileRepository(db.profileDao())
@@ -174,13 +172,11 @@ class AppGraph(private val context: Context) {
     )
     val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
 
-    val resolveTag: ResolveTag = ResolveTag(tags, assets, links, uow, clock)
-    val bindTag: BindTag = BindTag(tags, assets, links, uow, clock)
-    val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
+    val resolveTag: ResolveTag = ResolveTag(tags, assets, uow, clock)
+    val bindTag: BindTag = BindTag(tags, assets, uow, clock)
+    val provisionTag: ProvisionTag = ProvisionTag(tags, assets, uow, ids, clock)
     val applyTemplate: ApplyTemplate = ApplyTemplate(definitions, profiles, assets, uow, ids, clock)
     val createAsset: CreateAsset = CreateAsset(assets, uow, ids, clock, applyTemplate)
-    val saveLink: SaveLink = SaveLink(links, uow, ids, clock)
-    val openLink: OpenLink = OpenLink(links, uow, clock)
 
     // Phase 1C — the asset form. Archive-first: no hard delete for an asset in Phase 1 (R-9).
     val updateAsset: UpdateAsset = UpdateAsset(assets, uow, clock)
@@ -190,9 +186,6 @@ class AppGraph(private val context: Context) {
     // the one destructive asset action: it refuses a parent that still has children.
     val retireAsset: RetireAsset = RetireAsset(assets, uow, clock)
     val deleteAsset: DeleteAsset = DeleteAsset(assets, events, attachments, attachmentStorage, uow)
-
-    /** A link is a pointer, not a record, so it can be deleted — unless a tag still points at it. */
-    val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
 
     // Phase 2A — the maintenance journal.
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)

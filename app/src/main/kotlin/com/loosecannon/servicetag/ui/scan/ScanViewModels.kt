@@ -9,17 +9,13 @@ import com.loosecannon.nfc.tagcore.android.TagInspection
 import com.loosecannon.nfc.tagcore.android.TagIo
 import com.loosecannon.nfc.tagcore.android.TagRead
 import com.loosecannon.servicetag.core.model.Asset
-import com.loosecannon.servicetag.core.model.ExternalLink
-import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.core.nfc.NdefCodec
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.ports.AssetRepository
-import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.usecase.BindTag
-import com.loosecannon.servicetag.core.usecase.OpenLink
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.di.AppGraph
@@ -34,7 +30,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -47,7 +43,7 @@ private const val SUBSCRIPTION_GRACE_MS = 5_000L
  * The one mapping from a resolved scan to the route that shows it, shared by the foreground
  * scanner and the background dispatch trampoline so the two never drift apart in wording.
  *
- * `LaunchLink` has no route on purpose: a link tag launches its note and shows no sheet (R-7).
+ * A pre-split link tag takes the same route as any other row we hold: the pair, and one sheet.
  */
 internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
     is Resolution.OpenAsset -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
@@ -57,8 +53,17 @@ internal fun Resolution.asTagResult(): Route.TagResult = when (this) {
     is Resolution.NeedsNewerApp ->
         Route.TagResult(TagResultWire.FORMAT_NONE, "written by a newer ServiceTag (payload format $version)")
     is Resolution.NotOurs -> Route.TagResult(TagResultWire.FORMAT_NONE, describe(payload))
-    is Resolution.LaunchLink -> error("a link tag launches its note; it has no sheet (R-7)")
+    is Resolution.PreSplitLink -> Route.TagResult(TagResultWire.wordFor(tag.payloadFormat), tag.payloadKey)
 }
+
+/**
+ * The release's one new sentence (owner ruling 2026-09-18). It names the product that does own the
+ * job rather than only refusing: an owner holding a tag they wrote in 2025 needs to know where the
+ * note went, not merely that this app will not open it.
+ */
+internal const val PRE_SPLIT_LINK_SENTENCE: String =
+    "This tag points at a note link from before the product split. " +
+        "ServiceTag no longer opens links; NoteTag does."
 
 private fun describe(p: TagPayload): String = when (p) {
     TagPayload.Empty -> "empty tag"
@@ -73,9 +78,6 @@ data class ScanState(val reading: Boolean = false, val problem: String? = null)
 /** What a finished scan asks the screen to do; the screen owns the Activity, the ViewModel does not. */
 sealed interface ScanEvent {
     data class Show(val route: Route.TagResult) : ScanEvent
-
-    /** A link tag: launch the note straight away, with no sheet in between (R-7). */
-    data class Launch(val uri: String) : ScanEvent
 }
 
 /**
@@ -84,13 +86,12 @@ sealed interface ScanEvent {
  */
 class ScanViewModel(
     private val resolveTag: ResolveTag,
-    private val openLink: OpenLink,
     private val io: TagIo,
     private val codec: NdefCodec,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.resolveTag, graph.openLink, RealTagIo, graph.ndefCodec)
+    constructor(graph: AppGraph) : this(graph.resolveTag, RealTagIo, graph.ndefCodec)
 
     private val _state = MutableStateFlow(ScanState())
     val state: StateFlow<ScanState> = _state.asStateFlow()
@@ -109,10 +110,7 @@ class ScanViewModel(
             try {
                 val payload = withContext(ioDispatcher) { io.inspect(tag) }?.let(::classify)
                     ?: TagPayload.Malformed("this tag does not support NDEF")
-                when (val resolution = resolveTag.run(payload)) {
-                    is Resolution.LaunchLink -> launch(resolution.link.id)
-                    else -> _events.tryEmit(ScanEvent.Show(resolution.asTagResult()))
-                }
+                _events.tryEmit(ScanEvent.Show(resolveTag.run(payload).asTagResult()))
             } catch (e: Exception) {
                 // The class name and the stack are the log's; the user gets one thing to do (E2).
                 Log.w(TAG, "read failed", e)
@@ -138,16 +136,6 @@ class ScanViewModel(
         }
     }
 
-    private suspend fun launch(id: LinkId) {
-        when (val outcome = openLink.run(id)) {
-            is OpenLink.Outcome.Launch -> _events.tryEmit(ScanEvent.Launch(outcome.uri))
-            is OpenLink.Outcome.Refused ->
-                _events.tryEmit(ScanEvent.Show(Route.TagResult(TagResultWire.FORMAT_NONE, "link refused: ${outcome.reason}")))
-            is OpenLink.Outcome.Missing ->
-                _events.tryEmit(ScanEvent.Show(Route.TagResult(TagResultWire.FORMAT_NONE, "the link this tag pointed at no longer exists")))
-        }
-    }
-
     private companion object {
         const val TAG = "ScanViewModel"
     }
@@ -160,8 +148,8 @@ sealed interface TagResult {
     /** Known and bound: the sheet says so and the screen moves on without a tap (G1 §1.4). */
     data class OpensAsset(val tag: TagBinding, val asset: Asset) : TagResult
 
-    /** A link tag reached through a deep link rather than a scan; it still launches, no sheet. */
-    data class LaunchesLink(val uri: String) : TagResult
+    /** A tag bound to a pre-split note link: one sentence, and nothing to do (2.6). */
+    data class PreSplitLink(val tag: TagBinding) : TagResult
 
     data class Unregistered(val tag: TagBinding) : TagResult
     data class Revoked(val tag: TagBinding) : TagResult
@@ -174,7 +162,7 @@ sealed interface TagResult {
 }
 
 /** Everything the bind picker can point a tag at. "New asset…" is the screen's own row. */
-data class BindTargets(val assets: List<Asset> = emptyList(), val links: List<ExternalLink> = emptyList())
+data class BindTargets(val assets: List<Asset> = emptyList())
 
 /** Where the sheet goes once a bind is done: onto the asset it bound, or simply away. */
 sealed interface TagResultEvent {
@@ -191,15 +179,13 @@ sealed interface TagResultEvent {
 class TagResultViewModel(
     private val resolveTag: ResolveTag,
     private val bindTag: BindTag,
-    private val openLink: OpenLink,
     assets: AssetRepository,
-    links: LinkRepository,
     private val format: String,
     private val key: String,
 ) : ViewModel() {
 
     constructor(graph: AppGraph, format: String, key: String) :
-        this(graph.resolveTag, graph.bindTag, graph.openLink, graph.assets, graph.links, format, key)
+        this(graph.resolveTag, graph.bindTag, graph.assets, format, key)
 
     private val _state = MutableStateFlow<TagResult>(TagResult.Loading)
     val state: StateFlow<TagResult> = _state.asStateFlow()
@@ -207,10 +193,9 @@ class TagResultViewModel(
     private val _events = MutableSharedFlow<TagResultEvent>(replay = 0, extraBufferCapacity = 1)
     val events: SharedFlow<TagResultEvent> = _events.asSharedFlow()
 
-    val targets: StateFlow<BindTargets> =
-        combine(assets.observeAll(), links.observeAll()) { assetRows, linkRows ->
-            BindTargets(assets = assetRows, links = linkRows)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), BindTargets())
+    val targets: StateFlow<BindTargets> = assets.observeAll()
+        .map { BindTargets(assets = it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), BindTargets())
 
     init {
         viewModelScope.launch { resolve() }
@@ -225,7 +210,7 @@ class TagResultViewModel(
         }
         _state.value = when (val resolution = runCatching { resolveTag.run(payload) }.getOrNull()) {
             is Resolution.OpenAsset -> TagResult.OpensAsset(resolution.tag, resolution.asset)
-            is Resolution.LaunchLink -> launched(resolution.link)
+            is Resolution.PreSplitLink -> TagResult.PreSplitLink(resolution.tag)
             is Resolution.Unbound -> TagResult.Unregistered(resolution.tag)
             is Resolution.Revoked -> TagResult.Revoked(resolution.tag)
             is Resolution.UnknownV1 -> TagResult.NotInRecords(resolution.tagId.value)
@@ -235,13 +220,6 @@ class TagResultViewModel(
             null -> TagResult.NotOurs("this tag could not be resolved")
         }
     }
-
-    private suspend fun launched(link: ExternalLink): TagResult =
-        when (val outcome = openLink.run(link.id)) {
-            is OpenLink.Outcome.Launch -> TagResult.LaunchesLink(outcome.uri)
-            is OpenLink.Outcome.Refused -> TagResult.NotOurs("link refused: ${outcome.reason}")
-            is OpenLink.Outcome.Missing -> TagResult.NotOurs("the link this tag pointed at no longer exists")
-        }
 
     /**
      * Binds this tag to [target]. A v1 key that is not a canonical UUID is refused by `BindTag`,
@@ -271,7 +249,6 @@ class TagResultViewModel(
  */
 class WriteTagViewModel(
     assets: AssetRepository,
-    links: LinkRepository,
     target: TagTarget,
     label: String?,
     controllerFor: (CoroutineScope) -> TagWriteController,
@@ -279,7 +256,6 @@ class WriteTagViewModel(
 
     constructor(graph: AppGraph, target: TagTarget, label: String?) : this(
         graph.assets,
-        graph.links,
         target,
         label,
         { scope -> TagWriteController(graph, RealTagIo, target, label, scope) },
@@ -298,8 +274,7 @@ class WriteTagViewModel(
         viewModelScope.launch {
             val named = when (target) {
                 is TagTarget.AssetTarget -> assets.get(target.assetId)?.name
-                is TagTarget.LinkTarget -> links.get(target.linkId)?.label
-                TagTarget.None -> null
+                is TagTarget.LinkTarget, TagTarget.None -> null
             }
             if (named != null) _targetName.value = named
         }

@@ -8,7 +8,6 @@ import com.loosecannon.servicetag.core.model.AttachmentId
 import com.loosecannon.servicetag.core.model.AttachmentKind
 import com.loosecannon.servicetag.core.model.AttachmentMode
 import com.loosecannon.servicetag.core.model.AttachmentOwner
-import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.StorageProvider
 import kotlinx.coroutines.test.runTest
 import java.io.File
@@ -50,10 +49,7 @@ class Migration1To5Test {
 
                 // ...and they still resolve to each other through their foreign key columns.
                 assertEquals(listOf("t1"), db.nfcTagDao().forAsset("a1").map { it.id })
-                assertEquals(
-                    listOf(LinkId("l1")),
-                    RoomLinkRepository(db.externalLinkDao()).forAsset(AssetId("a1")).map { it.id },
-                )
+                assertEquals(listOf("l1"), db.externalLinkDao().forAsset("a1").map { it.id })
 
                 // The table v5 adds is there, empty, and takes a row against the carried asset.
                 val repo = RoomAttachmentRepository(db.attachmentDao())

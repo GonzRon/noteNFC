@@ -41,8 +41,6 @@ sealed interface Route : NavKey {
     ) : Route
     @Serializable data class EventDetail(val id: String) : Route
 
-    @Serializable data object Links : Route
-    @Serializable data class LinkDetail(val id: String) : Route
     @Serializable data object Scan : Route
     @Serializable data class TagResult(val format: String, val key: String) : Route
     @Serializable data class WriteTag(val targetKind: String, val targetId: String?, val label: String?) : Route
@@ -57,3 +55,12 @@ sealed interface Route : NavKey {
  * a slot in the primary navigation for something the app never asks the user to open.
  */
 val TopLevelRoutes: List<Route> = listOf(Route.Dashboard, Route.Assets)
+
+/**
+ * The target kinds this app writes. 2.6 removed "link": a serialised back stack or an old process
+ * can still carry `WriteTag("link", …)`, and it is refused at the nav boundary — no screen, no
+ * provisioned row — rather than inside the write screen.
+ */
+internal val SupportedWriteTargetKinds: Set<String> = setOf("asset", "none")
+
+internal fun Route.WriteTag.isSupported(): Boolean = targetKind in SupportedWriteTargetKinds

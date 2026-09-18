@@ -216,6 +216,10 @@ class RoomRepositoriesTest {
         )
     }
 
+    /**
+     * The partition queries are asked of the DAO now: 2.6 narrowed `LinkRepository` to what the
+     * backup path needs, and the table itself is a tombstone the DAO still describes in full.
+     */
     @Test
     fun linkRoundTripsAndPartitionsStandaloneFromOwned() = runTest {
         val db = inMemoryDb()
@@ -236,10 +240,10 @@ class RoomRepositoriesTest {
             links.upsert(owned)
             links.upsert(loose)
             assertEquals(owned, links.get(LinkId("l1")))
-            assertEquals(listOf(owned), links.forAsset(AssetId("a1")))
-            assertEquals(listOf(loose), links.standalone())
+            assertEquals(listOf("l1"), db.externalLinkDao().forAsset("a1").map { it.id })
+            assertEquals(listOf("l2"), db.externalLinkDao().standalone().map { it.id })
             assertEquals(2, links.all().size)
-            links.delete(LinkId("l2"))
+            db.externalLinkDao().delete("l2")
             assertNull(links.get(LinkId("l2")))
             links.deleteAll()
             assertEquals(emptyList<ExternalLink>(), links.all())

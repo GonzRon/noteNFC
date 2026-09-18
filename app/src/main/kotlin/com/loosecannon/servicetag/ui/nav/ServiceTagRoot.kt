@@ -22,8 +22,6 @@ import com.loosecannon.servicetag.ui.backup.BackupScreen
 import com.loosecannon.servicetag.ui.dashboard.DashboardScreen
 import com.loosecannon.servicetag.ui.journal.EventDetailScreen
 import com.loosecannon.servicetag.ui.journal.EventEntryScreen
-import com.loosecannon.servicetag.ui.links.LinkDetailScreen
-import com.loosecannon.servicetag.ui.links.LinksScreen
 import com.loosecannon.servicetag.ui.scan.ScanScreen
 import com.loosecannon.servicetag.ui.scan.TagResultSheet
 import com.loosecannon.servicetag.ui.scan.WriteTagScreen
@@ -76,7 +74,6 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
                     DashboardScreen(
                         graph = graph,
                         onOpenAsset = { backStack.add(Route.AssetDetail(it)) },
-                        onOpenLinks = { backStack.add(Route.Links) },
                         onNewAsset = { backStack.add(Route.AssetEdit(null)) },
                         onBackup = { backStack.add(Route.Backup) },
                         onSettings = { backStack.add(Route.Settings) },
@@ -100,7 +97,6 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
                         onEdit = { backStack.add(Route.AssetEdit(it)) },
                         onSetup = { backStack.add(Route.AssetSetup(it)) },
                         onWriteTag = { backStack.add(Route.WriteTag("asset", it, null)) },
-                        onOpenLinks = { backStack.add(Route.Links) },
                         onBackup = { backStack.add(Route.Backup) },
                         onLogEvent = { asset, profile ->
                             backStack.add(Route.EventEntry(asset, profile, null))
@@ -186,21 +182,6 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
                         onOpenSettings = { backStack.add(Route.Settings) },
                     )
                 }
-                entry<Route.Links> {
-                    LinksScreen(
-                        graph = graph,
-                        onOpenLink = { backStack.add(Route.LinkDetail(it)) },
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
-                entry<Route.LinkDetail> { key ->
-                    LinkDetailScreen(
-                        graph = graph,
-                        linkId = key.id,
-                        onBack = { backStack.removeLastOrNull() },
-                        onWriteTag = { backStack.add(it) },
-                    )
-                }
                 entry<Route.Scan> {
                     ScanScreen(
                         graph = graph,
@@ -222,7 +203,13 @@ fun ServiceTagRoot(graph: AppGraph, deepLinks: SharedFlow<Route>, snackbars: Sha
                     )
                 }
                 entry<Route.WriteTag> { key ->
-                    WriteTagScreen(graph = graph, key = key, onDone = { backStack.removeLastOrNull() })
+                    if (key.isSupported()) {
+                        WriteTagScreen(graph = graph, key = key, onDone = { backStack.removeLastOrNull() })
+                    } else {
+                        // 2.6: a link-kinded route is pre-split navigation. No screen, nothing
+                        // provisioned, nothing written — it simply leaves the stack.
+                        LaunchedEffect(key) { backStack.removeLastOrNull() }
+                    }
                 }
                 entry<Route.Backup> {
                     BackupScreen(graph = graph, onBack = { backStack.removeLastOrNull() })

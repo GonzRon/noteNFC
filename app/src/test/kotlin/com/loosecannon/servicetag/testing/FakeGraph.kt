@@ -25,7 +25,6 @@ import com.loosecannon.servicetag.core.usecase.DeleteAsset
 import com.loosecannon.servicetag.core.usecase.DeleteAttachment
 import com.loosecannon.servicetag.core.usecase.DeleteDefinition
 import com.loosecannon.servicetag.core.usecase.DeleteEvent
-import com.loosecannon.servicetag.core.usecase.DeleteLink
 import com.loosecannon.servicetag.core.usecase.DeleteProfile
 import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
@@ -123,8 +122,7 @@ class FakeGraph(
     )
     val ndefCodec: NdefCodec = NdefCodec(tagIdentity)
 
-    val provisionTag: ProvisionTag = ProvisionTag(tags, assets, links, uow, ids, clock)
-    val deleteLink: DeleteLink = DeleteLink(links, tags, uow)
+    val provisionTag: ProvisionTag = ProvisionTag(tags, assets, uow, ids, clock)
     val logEvent: LogEvent = LogEvent(events, definitions, profiles, assets, uow, ids, clock)
     val updateEvent: UpdateEvent = UpdateEvent(events, definitions, profiles, uow, ids, clock)
     val deleteEvent: DeleteEvent = DeleteEvent(events, attachments, attachmentStorage, uow)

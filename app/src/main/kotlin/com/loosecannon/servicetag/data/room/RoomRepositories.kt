@@ -87,21 +87,16 @@ class RoomTagRepository(private val dao: NfcTagDao) : TagRepository {
         dao.observeForLink(linkId.value).map { list -> list.map { it.toDomain() } }
 }
 
+/**
+ * The tombstone adapter (2.6): exactly the four members `LinkRepository` still declares, so the
+ * only way above the DAO to reach `external_link` is the backup path. The display queries this
+ * class used to expose live on [ExternalLinkDao] and nowhere else.
+ */
 class RoomLinkRepository(private val dao: ExternalLinkDao) : LinkRepository {
     override suspend fun upsert(link: ExternalLink) = dao.upsert(link.toEntity())
     override suspend fun get(id: LinkId): ExternalLink? = dao.byId(id.value)?.toDomain()
-
-    override suspend fun forAsset(assetId: AssetId): List<ExternalLink> =
-        dao.forAsset(assetId.value).map { it.toDomain() }
-
-    override suspend fun standalone(): List<ExternalLink> = dao.standalone().map { it.toDomain() }
     override suspend fun all(): List<ExternalLink> = dao.all().map { it.toDomain() }
-    override suspend fun delete(id: LinkId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()
-    override fun observeAll(): Flow<List<ExternalLink>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
-
-    override fun observeForAsset(assetId: AssetId): Flow<List<ExternalLink>> =
-        dao.observeForAsset(assetId.value).map { list -> list.map { it.toDomain() } }
 }
 
 /**

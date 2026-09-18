@@ -3,9 +3,6 @@ package com.loosecannon.servicetag.data.room
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
-import com.loosecannon.servicetag.core.model.ExternalLink
-import com.loosecannon.servicetag.core.model.LinkId
-import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -30,15 +27,6 @@ class RepositoryFlowsTest {
         payloadFormat = PayloadFormat.V1,
         payloadKey = "key-$id",
         target = assetId?.let { TagTarget.AssetTarget(AssetId(it)) } ?: TagTarget.None,
-        createdAt = 1L,
-        updatedAt = 1L,
-    )
-
-    private fun link(id: String, label: String) = ExternalLink(
-        id = LinkId(id),
-        kind = LinkKind.WEB,
-        label = label,
-        uri = "https://example.invalid/$id",
         createdAt = 1L,
         updatedAt = 1L,
     )
@@ -89,23 +77,4 @@ class RepositoryFlowsTest {
         }
     }
 
-    @Test
-    fun linksObserveAllEmitsOnDelete() = runTest {
-        val db = inMemoryDb()
-        try {
-            val repo = RoomLinkRepository(db.externalLinkDao())
-            repo.upsert(link("l1", "Manual"))
-            repo.upsert(link("l2", "Warranty"))
-
-            val first = repo.observeAll().first()
-            assertEquals(setOf("l1", "l2"), first.map { it.id.value }.toSet())
-
-            repo.delete(LinkId("l1"))
-
-            val second = repo.observeAll().first()
-            assertEquals(listOf("l2"), second.map { it.id.value })
-        } finally {
-            db.close()
-        }
-    }
 }

@@ -23,7 +23,6 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.ServiceTagApp
-import com.loosecannon.servicetag.ShareActivity
 import com.loosecannon.servicetag.ui.backup.BackupSetSink
 import com.loosecannon.servicetag.ui.backup.BackupViewModel
 import java.io.ByteArrayOutputStream
@@ -225,34 +224,6 @@ class AppSmokeTest {
     }
 }
 
-/**
- * The share sheet's own task (D12 §9). `ShareActivity` needs a real `EXTRA_TEXT`, so it is
- * launched from an explicit intent and asserted through an empty Compose rule — the rule finds
- * whatever composition is on screen, whichever activity owns it.
- */
-class ShareActivitySmokeTest {
-
-    @get:Rule val rule = createEmptyComposeRule()
-
-    @Before fun freshInstall() = clearInstall()
-
-    @Test fun sharedWebLinkShowsTheCard() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val intent = Intent(context, ShareActivity::class.java)
-            .setAction(Intent.ACTION_SEND)
-            .setType("text/plain")
-            .putExtra(Intent.EXTRA_TEXT, "Title\nhttps://example.invalid/x")
-
-        ActivityScenario.launch<ShareActivity>(intent).use {
-            // LinkKind.WEB reads "Web page"; the card shouts it (D12 §9).
-            rule.awaitText("WEB PAGE")
-            rule.onNodeWithText("WEB PAGE").assertIsDisplayed()
-            rule.onNodeWithText("Title").assertIsDisplayed()
-            rule.onNodeWithText("https://example.invalid/x").assertIsDisplayed()
-            rule.onNodeWithText("Write to a new tag").assertIsDisplayed()
-        }
-    }
-}
 
 /**
  * A deep link opened while the app is closed: the cold-start path through `MainActivity.onCreate`.

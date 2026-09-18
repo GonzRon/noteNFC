@@ -73,7 +73,7 @@ class AssetViewModelsTest {
 
     /** The detail model takes twelve collaborators; every test wants the same twelve off the graph. */
     private fun detailModel(id: AssetId) = AssetDetailViewModel(
-        graph.assets, graph.tags, graph.links,
+        graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.clock, id,
@@ -143,7 +143,6 @@ class AssetViewModelsTest {
         val state = vm.state.first { it != null && it.tags.isNotEmpty() }!!
         assertEquals("Pool pump", state.asset.name)
         assertEquals(listOf("t-pump"), state.tags.map { it.id.value })
-        assertTrue(state.links.isEmpty())
 
         vm.archive()
         assertEquals(AssetStatus.ARCHIVED, vm.state.first { it?.asset?.status == AssetStatus.ARCHIVED }!!.asset.status)

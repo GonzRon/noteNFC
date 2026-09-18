@@ -80,7 +80,6 @@ class MainActivity : ComponentActivity() {
         val uri = intent.data
         return when (val link = DeepLinkRoute.parse(uri?.scheme, uri?.host, uri?.pathSegments.orEmpty())) {
             is DeepLink.Asset -> Route.AssetDetail(link.id.value)
-            is DeepLink.Link -> Route.LinkDetail(link.id.value)
             is DeepLink.Tag -> when (val payload = link.payload) {
                 is TagPayload.V1 -> Route.TagResult(TagResultWire.formatOf(payload), payload.tagId.value)
                 else -> malformed()

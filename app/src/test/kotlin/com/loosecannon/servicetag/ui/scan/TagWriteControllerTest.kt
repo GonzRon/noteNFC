@@ -73,7 +73,7 @@ class TagWriteControllerTest {
     private fun TestScope.controller(target: TagTarget = TagTarget.None, label: String? = null): TagWriteController {
         val scope = CoroutineScope(backgroundScope.coroutineContext + dispatcher)
         return TagWriteController(
-            provisionTag = ProvisionTag(provision, graph.assets, graph.links, graph.uow, graph.ids, graph.clock),
+            provisionTag = ProvisionTag(provision, graph.assets, graph.uow, graph.ids, graph.clock),
             appScope = scope,
             io = io,
             codec = graph.ndefCodec,

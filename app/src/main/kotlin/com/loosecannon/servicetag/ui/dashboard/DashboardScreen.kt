@@ -52,17 +52,12 @@ import com.loosecannon.servicetag.ui.theme.PlateShape
  * the other three sections, arrive in Phase 3. Scan has no FAB of its own to replace (G1 §1.2
  * "Navigation") — [onScan] pushes the scan screen from the empty-state action, same as Settings
  * does with its own Read / inspect tag row.
- *
- * [onOpenLinks] is not wired to anything on this screen yet — links reach the dashboard with the
- * ledger in Phase 3 — but the route already knows how to answer it, so the parameter stays.
  */
-@Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     graph: AppGraph,
     onOpenAsset: (String) -> Unit,
-    onOpenLinks: () -> Unit,
     onNewAsset: () -> Unit,
     onBackup: () -> Unit,
     onSettings: () -> Unit,

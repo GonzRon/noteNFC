@@ -1,9 +1,6 @@
 package com.loosecannon.servicetag.ui.dashboard
 
 import com.loosecannon.servicetag.core.model.Asset
-import com.loosecannon.servicetag.core.model.ExternalLink
-import com.loosecannon.servicetag.core.model.LinkId
-import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.testing.FakeGraph
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -46,19 +43,7 @@ class DashboardViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = DashboardViewModel(graph.assets, graph.links, graph.prefs)
-
-    /** A link with no asset behind it: data the backup carries, and the only data on this install. */
-    private fun standaloneLink() = ExternalLink(
-        id = LinkId("link-1"),
-        assetId = null,
-        kind = LinkKind.WEB,
-        label = "Manual",
-        uri = "https://example.invalid/manual",
-        createdAt = 1L,
-        lastOpenedAt = null,
-        updatedAt = 1L,
-    )
+    private fun viewModel() = DashboardViewModel(graph.assets, graph.prefs)
 
     @Test fun needsBackupIsTrueUntilPrefsSayOtherwise() = runTest {
         val vm = viewModel()
@@ -77,19 +62,10 @@ class DashboardViewModelTest {
         assertEquals(9_000L, after.lastBackupAt)
     }
 
-    @Test fun emptyStoreNeverNeedsABackup() = runTest {
-        val vm = viewModel()
-        backgroundScope.launch { vm.state.collect() }
-
-        // Nothing has ever been backed up, and there is nothing to back up: no nudge. A fresh
-        // install is offered the empty state, not a chore.
-        assertNull(graph.prefs.lastBackupAt)
-        assertFalse(vm.state.first { it.assets.isEmpty() }.needsBackup)
-
-        // The same collector goes the other way the moment there is something to lose — which is
-        // also what proves the `false` above was computed and not just the initial state.
-        graph.links.upsert(standaloneLink())
-        assertTrue(vm.state.first { it.needsBackup }.assets.isEmpty())
+    @Test fun anInstallWithNothingInItIsNotNudged() = runTest {
+        val model = viewModel()
+        model.refresh()
+        assertFalse(model.state.value.needsBackup)
     }
 
     @Test fun assetsListedActiveOnly() = runTest {

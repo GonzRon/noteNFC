@@ -9,13 +9,10 @@ import android.widget.Toast
 import com.loosecannon.nfc.tagcore.android.ndefRecords
 import com.loosecannon.servicetag.MainActivity
 import com.loosecannon.servicetag.ServiceTagApp
-import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.nfc.TagPayload
 import com.loosecannon.servicetag.core.nfc.TagRoute
-import com.loosecannon.servicetag.core.usecase.OpenLink
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.ui.scan.TagResultWire
 import com.loosecannon.servicetag.ui.scan.asTagResult
 import kotlinx.coroutines.MainScope
@@ -27,9 +24,9 @@ import kotlinx.coroutines.launch
  * here through the one `NDEF_DISCOVERED` filter; only `EXTRA_NDEF_MESSAGES`, `EXTRA_TAG` and the
  * data URI are read — every other extra is ignored.
  *
- * It has no UI at all: a link tag launches straight away (R-7) and everything else is handed to
- * `MainActivity` as a (format, key) pair, so the single activity owns every pixel the app draws.
- * The translucent theme is what keeps a window from flashing on the way through.
+ * It has no UI at all: everything is handed to `MainActivity` as a (format, key) pair, so the
+ * single activity owns every pixel the app draws. The translucent theme is what keeps a window
+ * from flashing on the way through.
  */
 class NfcDispatchActivity : Activity() {
 
@@ -83,28 +80,9 @@ class NfcDispatchActivity : Activity() {
     private fun tagRoute(uri: Uri?): TagPayload? =
         TagRoute.parse(uri?.scheme, uri?.host, uri?.pathSegments.orEmpty())
 
-    /**
-     * A link tag launches its note here and now (R-7); everything else becomes the very route the
-     * foreground scanner would have produced, so the two paths say the same words about a tag.
-     */
-    private fun route(r: Resolution) = when (r) {
-        is Resolution.LaunchLink -> launch(r.link)
-        else -> r.asTagResult().let { handOff(it.format, it.key) }
-    }
-
-    private fun launch(link: ExternalLink) {
-        scope.launch {
-            try {
-                when (val out = graph.openLink.run(link.id)) {
-                    is OpenLink.Outcome.Launch -> { LinkLauncher.open(this@NfcDispatchActivity, out.uri); finish() }
-                    is OpenLink.Outcome.Refused -> handOff(TagResultWire.FORMAT_NONE, "link refused: ${out.reason}")
-                    is OpenLink.Outcome.Missing -> handOff(TagResultWire.FORMAT_NONE, "the link this tag pointed at no longer exists")
-                }
-            } catch (e: Exception) {
-                handOff(TagResultWire.FORMAT_NONE, "could not open the link: ${e.javaClass.simpleName}")
-            }
-        }
-    }
+    /** Every resolution becomes the very route the foreground scanner would have produced, so the
+     *  two paths say the same words about a tag. Nothing is launched from here (2.6). */
+    private fun route(r: Resolution) = r.asTagResult().let { handOff(it.format, it.key) }
 
     /** The trampoline's only exit: the single activity renders the result, this one never does. */
     private fun handOff(format: String, key: String) {

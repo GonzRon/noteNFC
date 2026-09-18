@@ -13,7 +13,6 @@ import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.AssetTree
 import com.loosecannon.servicetag.core.model.EventProfile
-import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.Season as SeasonWindow
@@ -23,7 +22,6 @@ import com.loosecannon.servicetag.core.ports.AssetRepository
 import com.loosecannon.servicetag.core.ports.Clock
 import com.loosecannon.servicetag.core.ports.DefinitionRepository
 import com.loosecannon.servicetag.core.ports.EventRepository
-import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.ProfileRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 import com.loosecannon.servicetag.core.usecase.ApplyResult
@@ -186,7 +184,6 @@ sealed interface DetailPrompt {
 data class AssetDetailState(
     val asset: Asset,
     val tags: List<TagBinding> = emptyList(),
-    val links: List<ExternalLink> = emptyList(),
     val definitions: List<MeasurementDefinition> = emptyList(),
     /** Unarchived only, in `sortOrder`: these are the quick actions the screen offers. */
     val profiles: List<EventProfile> = emptyList(),
@@ -216,14 +213,13 @@ data class AssetDetailState(
  * yet" and "gone" both read as a null state, and only the second one should send the user back —
  * a deep link or a restored back stack can name an asset a backup import has since replaced.
  *
- * Six flows feed the state and `combine` takes five, so the journal's three are folded into one
+ * Five flows feed the state and `combine` takes three, so the journal's three are folded into one
  * first. `readings` is computed here rather than stored: editing or deleting an event changes the
  * answer on the next emission with no cache to invalidate.
  */
 class AssetDetailViewModel(
     private val assets: AssetRepository,
     tags: TagRepository,
-    links: LinkRepository,
     private val definitions: DefinitionRepository,
     profiles: ProfileRepository,
     private val events: EventRepository,
@@ -236,7 +232,7 @@ class AssetDetailViewModel(
 ) : ViewModel() {
 
     constructor(graph: AppGraph, id: String) : this(
-        graph.assets, graph.tags, graph.links,
+        graph.assets, graph.tags,
         graph.definitions, graph.profiles, graph.events,
         graph.archiveAsset, graph.retireAsset, graph.deleteAsset,
         graph.applyTemplate, graph.clock, AssetId(id),
@@ -257,14 +253,13 @@ class AssetDetailViewModel(
     ) { defs, profileRows, eventRows -> Journal(defs, profileRows, eventRows) }
 
     val state: StateFlow<AssetDetailState?> =
-        combine(rows, tags.observeForAsset(id), links.observeForAsset(id), journal) { all, tagRows, linkRows, j ->
+        combine(rows, tags.observeForAsset(id), journal) { all, tagRows, j ->
             val row = all.firstOrNull { it.id == id } ?: return@combine null
             val today = clock.nowMillis().asLocalDate(zone)
             val parent = row.parentAssetId?.let { parentId -> all.firstOrNull { it.id == parentId } }
             AssetDetailState(
                 asset = row,
                 tags = tagRows,
-                links = linkRows,
                 definitions = j.definitions,
                 // An archived profile keeps its history but stops offering a quick action.
                 profiles = j.profiles.filter { p -> p.archivedAt == null },

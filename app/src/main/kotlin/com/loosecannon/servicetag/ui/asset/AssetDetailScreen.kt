@@ -57,7 +57,6 @@ import com.loosecannon.servicetag.core.model.DefinitionId
 import com.loosecannon.servicetag.core.model.DefinitionKind
 import com.loosecannon.servicetag.core.model.EventKind
 import com.loosecannon.servicetag.core.model.EventProfile
-import com.loosecannon.servicetag.core.model.ExternalLink
 import com.loosecannon.servicetag.core.model.MeasurementDefinition
 import com.loosecannon.servicetag.core.model.Money
 import com.loosecannon.servicetag.core.model.TagBinding
@@ -109,7 +108,6 @@ fun AssetDetailScreen(
     onEdit: (String) -> Unit,
     onSetup: (String) -> Unit,
     onWriteTag: (String) -> Unit,
-    onOpenLinks: () -> Unit,
     onBackup: () -> Unit,
     onLogEvent: (assetId: String, profileId: String) -> Unit,
     onOpenEvent: (eventId: String) -> Unit,
@@ -215,7 +213,6 @@ fun AssetDetailScreen(
                     onEdit = onEdit,
                     onSetup = onSetup,
                     onWriteTag = onWriteTag,
-                    onOpenLinks = onOpenLinks,
                     onBackup = onBackup,
                     onSetUp = { pickingTemplate = true },
                 ),
@@ -229,7 +226,6 @@ fun AssetDetailScreen(
             )
             ServiceRecordSection(current.events, current.definitions, onOpenEvent)
             TagsSection(current.tags)
-            LinksSection(current.links)
             AttachmentsSection(
                 graph = graph,
                 owner = AttachmentOwner.OfAsset(current.asset.id),
@@ -257,13 +253,11 @@ private fun detailActions(
     onEdit: (String) -> Unit,
     onSetup: (String) -> Unit,
     onWriteTag: (String) -> Unit,
-    onOpenLinks: () -> Unit,
     onBackup: () -> Unit,
     onSetUp: () -> Unit,
 ): List<ActionSpec> {
     val ledger = ServiceTagIcons.History
     val nfc = ServiceTagIcons.NfcTag
-    val documents = ServiceTagIcons.Description
     val backup = ServiceTagIcons.Backup
     return buildList {
         profiles.forEach { profile ->
@@ -277,7 +271,6 @@ private fun detailActions(
         add(ActionSpec("Edit", Icons.Outlined.Edit, outlined = true) { onEdit(assetId) })
         // What this asset measures and what can be logged against it, both editable (spec §9).
         add(ActionSpec("Readings & actions", ServiceTagIcons.Speed, outlined = true) { onSetup(assetId) })
-        add(ActionSpec("Links", documents, outlined = false, onClick = onOpenLinks))
         add(ActionSpec("Backup", backup, outlined = false, onClick = onBackup))
         if (bare) add(ActionSpec("Set up from template", Icons.Outlined.Add, outlined = true, onClick = onSetUp))
     }
@@ -712,33 +705,6 @@ private fun TagsSection(tags: List<TagBinding>) {
                 null
             },
         )
-    }
-}
-
-@Composable
-private fun LinksSection(links: List<ExternalLink>) {
-    SectionHeader(title = "Links")
-    if (links.isEmpty()) {
-        QuietLine("No links yet")
-        return
-    }
-    Column {
-        links.forEach { link ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = link.label,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = link.kind.name.lowercase().replaceFirstChar { it.uppercase() },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
     }
 }
 

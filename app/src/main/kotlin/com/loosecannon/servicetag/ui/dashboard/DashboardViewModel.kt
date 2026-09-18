@@ -6,7 +6,6 @@ import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetStatus
 import com.loosecannon.servicetag.core.model.isRetired
 import com.loosecannon.servicetag.core.ports.AssetRepository
-import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,28 +42,24 @@ data class DashboardState(
  */
 class DashboardViewModel(
     assets: AssetRepository,
-    links: LinkRepository,
     private val prefs: AppPrefs,
 ) : ViewModel() {
 
-    constructor(graph: AppGraph) : this(graph.assets, graph.links, graph.prefs)
+    constructor(graph: AppGraph) : this(graph.assets, graph.prefs)
 
     private val refreshes = MutableStateFlow(0)
 
     val state: StateFlow<DashboardState> =
-        combine(assets.observeAll(), links.observeAll(), refreshes) { rows, linkRows, _ ->
+        combine(assets.observeAll(), refreshes) { rows, _ ->
             val last = prefs.lastBackupAt
             val active = rows.filter { it.status == AssetStatus.ACTIVE }
             val inService = active.filterNot { it.isRetired }
             DashboardState(
-                // CURRENT is the section for assets in service. A retired asset is out of service
-                // exactly as an archived one is (spec §7), so it is not in it either — but it is
-                // still something a backup would lose, which is why the nudge below counts it.
                 assets = inService,
                 // An empty install has nothing to lose, and a nudge over an empty dashboard is
                 // noise: the offer only means something once there is something to survive the
-                // phone change. Links count — a standalone link is data the backup carries too.
-                needsBackup = last == null && (active.isNotEmpty() || linkRows.isNotEmpty()),
+                // phone change.
+                needsBackup = last == null && active.isNotEmpty(),
                 lastBackupAt = last,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_GRACE_MS), DashboardState())

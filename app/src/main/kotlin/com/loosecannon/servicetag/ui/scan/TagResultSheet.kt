@@ -1,6 +1,5 @@
 package com.loosecannon.servicetag.ui.scan
 
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,9 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.core.model.TagStatus
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
-import com.loosecannon.servicetag.ui.links.host
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
 import com.loosecannon.servicetag.ui.theme.ControlShape
@@ -83,7 +80,6 @@ fun TagResultSheet(
         viewModel(key = "$format/$key") { TagResultViewModel(graph, format, key) }
     val state by model.state.collectAsStateWithLifecycle()
     val targets by model.targets.collectAsStateWithLifecycle()
-    val activity = LocalActivity.current
     var picking by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
 
@@ -115,13 +111,15 @@ fun TagResultSheet(
                 }
             }
 
-            is TagResult.LaunchesLink -> {
-                // A link tag launches its note and shows no sheet at all (R-7).
-                LaunchedEffect(result) {
-                    activity?.let { LinkLauncher.open(it, result.uri) }
-                    onDismiss()
-                }
-            }
+            is TagResult.PreSplitLink -> NfcSheet(
+                eyebrow = "Tag detected",
+                accent = ServiceTagTheme.semanticColors.dueSoon.foreground,
+                border = ServiceTagTheme.semanticColors.dueSoon.foreground,
+                glyph = Icons.Outlined.Info,
+                sentence = PRE_SPLIT_LINK_SENTENCE,
+                identifier = result.tag.identityLine(),
+                actions = { TextAction("Cancel", onDismiss) },
+            )
 
             is TagResult.Unregistered -> NfcSheet(
                 eyebrow = "Unregistered tag",
@@ -132,7 +130,7 @@ fun TagResultSheet(
                 identifier = result.tag.identityLine(),
                 problem = problem,
                 actions = {
-                    FilledAction("Bind to asset or note") { picking = true }
+                    FilledAction("Bind to asset") { picking = true }
                     TextAction("Cancel", onDismiss)
                 },
             )
@@ -146,7 +144,7 @@ fun TagResultSheet(
                 identifier = result.tag.identityLine(),
                 problem = problem,
                 actions = {
-                    FilledAction("Bind to asset or note") { picking = true }
+                    FilledAction("Bind to asset") { picking = true }
                     TextAction("Cancel", onDismiss)
                 },
             )
@@ -160,7 +158,7 @@ fun TagResultSheet(
                 identifier = identityLine(result.tagId),
                 problem = problem,
                 actions = {
-                    FilledAction("Bind to asset or note") { picking = true }
+                    FilledAction("Bind to asset") { picking = true }
                     OutlinedAction("Write a new tag over it") { onWriteTag(Route.WriteTag("none", null, null)) }
                     TextAction("Cancel", onDismiss)
                 },
@@ -285,8 +283,8 @@ internal fun ColumnScope.TextAction(label: String, onClick: () -> Unit) {
 }
 
 /**
- * Where a tag may point: an asset, a saved link, or an asset that does not exist yet — and for
- * that last one the honest answer is to go and make it, then scan the tag again.
+ * Where a tag may point: an asset, or an asset that does not exist yet — and for that last one
+ * the honest answer is to go and make it, then scan the tag again.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -304,7 +302,7 @@ private fun BindTargetPicker(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             PickerRow(title = "New asset…", detail = "Create it, then scan this tag again", onClick = onNewAsset)
-            if (targets.assets.isEmpty() && targets.links.isEmpty()) {
+            if (targets.assets.isEmpty()) {
                 QuietLine("Nothing to bind to yet")
             }
             targets.assets.forEach { asset ->
@@ -312,14 +310,6 @@ private fun BindTargetPicker(
                     title = asset.name,
                     detail = asset.category.ifBlank { "Asset" },
                     onClick = { onPick(TagTarget.AssetTarget(asset.id)) },
-                )
-            }
-            targets.links.forEach { link ->
-                PickerRow(
-                    title = link.label,
-                    detail = link.host(),
-                    mono = true,
-                    onClick = { onPick(TagTarget.LinkTarget(link.id)) },
                 )
             }
         }

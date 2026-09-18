@@ -42,7 +42,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.nfc.tagcore.android.NfcReaderModeSession
 import com.loosecannon.nfc.tagcore.android.NfcTagHandle
 import com.loosecannon.servicetag.di.AppGraph
-import com.loosecannon.servicetag.links.LinkLauncher
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
 import com.loosecannon.servicetag.ui.components.QuietLine
 import com.loosecannon.servicetag.ui.nav.Route
@@ -55,8 +54,7 @@ private const val BREATH_MILLIS = 3_200
 /**
  * Foreground reader-mode scanning (D3 §9, G1 §1.4). The only `tertiaryContainer` surface in the
  * app sits here and the halo is the app's only animation; what a tag turns out to be is decided by
- * `ResolveTag` and shown on the result sheet — except a link tag, which launches its note with no
- * sheet at all (R-7).
+ * `ResolveTag` and shown on the result sheet —
  *
  * Reached as a pushed destination (Settings' Read / inspect tag row, or the dashboard's empty-state
  * action), never a tab (D12 §16 correction), so it always needs a way back.
@@ -82,11 +80,10 @@ fun ScanScreen(
         onPauseOrDispose { session?.stop() }
     }
 
-    LaunchedEffect(model, activity) {
+    LaunchedEffect(model) {
         model.events.collect { event ->
             when (event) {
                 is ScanEvent.Show -> onResolved(event.route)
-                is ScanEvent.Launch -> activity?.let { LinkLauncher.open(it, event.uri) }
             }
         }
     }

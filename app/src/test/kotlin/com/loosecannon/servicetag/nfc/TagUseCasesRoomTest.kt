@@ -12,7 +12,6 @@ import com.loosecannon.servicetag.core.usecase.ProvisionTag
 import com.loosecannon.servicetag.core.usecase.ResolveTag
 import com.loosecannon.servicetag.core.usecase.Resolution
 import com.loosecannon.servicetag.data.room.RoomAssetRepository
-import com.loosecannon.servicetag.data.room.RoomLinkRepository
 import com.loosecannon.servicetag.data.room.RoomTagRepository
 import com.loosecannon.servicetag.data.room.RoomUnitOfWork
 import com.loosecannon.servicetag.data.room.inMemoryDb
@@ -43,11 +42,10 @@ class TagUseCasesRoomTest {
         try {
             val assets = RoomAssetRepository(db.assetDao())
             val tags = RoomTagRepository(db.nfcTagDao())
-            val links = RoomLinkRepository(db.externalLinkDao())
             val uow = RoomUnitOfWork(db)
             // two clocks, so `lastScannedAt` cannot pass by coinciding with the write time
-            val provision = ProvisionTag(tags, assets, links, uow, UuidGenerator, Clock { 42L })
-            val resolve = ResolveTag(tags, assets, links, uow, Clock { 43L })
+            val provision = ProvisionTag(tags, assets, uow, UuidGenerator, Clock { 42L })
+            val resolve = ResolveTag(tags, assets, uow, Clock { 43L })
 
             uow.write { assets.upsert(Asset(AssetId("a1"), "Hot tub", createdAt = 1L, updatedAt = 1L)) }
             val row = provision.begin(TagTarget.AssetTarget(AssetId("a1")), "lid")
@@ -72,9 +70,8 @@ class TagUseCasesRoomTest {
         try {
             val assets = RoomAssetRepository(db.assetDao())
             val tags = RoomTagRepository(db.nfcTagDao())
-            val links = RoomLinkRepository(db.externalLinkDao())
             val uow = RoomUnitOfWork(db)
-            val provision = ProvisionTag(tags, assets, links, uow, UuidGenerator, Clock { 1L })
+            val provision = ProvisionTag(tags, assets, uow, UuidGenerator, Clock { 1L })
             val spare = provision.begin(TagTarget.None, null)
             val written = provision.complete(provision.begin(TagTarget.None, null).id, null)
             provision.abandon(spare.id)

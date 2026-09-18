@@ -3,29 +3,8 @@
     <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
-    <!-- Handler-present checks for the outbound link allowlist (D3 §10; API 30+ package visibility). -->
     <queries>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="joplin" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="obsidian" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="logseq" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="http" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-        <!-- "Open with" for an attachment: is there anything on this device that can view it? -->
+        <!-- "Open with" for an attachment: is there anything on this device that can view it? (API 30+ package visibility) -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="content" android:mimeType="*/*" />
@@ -49,28 +28,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- servicetag://asset|link|tag: navigation only, validated by shape then by existence. -->
+            <!-- servicetag://asset|tag: navigation only, validated by shape then by existence. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="servicetag" android:host="asset" />
-                <data android:scheme="servicetag" android:host="link" />
                 <data android:scheme="servicetag" android:host="tag" />
-            </intent-filter>
-        </activity>
-
-        <!-- Share a note link from a notes app: its own task, never in recents. -->
-        <activity
-            android:name="com.loosecannon.servicetag.ShareActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.ServiceTag">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 

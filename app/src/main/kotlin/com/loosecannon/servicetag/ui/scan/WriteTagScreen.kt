@@ -35,7 +35,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.nfc.tagcore.android.NfcReaderModeSession
 import com.loosecannon.nfc.tagcore.android.NfcTagHandle
 import com.loosecannon.servicetag.core.model.AssetId
-import com.loosecannon.servicetag.core.model.LinkId
 import com.loosecannon.servicetag.core.model.TagTarget
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -50,8 +49,8 @@ import com.loosecannon.servicetag.ui.theme.PlateShape
  * read first, ask before replacing anything, write off the main thread, read back and compare,
  * and lock — if the user armed it — only once the read-back has proved what is on the tag.
  *
- * The screen is hosted both by the nav shell and by `ShareActivity`, so it owns nothing but its
- * own reader-mode session; every decision belongs to [TagWriteController].
+ * The screen is hosted by the nav shell, so it owns nothing but its own reader-mode session;
+ * every decision belongs to [TagWriteController].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -285,6 +284,5 @@ private fun NfcAvailabilityLine(session: NfcReaderModeSession?) {
 /** The route carries ids, never objects; this is the one place they become a [TagTarget] again. */
 internal fun Route.WriteTag.target(): TagTarget = when (targetKind) {
     "asset" -> targetId?.let { TagTarget.AssetTarget(AssetId(it)) } ?: TagTarget.None
-    "link" -> targetId?.let { TagTarget.LinkTarget(LinkId(it)) } ?: TagTarget.None
     else -> TagTarget.None
 }

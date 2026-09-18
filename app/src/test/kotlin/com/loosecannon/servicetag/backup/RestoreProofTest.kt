@@ -245,8 +245,8 @@ class RestoreProofTest {
             val standalone = before.links.single { it.assetId == null }
             assertEquals(1, g2.tags.forLink(standalone.id).size)
             assertEquals(TagId("tag-on-manual"), g2.tags.forLink(standalone.id).single().id)
-            assertEquals(1, g2.links.forAsset(AssetId("asset-furnace")).size)
-            assertEquals(listOf(LinkId("link-standalone")), g2.links.standalone().map { it.id })
+            assertEquals(1, g2.db.externalLinkDao().forAsset("asset-furnace").size)
+            assertEquals(listOf("link-standalone"), g2.db.externalLinkDao().standalone().map { it.id })
             assertEquals(TagTarget.None, g2.tags.get(TagId("tag-spare"))!!.target)
             // The payload lookup finds the furnace's row: (format, key) survived as a pair, and
             // the row it names is still pointing at the asset it was bound to.

@@ -45,9 +45,8 @@ import org.junit.Test
  *   is `TagIdentityDispatchTest.theRetiredExternalTypeResolvesToNothingOfOurs`'s claim, not this
  *   class's.
  * - `NfcSheet` shouts its eyebrow (`eyebrow.uppercase()`, G1 §1.4), so the rows assert the
- *   uppercase form the tree actually carries, the way `ShareActivitySmokeTest` asserts "WEB PAGE",
- *   and each not-ours row also asserts the `QuietLine(result.reason)` prose that tells the two
- *   refusals apart.
+ *   uppercase form the tree actually carries, and each not-ours row also asserts the
+ *   `QuietLine(result.reason)` prose that tells the two refusals apart.
  */
 class NfcIdentityDeviceProofTest {
 

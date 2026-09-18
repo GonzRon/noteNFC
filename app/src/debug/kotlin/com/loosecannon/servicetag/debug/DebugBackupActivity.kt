@@ -15,9 +15,6 @@ import com.loosecannon.servicetag.backup.SafBackupSetWriter
 import com.loosecannon.servicetag.core.model.Asset
 import com.loosecannon.servicetag.core.model.AssetId
 import com.loosecannon.servicetag.core.model.AssetStatus
-import com.loosecannon.servicetag.core.model.ExternalLink
-import com.loosecannon.servicetag.core.model.LinkId
-import com.loosecannon.servicetag.core.model.LinkKind
 import com.loosecannon.servicetag.core.model.PayloadFormat
 import com.loosecannon.servicetag.core.model.TagBinding
 import com.loosecannon.servicetag.core.model.TagId
@@ -67,7 +64,6 @@ class DebugBackupActivity : Activity() {
         val g = graph
         val now = g.clock.nowMillis()
         val assetIds = List(2) { AssetId(g.ids.newId()) }
-        val linkIds = List(2) { LinkId(g.ids.newId()) }
 
         g.uow.write {
             assetIds.forEachIndexed { i, id ->
@@ -84,32 +80,7 @@ class DebugBackupActivity : Activity() {
                     ),
                 )
             }
-            // one link belongs to the first asset, one stands alone
-            g.links.upsert(
-                ExternalLink(
-                    id = linkIds[0],
-                    assetId = assetIds[0],
-                    kind = LinkKind.JOPLIN,
-                    label = "Service log",
-                    uri = "joplin://x-callback-url/openNote?id=${g.ids.newId()}",
-                    createdAt = now,
-                    lastOpenedAt = null,
-                    updatedAt = now,
-                ),
-            )
-            g.links.upsert(
-                ExternalLink(
-                    id = linkIds[1],
-                    assetId = null,
-                    kind = LinkKind.WEB,
-                    label = "Manual",
-                    uri = "https://example.invalid/${g.ids.newId()}",
-                    createdAt = now,
-                    lastOpenedAt = null,
-                    updatedAt = now,
-                ),
-            )
-            // one tag on an asset, one on the standalone link, one unbound spare
+            // one tag on an asset, two unbound spares
             g.tags.upsert(
                 seedTag(
                     id = g.ids.newId(),
@@ -124,8 +95,8 @@ class DebugBackupActivity : Activity() {
                 seedTag(
                     id = g.ids.newId(),
                     format = PayloadFormat.V1,
-                    target = TagTarget.LinkTarget(linkIds[1]),
-                    status = TagStatus.ACTIVE,
+                    target = TagTarget.None,
+                    status = TagStatus.UNBOUND,
                     label = "on the manual",
                     now = now,
                 ),
@@ -141,7 +112,7 @@ class DebugBackupActivity : Activity() {
                 ),
             )
         }
-        "seeded 2 assets, 2 links, 3 tags"
+        "seeded 2 assets, 3 tags"
     }
 
     private fun seedTag(
