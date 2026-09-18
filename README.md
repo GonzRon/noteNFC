@@ -17,12 +17,17 @@ projection that never becomes the source of truth.
 
 A single-screen Compose app — Dashboard and Assets along the bottom, everything else one push deep —
 around the one-tap flow that is still the spine: tap a tag anywhere and the phone opens the right
-place. Read / inspect tag, for the rare deliberate look, lives under Settings.
+place. Read / inspect tag, for the rare deliberate look, lives under Settings, and it keeps NFC for
+as long as you are on it: what a tag turns out to be is shown on the screen you are already on, so a
+tag left against the phone is never handed back to the system halfway through a look.
 
 - **Dashboard** — the assets in service, and, until the first export succeeds, a card that says
-  there is no backup yet and offers to take one. The sections for what needs attention and what is
-  coming up are drawn from schedules, which are Phase 3, so today the dashboard draws the current
-  assets and the backup nudge.
+  there is no backup yet and offers to take one. The list is the systems themselves: a component of
+  another asset is listed on that asset and not again here. A search box above the list filters as
+  you type — over the name, the category, the make, the model, the serial and the location — and a
+  component that matches comes back with the system it is part of named under it. The sections for
+  what needs attention and what is coming up are drawn from schedules, which are Phase 3, so today
+  the dashboard draws the current assets and the backup nudge.
 - **Assets** — a list you can filter to include archived ones, an asset screen built around the
   identity plate (category, name, description and tags), a create/edit form, and archive
   rather than delete.

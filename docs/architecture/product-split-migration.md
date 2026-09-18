@@ -956,7 +956,8 @@ physical gate is the only place that can see it:
 
 | # | Owner action | Pass condition |
 |---|---|---|
-| **R1** | with **ServiceTag** open, move between **Read / inspect tag** and the **write tag** screen — both directions — and tap **T2** on the screen that survives the transition | ServiceTag composes **two** reader-mode sessions (`ScanScreen` and `WriteTagScreen`); on a nav transition that overlaps both, confirm the surviving screen still reads a tag, i.e. one session's stop never leaves the app with no reader mode. Pre-existing ServiceTag behaviour, **ServiceTag only** — NoteTag has a single writer screen and no overlap to lose |
+| **R1** | with **ServiceTag** open, move between **Read / inspect tag** and the **write tag** screen — both directions — and tap **T2** on the screen that survives the transition | ServiceTag used to compose **two** reader-mode sessions (`ScanScreen` and `WriteTagScreen`); on a nav transition that overlapped both, one session's stop could leave the app with no reader mode. **From 2.7 this is structural**: one session belongs to the activity (`app/…/ui/nfc/ReaderMode.kt`), the two screens install a tag sink instead of a session of their own, and the hold spans both routes — so a transition makes no `enableReaderMode`/`disableReaderMode` call at all, proved on the JVM by `ReaderModeTest` and on the emulator by `ReaderModeHoldTest`. The tap is what remains: only the phone can show that the platform agrees, and that the surviving screen really does read the tag. Pre-existing ServiceTag behaviour, **ServiceTag only** — NoteTag has a single writer screen and no overlap to lose |
+| **R2** | with **ServiceTag** open on **Read / inspect tag**, hold **T4** (NoteTag's tag) against the phone and **leave it there** until the answer appears; then take it away. Then, back on **Read / inspect tag**, hold **T2** (a tag bound to a ServiceTag asset) the same way, leave it there until the asset opens, and press **back** once | issue **#37**'s acceptance, and check 6 of §E repeated with the tag left in the field — which is what the 2026-09-17 gate observed going wrong (§E check 6's note, evidence P5): ServiceTag released reader mode ~200 ms after its read and the platform dispatched the tag to NoteTag, which opened the note. Pass: the inspect screen names the tag as another app's and **nothing else opens** — no NoteTag window, no note, no chooser, no second dispatch — and the answer appears on the inspect screen itself rather than on a screen pushed over it. 2.7 holds the activity's one session for as long as a tag-reading screen is on top and draws the answer in place, so the tag stays ServiceTag's until the owner leaves the screen. For **T2**: the asset opens once. Pressing back either returns to the inspect screen (one entry) or shows the same asset a second time — the second is the pre-2.7 duplicate from the platform's re-dispatch after a bound tag's auto-open releases the hold (a detail screen does not read tags, by design); **record which, neither blocks**. **ServiceTag only**, two owner actions, outside the 12-action budget for the same reason R1 is |
 
 **Read from the logs, with no tap** — §25's remaining rows:
 
@@ -974,9 +975,10 @@ physical gate is the only place that can see it:
 | **2 — coexistence** (§E) | **8** | T3 write, T4 cold ambient, T2 ambient, T3 ambient, T2 in NoteTag's writer, T4 in ServiceTag's inspector, T7 ambient, and the uninstall/tap/reinstall spike tap |
 
 **Total: 12 owner actions, in two sessions — and 12 is the *tag and coexistence* budget, not the
-whole of the owner's involvement.** The pre-existing ServiceTag reader-mode row **R1** above is one
-further tap and is deliberately outside this budget: it proves nothing about the split, only that
-ServiceTag's two reader-mode sessions still hand over cleanly across a nav transition. §C's data migration needs **four** further on-phone UI actions
+whole of the owner's involvement.** The pre-existing ServiceTag reader-mode rows **R1** and **R2**
+above are two further taps and are deliberately outside this budget: they prove nothing about the
+split, only that ServiceTag's own reader mode survives a nav transition (R1) and holds a tag through
+an inspect (R2 — issue #37, fixed in 2.7). §C's data migration needs **four** further on-phone UI actions
 (Export set; pick the SAF folder; Import data; Restore files), named and counted in §C's intro, which
 sit outside this budget because they belong to a different phase and a different gate. The two
 first-use NFC permission confirmations are **folded into checks 2 and 3** and are not counted
