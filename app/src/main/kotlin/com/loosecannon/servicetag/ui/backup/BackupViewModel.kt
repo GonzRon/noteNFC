@@ -17,6 +17,7 @@ import com.loosecannon.servicetag.core.usecase.ExportBackupSet
 import com.loosecannon.servicetag.core.usecase.ImportBackupReplace
 import com.loosecannon.servicetag.core.usecase.ImportReport
 import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
+import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.prefs.AppPrefs
 import java.io.OutputStream
@@ -85,6 +86,7 @@ class BackupViewModel(
     private val exportBackupSet: ExportBackupSet,
     private val importBackupReplace: ImportBackupReplace,
     private val restoreArtifacts: RestoreArtifacts,
+    private val storeIsEmpty: StoreIsEmpty,
     private val storage: AttachmentStorage,
     private val prefs: AppPrefs,
     private val clock: Clock,
@@ -92,7 +94,7 @@ class BackupViewModel(
 
     constructor(graph: AppGraph) : this(
         graph.exportBackupSet, graph.importBackupReplace, graph.restoreArtifacts,
-        graph.attachmentStorage, graph.prefs, graph.clock,
+        graph.storeIsEmpty, graph.attachmentStorage, graph.prefs, graph.clock,
     )
 
     private val _state = MutableStateFlow(
@@ -205,6 +207,18 @@ class BackupViewModel(
             io.openStream().use { restoreArtifacts.run(it, prefs.lastRestoredBackupSetId) }
         }
     }.rethrowCancellation()
+
+    /**
+     * Whether this phone holds any records at all (#40) — what the restore confirmation turns on.
+     *
+     * Deliberately not called `storeIsEmpty()`: that is the name of the use case this delegates to,
+     * and a property and a function sharing a name would read as one thing. Deliberately a suspend
+     * function rather than a state flow: it is asked at most once per visit to the screen, and the
+     * answer that matters is the one true at the moment a file was picked. No `withContext` either
+     * — Room already runs these five reads on the graph's own query context, which is what lets the
+     * JVM fixture settle them on its shared test scheduler.
+     */
+    suspend fun isStoreEmpty(): Boolean = storeIsEmpty.run()
 
     /** What the screen calls once the owner has picked a folder. */
     fun exportSetTo(sink: BackupSetSink) = once {

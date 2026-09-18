@@ -60,10 +60,13 @@ private val IMPORT_TYPES = arrayOf("application/zip", "application/octet-stream"
  * set is two files (spec §7.3).
  *
  * Export is filled and safe. Restore data is outlined and asks the user to type [REPLACE_WORD]
- * first, because it deletes everything that is not in the file (R-9). Restore files is outlined
- * but has no dialog at all: it adds bytes the data archive only listed and deletes nothing, and
- * it refuses an archive belonging to a different set rather than mixing two backups together.
- * There is no wipe here — that is the debug harness's job, not the product's.
+ * first, because it deletes everything that is not in the file (R-9) — unless there is nothing
+ * here to delete, in which case it asks for a plain confirmation instead (#40): a phone with no
+ * assets, tags, events, attachments or tombstone link rows has nothing to accept the loss of, and
+ * spelling out REPLACE over an empty database warns about data that does not exist. Restore files
+ * is outlined but has no dialog at all: it adds bytes the data archive only listed and deletes
+ * nothing, and it refuses an archive belonging to a different set rather than mixing two backups
+ * together. There is no wipe here — that is the debug harness's job, not the product's.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +82,9 @@ fun BackupScreen(
     val scope = rememberCoroutineScope()
     var confirming by remember { mutableStateOf<Uri?>(null) }
     var typed by remember { mutableStateOf("") }
+    // Which confirmation the picked file gets (#40). Written before [confirming], so one pick
+    // raises exactly one dialog and the owner never sees one replaced by the other.
+    var emptyStore by remember { mutableStateOf(false) }
 
     LaunchedEffect(model) { model.messages.collect { snackbars.showSnackbar(it) } }
 
@@ -100,8 +106,19 @@ fun BackupScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         // Picking the file is not agreeing to lose what is here: the dialog is the agreement.
+        //
+        // #40 — and which agreement is a question about this phone, not about the file. It is asked
+        // once per pick and answered before the dialog goes up, so there is never a frame in which
+        // the wrong confirmation is on screen. A cancelled pick asks nothing.
         typed = ""
-        confirming = uri
+        if (uri == null) {
+            confirming = null
+        } else {
+            scope.launch {
+                emptyStore = model.isStoreEmpty()
+                confirming = uri
+            }
+        }
     }
 
     val restoreFilesFrom = rememberLauncherForActivityResult(
@@ -170,42 +187,71 @@ fun BackupScreen(
     }
 
     confirming?.let { uri ->
-        AlertDialog(
-            onDismissRequest = { confirming = null },
-            title = { Text("Replace everything?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Every asset, tag and link on this phone is deleted and replaced with what " +
-                            "is in the file. This cannot be undone.",
-                    )
-                    OutlinedTextField(
-                        value = typed,
-                        onValueChange = { typed = it },
-                        singleLine = true,
-                        label = { Text("Type $REPLACE_WORD to confirm") },
-                        shape = ControlShape,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirming = null
-                        model.restoreDataFrom(SafBackupIO(resolver, uri))
-                    },
-                    enabled = typed == REPLACE_WORD,
-                ) {
-                    Text("Replace")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirming = null }) { Text("Cancel") }
-            },
-            shape = ControlShape,
-        )
+        if (emptyStore) {
+            RestoreEmptyStoreDialog(
+                onDismiss = { confirming = null },
+                onRestore = {
+                    confirming = null
+                    model.restoreDataFrom(SafBackupIO(resolver, uri))
+                },
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { confirming = null },
+                title = { Text("Replace everything?") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "Every asset, tag and link on this phone is deleted and replaced with what " +
+                                "is in the file. This cannot be undone.",
+                        )
+                        OutlinedTextField(
+                            value = typed,
+                            onValueChange = { typed = it },
+                            singleLine = true,
+                            label = { Text("Type $REPLACE_WORD to confirm") },
+                            shape = ControlShape,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirming = null
+                            model.restoreDataFrom(SafBackupIO(resolver, uri))
+                        },
+                        enabled = typed == REPLACE_WORD,
+                    ) {
+                        Text("Replace")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirming = null }) { Text("Cancel") }
+                },
+                shape = ControlShape,
+            )
+        }
     }
+}
+
+/**
+ * The confirmation an empty phone gets (#40). No typed word, because there is nothing to authorise
+ * the loss of: `REPLACE` exists so that the owner has to spell out that they accept losing what is
+ * on this phone (R-9), and on a phone with no assets, tags, events, attachments or tombstone link
+ * rows there is nothing to lose. The restore itself is the same call either way — a wipe-and-load
+ * of an empty database is a load.
+ */
+@Composable
+private fun RestoreEmptyStoreDialog(onDismiss: () -> Unit, onRestore: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Restore this backup?") },
+        text = { Text("This phone has no records yet, so there is nothing to replace.") },
+        confirmButton = { TextButton(onClick = onRestore) { Text("Restore") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        shape = ControlShape,
+    )
 }
 
 /** "Never" is a fact worth stating plainly; anything else is the instant, to the minute. */

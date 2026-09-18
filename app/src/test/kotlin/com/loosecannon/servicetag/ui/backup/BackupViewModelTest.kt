@@ -13,6 +13,7 @@ import com.loosecannon.servicetag.core.ports.ByteSource
 import com.loosecannon.servicetag.core.ports.StoreState
 import com.loosecannon.servicetag.core.usecase.AddAttachmentCommand
 import com.loosecannon.servicetag.core.usecase.AttachmentResult
+import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -39,6 +40,7 @@ import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -75,6 +77,7 @@ class BackupViewModelTest {
 
     private fun viewModel() = BackupViewModel(
         graph.exportBackupSet, graph.importBackupReplace, graph.restoreArtifacts,
+        StoreIsEmpty(graph.assets, graph.tags, graph.events, graph.attachments, graph.links),
         graph.attachmentStorage, graph.prefs, graph.clock,
     )
 
@@ -760,5 +763,25 @@ class BackupViewModelTest {
         assertEquals(assetsBefore, graph.assets.all().size)
         assertNotNull(report.lastRestoredBackupSetId)
         assertEquals(report.lastRestoredBackupSetId, vm.state.value.lastRestoredBackupSetId)
+    }
+
+    // --- the restore prompt (#40) -----------------------------------------------------------
+
+    /**
+     * #40 — a phone with nothing on it. The Backup screen asks this before it raises a dialog, and
+     * the answer is what decides between the typed `REPLACE` confirmation and a plain one. Nothing
+     * is seeded here, so the fixture *is* the empty install.
+     */
+    @Test fun anUntouchedInstallReportsAnEmptyStore() = runTest {
+        assertTrue(viewModel().isStoreEmpty())
+    }
+
+    /**
+     * #40, the other branch — one asset is enough. The typed word exists to make the owner accept
+     * losing what is here, and now there is something here to lose.
+     */
+    @Test fun oneAssetIsEnoughToReportANonEmptyStore() = runTest {
+        graph.createAsset.run("Pool pump", "Water")
+        assertFalse(viewModel().isStoreEmpty())
     }
 }

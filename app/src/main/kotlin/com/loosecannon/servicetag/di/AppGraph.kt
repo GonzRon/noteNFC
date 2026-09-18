@@ -49,6 +49,7 @@ import com.loosecannon.servicetag.core.usecase.RestoreArtifacts
 import com.loosecannon.servicetag.core.usecase.RetireAsset
 import com.loosecannon.servicetag.core.usecase.SaveDefinition
 import com.loosecannon.servicetag.core.usecase.SaveProfile
+import com.loosecannon.servicetag.core.usecase.StoreIsEmpty
 import com.loosecannon.servicetag.core.usecase.UpdateAsset
 import com.loosecannon.servicetag.core.usecase.UpdateAttachment
 import com.loosecannon.servicetag.core.usecase.UpdateEvent
@@ -155,6 +156,13 @@ class AppGraph(private val context: Context) {
     val importBackupReplace: ImportBackupReplace = ImportBackupReplace(
         assets, tags, links, definitions, profiles, events, attachments, attachmentStorage, uow,
     )
+
+    /**
+     * #40 — is there anything on this phone a restore would replace? The Backup screen asks once,
+     * per picked file, and the answer chooses the confirmation. Definitions and profiles are not
+     * read: neither can exist without its asset, so `assets` answers for both.
+     */
+    val storeIsEmpty: StoreIsEmpty = StoreIsEmpty(assets, tags, events, attachments, links)
 
     /** Process-wide scope for work that must outlive a finishing activity (e.g. abandoning a row). */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
