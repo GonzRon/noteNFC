@@ -939,6 +939,14 @@ tags written, `adb logcat` capturing from the workstation throughout.
 | **7** | **ambient tap of T7**, the commercial URL sticker | row 6 | **no unsafe action**: neither app draws a screen, neither writes to its database. A platform notification is the *expected* result, not a failure — **[platform-doc] PD10**: `ACTION_VIEW` from Android 16, an "open link" notification from Android 17 |
 | **8** | **uninstall NoteTag** (workstation), then **one tap of T4**, then **reinstall** (workstation) | — | **dispatch-spike S2**: with no app claiming the external type and **no AAR to fall back to**, the expected result is nothing at all — `NDEF_DISCOVERED` no match, `TECH_DISCOVERED` no filter, stop. **To observe on-device.** The uninstall and reinstall are workstation commands; only the tap is the owner's |
 
+**One further tap, ServiceTag's alone and pre-existing** — outside the 12-action coexistence budget
+because it is neither a coexistence row nor anything the split introduced. It is here because the
+physical gate is the only place that can see it:
+
+| # | Owner action | Pass condition |
+|---|---|---|
+| **R1** | with **ServiceTag** open, move between **Read / inspect tag** and the **write tag** screen — both directions — and tap **T2** on the screen that survives the transition | ServiceTag composes **two** reader-mode sessions (`ScanScreen` and `WriteTagScreen`); on a nav transition that overlaps both, confirm the surviving screen still reads a tag, i.e. one session's stop never leaves the app with no reader mode. Pre-existing ServiceTag behaviour, **ServiceTag only** — NoteTag has a single writer screen and no overlap to lose |
+
 **Read from the logs, with no tap** — §25's remaining rows:
 
 | §25 row | How it is established |
@@ -955,7 +963,9 @@ tags written, `adb logcat` capturing from the workstation throughout.
 | **2 — coexistence** (§E) | **8** | T3 write, T4 cold ambient, T2 ambient, T3 ambient, T2 in NoteTag's writer, T4 in ServiceTag's inspector, T7 ambient, and the uninstall/tap/reinstall spike tap |
 
 **Total: 12 owner actions, in two sessions — and 12 is the *tag and coexistence* budget, not the
-whole of the owner's involvement.** §C's data migration needs **four** further on-phone UI actions
+whole of the owner's involvement.** The pre-existing ServiceTag reader-mode row **R1** above is one
+further tap and is deliberately outside this budget: it proves nothing about the split, only that
+ServiceTag's two reader-mode sessions still hand over cleanly across a nav transition. §C's data migration needs **four** further on-phone UI actions
 (Export set; pick the SAF folder; Import data; Restore files), named and counted in §C's intro, which
 sit outside this budget because they belong to a different phase and a different gate. The two
 first-use NFC permission confirmations are **folded into checks 2 and 3** and are not counted

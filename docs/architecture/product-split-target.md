@@ -566,8 +566,14 @@ promoted (§4.7).
     then refuses it with "Tag is out of date", **[device-observed]** on an Android 17 phone
     (arch §5.6, `0e1975f`).
 11. *(protocol)* **Single-flight.** A tap arriving mid-write, or after the session finished, is
-    dropped; a confirmation transfers ownership of the busy flag to the sheet. Any exception escaping
-    the callback becomes an error state, never a crash on a binder thread.
+    dropped. **Two mechanisms are ratified for what a raised confirmation does with the flag, and
+    the choice is the consumer's** (2026-09-18): ServiceTag **transfers ownership of the busy flag
+    to the sheet**, which holds it until `confirmOverwrite` or `keepIt` releases it; NoteTag
+    **releases the flag and re-asks**, so a tap while its sheet is up re-inspects and puts the same
+    question again (the plan's NoteTag controller, released by the owner). The outcome is identical
+    and is what the invariant is about: **no write without the consent the user gave for that
+    content**. Any exception escaping the callback becomes an error state, never a crash on a binder
+    thread.
 12. *(protocol)* **Explicit write mode only.** Ambient dispatch cannot write, by construction: the
     trampoline reads `EXTRA_NDEF_MESSAGES`, `EXTRA_TAG` and the data URI, and `nfcTag()` — the only
     route to a writable handle — is never called on that path (arch §5.10). Reader mode is entered
@@ -711,7 +717,7 @@ O5, arch §6.1); and `TagWriteSession` (deferred — §4.7).
 | Candidate | Why it waits | When it may be promoted |
 |---|---|---|
 | **The versioned payload layout** (`version|flags|UUID`, once proposed as `VersionedUuidPayload`) | **Out, not deferred.** The two products' bodies genuinely differ: ServiceTag's v1 body is `version|flags|16-byte UUID`; NoteTag's is `version|kind|flags|kind-body` with three kinds (§4.9, O13/O14). No single layout is used identically by two consumers, so the two-consumer rule forbids it. What *is* shared is the byte↔UUID helper, which is application-neutral and named by §4 and §22 — the distinction is between a **helper** and a **scheme** | not while the schemes differ. If a third product ever adopts one of the two layouts, that layout belongs to the app that already owns it |
-| **`TagWriteSession`** — single-flight, read-before-write, consent ownership, remembered consent across a stale handle, format → measure → capacity-check → write → verify → lock-last, abandon-on-close | The protocol exists once, in `TagWriteController` (299 lines, `c808b49`), entangled with `ProvisionTag`, `TagBinding`, `AppGraph` and thirteen message strings (arch §6.2). It is *believed* general, but NoteTag has not been built yet, and "the highest-value extraction and the hardest" is exactly the kind that must not be designed against one consumer. C5 is explicit: extract the unquestionable seam, build NoteTag against it, promote the rest only if both need it | **A later step, not a day-one deliverable.** The criterion is concrete: after NoteTag ships its writer, diff its write flow against ServiceTag's. If both need single-flight, one-confirmation-remembered-against-content, and format → measure → write → verify → lock-last with identical *decisions* (not merely similar shapes), promote it as `nfc-tag-core-v0.2.0` and delete both copies. If NoteTag's writer turns out simpler — plausibly it has no row to provision and no stale-sheet problem — the protocol stays ServiceTag's and the library keeps only the pattern in its README |
+| **`TagWriteSession`** — single-flight, read-before-write, consent ownership, remembered consent across a stale handle, format → measure → capacity-check → write → verify → lock-last, abandon-on-close | The protocol exists once, in `TagWriteController` (299 lines, `c808b49`), entangled with `ProvisionTag`, `TagBinding`, `AppGraph` and thirteen message strings (arch §6.2). It is *believed* general, but NoteTag has not been built yet, and "the highest-value extraction and the hardest" is exactly the kind that must not be designed against one consumer. C5 is explicit: extract the unquestionable seam, build NoteTag against it, promote the rest only if both need it | **A later step, not a day-one deliverable.** The criterion is concrete: after NoteTag ships its writer, diff its write flow against ServiceTag's. If both need single-flight, one-confirmation-remembered-against-content, and format → measure → write → verify → lock-last with identical *decisions* (not merely similar shapes), promote it as `nfc-tag-core-v0.2.0` and delete both copies. If NoteTag's writer turns out simpler — plausibly it has no row to provision and no stale-sheet problem — the protocol stays ServiceTag's and the library keeps only the pattern in its README. **Evaluated 2026-09-18 at the first side-by-side diff: the two flows agree on route-before-plan, fit-before-consent, consent-against-content and format-is-not-a-write, and differ on the single-flight primitive, busy ownership, the retain/remove rule, locking and what is provisioned before the write — similar shapes, different decisions; not promoted at v0.2.0.** |
 | **Version/kind negotiation** (`NewerVersion`) | a body concern; each app decides what an unknown version or kind means to its user | with the layout, i.e. not at all |
 | **Foreign/malformed *wording*** | §4: no wording in the library. The classification is shared (`Foreign`, `Unreadable`); the sentence is not | never |
 
@@ -1056,6 +1062,8 @@ The dependency order is therefore `:app → :nfc-android → :nfc-core` and `:ap
       - name: assert the shared library is initialised at the pinned commit
         run: |
           set -euo pipefail
+          # The shape; what each app's ci.yml actually runs is tools/check-submodule-pin.sh, which
+          # carries exactly these checks in this order (and is what a local run calls too).
           test -f libs/nfc-tag-core/nfc-core/build.gradle.kts \
             || { echo "libs/nfc-tag-core is not initialised"; exit 1; }
           pinned=$(git ls-tree HEAD libs/nfc-tag-core | awk '{print $3}')
@@ -1079,7 +1087,7 @@ The dependency order is therefore `:app → :nfc-android → :nfc-core` and `:ap
 | `submodules: recursive` on the checkout | both apps' `actions/checkout@v4` step — **today it has none** (review correction 14) | without it CI checks out an empty `libs/nfc-tag-core` and fails at configuration time with the `require` message |
 | **`fetch-depth: 0`** on the same step | both apps | `actions/checkout` defaults to a depth-1 fetch with **no tags**, under which `git describe --exact-match --match 'nfc-tag-core-v*'` fails on a correctly-pinned submodule — a false red that would teach everyone to ignore the assertion. The step also runs `git -C libs/nfc-tag-core fetch --tags --force` so it survives a later reversion to a shallow checkout |
 | the `android-library` catalog alias | both apps' and the library's `gradle/libs.versions.toml` | **absent today**; without it `nfc-android` cannot declare its plugin at all (§6.1, §A.4 task 1) |
-| the assertion step above, also available as `tools/check-submodule-pin.sh` for local runs and as a `check` dependency | both apps | §19's "exact version/commit pinned" and "mutable HEAD not silently consumed" |
+| the assertion step above, also available as `tools/check-submodule-pin.sh` for local runs | both apps | §19's "exact version/commit pinned" and "mutable HEAD not silently consumed". Asserted by each app's `ci.yml`, again by `release.yml` before it signs (§8), and by `tools/release-dry-run.sh` locally. It is deliberately **not** wired into Gradle `check` (ruled 2026-09-18): the script fetches the library's tags, and `check` must stay runnable without the network |
 | clean-clone builds for **both** apps | §26 acceptance, run outside CI as well | `git clone --recurse-submodules <url> <tmp>` into a never-used directory, then that repo's CI task list; once more from a second workstation |
 | nothing about the daemon JVM, the catalog or the configuration cache | — | that is the point of subprojects: those files exist once, at the app root, and now cover the library too |
 | no credential, token or repository URL in any build file | all three | preserves the property that ordinary CI interpolates no `secrets.*` (arch §4.2) and satisfies §26; the apps' tag-only `release.yml` repeats this pin assertion before it signs anything (§8) |
@@ -1245,10 +1253,12 @@ ServiceTag release, not after.
 
 ## 9. CI per repository (§26)
 
-All three workflows keep the shape the current one has: `ubuntu-latest`, `actions/checkout@v4`,
-`actions/setup-java@v4` with Temurin 17, `android-actions/setup-android@v3` (`platform-tools` only),
-`gradle/actions/setup-gradle@v4`, `--console=plain`, and `actions/upload-artifact@v4` with
-`if: always()` for test results (arch §4.2). Triggers stay `push` and `pull_request`. **No
+The three `ci.yml` workflows keep the shape the current one has: `ubuntu-latest`,
+`actions/checkout@v4`, `actions/setup-java@v4` with Temurin 17, `android-actions/setup-android@v3`
+(`platform-tools` only), `gradle/actions/setup-gradle@v4`, `--console=plain`, and
+`actions/upload-artifact@v4` with `if: always()` for test results (arch §4.2). The floating
+major-version tags here are the **unprivileged** pipeline's; each app's privileged `release.yml`
+pins every external action to a full commit SHA instead, and §8 has those pins. Triggers stay `push` and `pull_request`. **No
 `secrets.*` in `ci.yml`; no absolute home path, no developer-local Gradle state, no device id, no
 private signing material in source** (§26). The only workflow that names a secret is each app's
 tag-only `release.yml`, in the `release` environment (§8; owner ruling 2026-09-17); `nfc-tag-core`

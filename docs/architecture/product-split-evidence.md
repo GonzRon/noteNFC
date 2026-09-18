@@ -576,19 +576,23 @@ was generated, touched or rotated, and the only device id anywhere in this phase
 `emulator-5554`. Two release **dry runs** ran locally; they are quoted by their verdict lines and
 exit codes alone, which is all either script prints about signing identity by design.
 
-**The two FINALs.** ServiceTag stands at **`08447d6`** on `product-split` in
-`~/Documents/Projects/AndroidStudioProjects/ServiceTag-split` — seventeen commits from the plan's
-release (`7cf0e1a`) — and its **last code commit is `836f1b3`**; `2064b19` and `08447d6` after it
-are the controller's plan and design text, so every suite below stands for `836f1b3` as well.
-NoteTag stands at **`fb68a4c`** on `master` in `~/Documents/Projects/AndroidStudioProjects/NoteTag`
-— six commits from Phase E's FINAL (`9ff1d65`), all implementation. ServiceTag's nine
-implementation commits are `773e356` (wiring), `490e72e` (`:core`), `556b859` + `a9afc32` (`:app`
-and its review fix round), `1d5c27e` (CI and the pin script), `b7ca574` + `b596254` + `6896562`
-(the release workflow, its dry-run hardening, the action pins) and `836f1b3` (WS-1, the
-consent-wording pin); its eight docs commits are five plan amendments (`7cf0e1a`, `1e5a6a9`,
-`82b059f`, `01f75e7`, `2064b19`) and three design/runbook amendments (`753550b`, `1fc423f`,
-`08447d6`). NoteTag's six are `b055028` (wiring), `7458229` (`:core`), `804f560` + `32eaec1` (`:app`
-and its fix round), `62f6e37` (CI) and `fb68a4c` (the release workflow). ServiceTag's `origin` is
+**The two FINALs**, as of the end of the 2026-09-18 fix round. The plan's release `7cf0e1a` is the
+**base** of this phase, not one of its commits, so it is counted from and never counted in.
+ServiceTag stands on `product-split` in `~/Documents/Projects/AndroidStudioProjects/ServiceTag-split`
+at **the fix round's docs-and-evidence commit** — the one carrying this paragraph, which is the tip
+and so cannot name its own sha — **twenty commits after the base**; its **last code commit is
+`dee0ee5`**, and only plan, design, runbook and evidence text follows it, so every suite below
+stands for `dee0ee5` as well. NoteTag stands at **`0928422`** on `master` in
+`~/Documents/Projects/AndroidStudioProjects/NoteTag` — **seven commits after Phase E's FINAL
+(`9ff1d65`)**, all implementation. ServiceTag's ten implementation commits are `773e356` (wiring),
+`490e72e` (`:core`), `556b859` + `a9afc32` (`:app` and its review fix round), `1d5c27e` (CI and the
+pin script), `b7ca574` + `b596254` + `6896562` (the release workflow, its dry-run hardening, the
+action pins), `836f1b3` (WS-1, the consent-wording pin) and `dee0ee5` (the whole-branch fix round);
+its ten docs commits are five plan amendments (`1e5a6a9`, `82b059f`, `01f75e7`, `2064b19`,
+`4872f1c`), three design/runbook amendments (`753550b`, `1fc423f`, `08447d6`) and two evidence
+commits (`5a0998a` and this one). NoteTag's seven are `b055028` (wiring), `7458229` (`:core`),
+`804f560` + `32eaec1` (`:app` and its fix round), `62f6e37` (CI), `fb68a4c` (the release workflow)
+and `0928422` (the whole-branch fix round). ServiceTag's `origin` is
 still `GonzRon/noteNFC` and nothing was pushed; NoteTag has **no remote at all** (`git remote |
 wc -l` is `0`) and no tags; ServiceTag's only tag is still `pre-split-checkpoint`.
 
@@ -668,9 +672,11 @@ and `aTagThatIsNotNdefAtAllIsRefusedAndProvisionsNothing` asserts zero rows in t
 `FakeTagIo` with a mutable inspection flipped from `needsFormat` to `Writable(maxSize)`; NoteTag's
 second tap plans against `maxSize = 60`, falls to `LOCAL_REF`, mints exactly one uuid and stops at
 `Confirm([DEVICE_BOUND], "Write")`, and the case now runs on through `confirm()` and a third tap.
-**R3** (an honest sentence) is G-5's wording, asserted character for character as a whole
-`WriteState.Idle` value: NoteTag "Formatted the tag. Hold it to the phone again to write the link.",
-ServiceTag "Formatted. Lift the tag off and hold it again to write." **R4** (the read exception) is
+**R3** (an honest sentence) is G-5's wording, asserted character for character as a whole state
+value in each app — **ServiceTag as a whole `WriteState.Idle` value**, "Formatted. Lift the tag off
+and hold it again to write."; **NoteTag as a whole `WriteState.Waiting` value**, "Formatted the tag.
+Hold it to the phone again to write the link." (the two apps park a formatted tag in different
+states, which is why the assertion is against a different type in each). **R4** (the read exception) is
 `catch (e: CancellationException) { throw e }` ahead of the broad catch in both controllers, with
 `Log.w` on the caught exception, on `WriteResult.Failed.cause` on both the write and the format path
 and on `TagRead.Unreadable.cause` — five such sites in NoteTag — pinned by
@@ -849,5 +855,52 @@ URL clean clones with the second-workstation proof (§B.6) are owner-authorized 
 phase, as is the first execution of either `release.yml`. **Gate 6 (NoteTag §23 end to end) and
 gate 10 are not claimed here**: both need K/L, the phone and the physical sessions, and nothing in
 this section should be read as evidence for either.
+
+**Fix round after the whole-branch review (2026-09-18).** The whole-branch review of the finished
+phase returned **no blocking finding** — the branch stands as released — and a short list of
+correctness, hardening, test-strength and documentation items; **not one of them changes a sentence
+shown to a user**. **A1**: ServiceTag's single-flight flag became an `AtomicBoolean` claimed with
+`compareAndSet` instead of a `@Volatile` read-then-write, so two binder threads tapping at once can
+no longer both enter (`sheetOwnsBusy` unchanged — the sheet still owns the flag until
+`confirmOverwrite`/`keepIt`). **A2**: NoteTag's `confirm()` and `cancel()` open with
+`val p = pending ?: return`, so a stray answer after a verified `Written` is a no-op instead of an
+emission. **A3**: both controllers' broad `onTag` catch is `catch (e: Exception)` — NoteTag's
+`Throwable` narrowed, the `CancellationException` rethrow still first — logging
+`Log.w(TAG, "tap failed", e)`, because the catch covers the whole tap and not just the inspect.
+**A4**: both `release.yml` files and both `tools/release-dry-run.sh` scripts now require
+`apksigner verify --print-certs` to yield **exactly one** `SHA-256 digest` line before the
+fingerprint compare, so a multi-signer APK cannot pass on its first signer, and `certs.txt` joins
+the `if: always()` cleanup. **A5**: both checkouts carry `persist-credentials: false`
+(`submodules: recursive` and `fetch-depth: 0` unchanged). On the documentation side: §6.3 no longer
+claims the pin assertion is a Gradle `check` dependency and records the ruling that it must not
+become one (`check` has to run without the network the script's tag fetch uses); the §6.3 snippet
+points at `tools/check-submodule-pin.sh`, the script the apps actually call; §9's opening now says
+**the three `ci.yml` workflows** and points at §8 for `release.yml`'s SHA pins; invariant 11 records
+**both** ratified single-flight mechanisms (ServiceTag transfers busy-ownership to the sheet, NoteTag
+releases the flag and re-asks) with the identical outcome that is the invariant's point; §4.7 records
+that the `TagWriteSession` promotion criterion was evaluated at the first side-by-side diff and not
+met; and the runbook's physical gate gains one pre-existing, **ServiceTag-only** row — the two
+reader-mode sessions across a nav transition — explicitly outside the 12-action budget.
+
+**The fix round re-proved, at `dee0ee5` (ServiceTag) and `0928422` (NoteTag).** Both gates —
+`:nfc-core:test :nfc-android:testDebugUnitTest :core:test :app:testDebugUnitTest :app:assembleDebug
+:app:compileDebugAndroidTestKotlin` — are green with **0 failures, 0 errors, 0 skipped** in every
+XML file. Every JVM figure in "Suites at the two FINALs" above was re-measured and stands unchanged
+except NoteTag's, where the new M2 case lifts `:app:testDebugUnitTest` **29 → 30** and
+`NoteTagWriteControllerTest` **19 → 20**; that case fails on the pre-fix controller (it is the one
+that proved A2 red before green) and passes after it. The connected suites were re-run on
+`emulator-5554` only, serial, ServiceTag first: ServiceTag **68 tests in 14 classes**
+(2026-09-18T09:39–09:40Z) and NoteTag **19 tests in 5 classes** (2026-09-18T09:43Z), both 0/0/0 and
+both equal to the figures above. The two dry runs are unchanged in verdict: ServiceTag exit **3**,
+`BLOCKED: no signing material (target §8)`; NoteTag exit **0**, `version: 2.0 matches 2.0` and
+`RELEASE DRY RUN: PARTIAL — signing identity not independently checked`. ServiceTag's new one-signer
+assertion was additionally exercised through the script's self-test hook against the debug APK,
+which has exactly one signer and passes it. The YAML assertion still loads each `release.yml` with
+`yaml.safe_load` and reads the quoted `'on':` key as the string it is: `['push']` in both, with the
+tag globs `servicetag-v*` and `notetag-v*`.
+
+**Parked to the owner, not done here** (each raised by the whole-branch review and each left exactly
+as it was): **M4**, **M11** and **M12**; the Task 2 message; the Task 3 minor arms; the Task 6 test;
+and the Task 10 fetch flag. They are recorded so nobody reads their absence as an oversight.
 
 **Phase G local consumption complete; both apps green on nfc-tag-core-v0.1.0; K/L pending owner authorization**
