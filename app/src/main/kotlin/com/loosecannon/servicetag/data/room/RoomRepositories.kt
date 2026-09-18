@@ -73,9 +73,6 @@ class RoomTagRepository(private val dao: NfcTagDao) : TagRepository {
     override suspend fun forAsset(assetId: AssetId): List<TagBinding> =
         dao.forAsset(assetId.value).map { it.toDomain() }
 
-    override suspend fun forLink(linkId: LinkId): List<TagBinding> =
-        dao.forLink(linkId.value).map { it.toDomain() }
-
     override suspend fun all(): List<TagBinding> = dao.all().map { it.toDomain() }
     override suspend fun delete(id: TagId) = dao.delete(id.value)
     override suspend fun deleteAll() = dao.deleteAll()

@@ -40,7 +40,6 @@ interface TagRepository {
     suspend fun get(id: TagId): TagBinding?
     suspend fun findByPayload(format: PayloadFormat, key: String): TagBinding?
     suspend fun forAsset(assetId: AssetId): List<TagBinding>
-    suspend fun forLink(linkId: LinkId): List<TagBinding>
     suspend fun all(): List<TagBinding>
     suspend fun delete(id: TagId)
     suspend fun deleteAll()

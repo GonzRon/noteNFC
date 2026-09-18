@@ -8,6 +8,7 @@ import java.io.File
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -52,6 +53,8 @@ class PreservedSetRestoreTest {
 
         val graph = app.graph
         val report = runBlocking { graph.importBackupReplace.run(bytes) }
+        // The proof must not pass vacuously on a linkless archive.
+        assertTrue(preserved.data.externalLinks.isNotEmpty())
         assertEquals(preserved.data.externalLinks.size, report.links)
         assertEquals(preserved.data.externalLinks.size, runBlocking { graph.links.all().size })
 

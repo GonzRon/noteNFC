@@ -138,9 +138,6 @@ class InMemoryTagRepository : TagRepository, Rollbackable, Witnessed {
     override suspend fun forAsset(assetId: AssetId): List<TagBinding> =
         rows.values.filter { (it.target as? TagTarget.AssetTarget)?.assetId == assetId }
 
-    override suspend fun forLink(linkId: LinkId): List<TagBinding> =
-        rows.values.filter { (it.target as? TagTarget.LinkTarget)?.linkId == linkId }
-
     override suspend fun all(): List<TagBinding> {
         witness?.observeAll()
         return rows.values.toList()

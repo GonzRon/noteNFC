@@ -243,8 +243,8 @@ class RestoreProofTest {
                 g2.tags.forAsset(before.assets[0].id).single().id,
             )
             val standalone = before.links.single { it.assetId == null }
-            assertEquals(1, g2.tags.forLink(standalone.id).size)
-            assertEquals(TagId("tag-on-manual"), g2.tags.forLink(standalone.id).single().id)
+            assertEquals(1, g2.db.nfcTagDao().forLink(standalone.id.value).size)
+            assertEquals("tag-on-manual", g2.db.nfcTagDao().forLink(standalone.id.value).single().id)
             assertEquals(1, g2.db.externalLinkDao().forAsset("asset-furnace").size)
             assertEquals(listOf("link-standalone"), g2.db.externalLinkDao().standalone().map { it.id })
             assertEquals(TagTarget.None, g2.tags.get(TagId("tag-spare"))!!.target)

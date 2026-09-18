@@ -59,6 +59,7 @@ class DashboardViewModel(
                 // An empty install has nothing to lose, and a nudge over an empty dashboard is
                 // noise: the offer only means something once there is something to survive the
                 // phone change.
+                // The nudge counts every active asset, retired included; CURRENT above excludes them.
                 needsBackup = last == null && active.isNotEmpty(),
                 lastBackupAt = last,
             )
