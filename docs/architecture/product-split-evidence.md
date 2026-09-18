@@ -582,8 +582,8 @@ ServiceTag stands on `product-split` in `~/Documents/Projects/AndroidStudioProje
 at **the fix round's closing evidence commit** — the one carrying this paragraph, which is the tip
 and so cannot name its own sha — **twenty-five commits after the base**; its **last code commit is
 `2a19226`**, and only plan, design and evidence text follows it, so every suite below stands for `2a19226`
-as well. NoteTag stands at **`6749d0a`** on `master` in
-`~/Documents/Projects/AndroidStudioProjects/NoteTag` — **eight commits after Phase E's FINAL
+as well. NoteTag stands at **`01d001f`** on `master` in
+`~/Documents/Projects/AndroidStudioProjects/NoteTag` — **nine commits after Phase E's FINAL
 (`9ff1d65`)**, all implementation. ServiceTag's eleven implementation commits are `773e356`
 (wiring), `490e72e` (`:core`), `556b859` + `a9afc32` (`:app` and its review fix round), `1d5c27e`
 (CI and the pin script), `b7ca574` + `b596254` + `6896562` (the release workflow, its dry-run
@@ -594,8 +594,9 @@ amendments (`753550b`, `1fc423f`, `08447d6`, `63f8d46` — the last also carryin
 evidence), one plan-and-design catch-up after the fix round (`677e9f1`) and three evidence commits
 (`5a0998a`, `13af50a` and this one). NoteTag's eight are `b055028`
 (wiring), `7458229` (`:core`), `804f560` + `32eaec1` (`:app` and its fix round), `62f6e37` (CI),
-`fb68a4c` (the release workflow), `0928422` (the whole-branch fix round) and `6749d0a` (the
-UNREADABLE wording ruling). ServiceTag's `origin` is
+`fb68a4c` (the release workflow), `0928422` (the whole-branch fix round), `6749d0a` (the
+UNREADABLE wording ruling) and `01d001f` (the format-failure log made unconditional, the K/L
+pre-flight fix the owner ordered on 2026-09-18 so both apps log the reason the same way). ServiceTag's `origin` is
 still `GonzRon/noteNFC` and nothing was pushed; NoteTag has **no remote at all** (`git remote |
 wc -l` is `0`) and no tags; ServiceTag's only tag is still `pre-split-checkpoint`.
 
