@@ -11,6 +11,7 @@ import com.loosecannon.servicetag.prefs.AppPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -42,7 +43,7 @@ data class DashboardState(
     val query: String = "",
     /** Whether anything is in service at all, before [query] is applied. */
     val anyInService: Boolean = false,
-    /** How many in-service components a blank query is not listing. */
+    /** How many in-service components there are, whatever the query; read only while it is blank. */
     val hiddenComponents: Int = 0,
     val needsBackup: Boolean = false,
     val lastBackupAt: Long? = null,
@@ -95,6 +96,16 @@ class DashboardViewModel(
     private val refreshes = MutableStateFlow(0)
     private val queries = MutableStateFlow("")
 
+    /**
+     * What the search box draws itself from, synchronously (F3). [DashboardState.query] carries the
+     * same string, but it arrives through `combine` and `stateIn` — an internal channel and a
+     * sharing coroutine — so it is not guaranteed to be back before the next keystroke, which is
+     * how characters get dropped and the cursor jumps to the end mid-word. Every other hoisted
+     * field in this app reads its own `asStateFlow()` for exactly that reason; the filtering still
+     * happens off [DashboardState.query] and nothing about the list's rules moves here.
+     */
+    val query: StateFlow<String> = queries.asStateFlow()
+
     val state: StateFlow<DashboardState> =
         combine(assets.observeAll(), refreshes, queries) { rows, _, query ->
             val last = prefs.lastBackupAt
@@ -118,6 +129,7 @@ class DashboardViewModel(
                 // An empty install has nothing to lose, and a nudge over an empty dashboard is
                 // noise: the offer only means something once there is something to survive the
                 // phone change.
+                // The nudge counts every active asset, retired included; CURRENT above excludes them.
                 needsBackup = last == null && active.isNotEmpty(),
                 lastBackupAt = last,
             )

@@ -212,4 +212,78 @@ class DashboardViewModelTest {
         assertTrue(nothing.assets.isEmpty())
         assertTrue(nothing.anyInService)
     }
+
+    /**
+     * #39 / F1 — an empty list under an empty box is reachable in two ordinary actions: retire the
+     * parent and its component stays in service, because `RetireAsset` does not touch children. The
+     * state has to say so — something in service, nothing to list, a component accounted for — so
+     * the screen can keep "Nothing matches that." for a query somebody actually typed.
+     */
+    @Test fun aRetiredParentLeavesItsComponentInServiceWithNothingToList() = runTest {
+        val tub = graph.createAsset.run(AssetCommand(name = "Hot tub", category = "Water"))
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", parentAssetId = tub.id))
+        graph.retireAsset.retire(tub.id, "2026-04-02")
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+
+        val state = vm.state.first { it.anyInService }
+        assertTrue("the parent is retired, so there is no system to list", state.assets.isEmpty())
+        assertEquals("nobody typed anything", "", state.query)
+        assertEquals(1, state.hiddenComponents)
+    }
+
+    /**
+     * #39 / F5 — the query is trimmed for matching and kept verbatim in the state. Trimming the
+     * stored string instead would fight the text field over what it holds; not trimming at all
+     * would make a trailing space from an IME suggestion look like a query that found nothing.
+     */
+    @Test fun theQueryIsTrimmedButKeptVerbatim() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", category = "Water"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.assets.isNotEmpty() }
+
+        vm.onQueryChange(" circ ")
+        val hit = vm.state.first { it.query == " circ " }
+        assertEquals(listOf("Circulation pump"), hit.assets.map { it.asset.name })
+        assertEquals(" circ ", hit.query)
+    }
+
+    /**
+     * #39 / F5 — the query is the screen's, not the store's. It is an independent arm of the
+     * `combine`, so a row arriving recomputes the rows against the same query; folding the query
+     * into the repository flow would pass every other case in this class and fail this one.
+     */
+    @Test fun aRowArrivingDoesNotDisturbTheQuery() = runTest {
+        graph.createAsset.run(AssetCommand(name = "Circulation pump", category = "Water"))
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect() }
+        vm.state.first { it.assets.isNotEmpty() }
+
+        vm.onQueryChange("pump")
+        vm.state.first { it.query == "pump" }
+
+        graph.createAsset.run("Pool pump", "Water")
+        val after = vm.state.first { it.assets.size == 2 }
+        assertEquals("pump", after.query)
+    }
+
+    /**
+     * #39 / F3 — what the box draws itself from answers synchronously, with no collector and no
+     * scheduler turn. `state.query` says the same thing eventually, through `combine` and
+     * `stateIn`; a text field that had to wait for that round trip is a text field that drops
+     * characters typed fast.
+     */
+    @Test fun theBoxSeesItsOwnKeystrokeWithoutWaitingForTheList() = runTest {
+        val vm = viewModel()
+
+        assertEquals("", vm.query.value)
+        vm.onQueryChange("circ")
+        assertEquals("circ", vm.query.value)
+        vm.clearQuery()
+        assertEquals("", vm.query.value)
+    }
 }

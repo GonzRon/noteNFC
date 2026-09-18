@@ -35,6 +35,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -67,6 +69,10 @@ fun DashboardScreen(
 ) {
     val model: DashboardViewModel = viewModel(key = "dashboard") { DashboardViewModel(graph) }
     val state by model.state.collectAsStateWithLifecycle()
+    // The box draws itself from the view model's own query holder, not from `state.query` (F3): the
+    // latter is a `combine`/`stateIn` round trip and a text field has to see its own keystroke back
+    // in the same frame. `state.query` still decides what the list and the two lines below say.
+    val query by model.query.collectAsStateWithLifecycle()
 
     // An export that happened on the backup screen is a preference, and nothing observes those:
     // coming back here is the moment to ask again whether the nudge is still true.
@@ -95,7 +101,7 @@ fun DashboardScreen(
                 FirstRun(onNewAsset = onNewAsset, onScan = onScan)
             } else {
                 SearchBox(
-                    query = state.query,
+                    query = query,
                     onQueryChange = model::onQueryChange,
                     onClear = model::clearQuery,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -108,9 +114,7 @@ fun DashboardScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
-                if (state.assets.isEmpty()) {
-                    QuietLine(text = "Nothing matches that.", modifier = Modifier.padding(16.dp))
-                } else {
+                if (state.assets.isNotEmpty()) {
                     SectionHeader(title = "Current", modifier = Modifier.padding(horizontal = 16.dp))
                     LazyColumn {
                         items(state.assets, key = { it.asset.id.value }) { row ->
@@ -121,6 +125,13 @@ fun DashboardScreen(
                             )
                         }
                     }
+                } else if (state.query.isNotBlank()) {
+                    // Only ever an answer to something typed (F1). An empty list under an empty box
+                    // is reachable — retire a parent and its component stays in service — and there
+                    // the line above has already said where the parts are; telling the owner their
+                    // search found nothing when they searched for nothing is how they conclude
+                    // their assets are gone.
+                    QuietLine(text = "Nothing matches that.", modifier = Modifier.padding(16.dp))
                 }
             }
         }
@@ -154,7 +165,12 @@ private fun SearchBox(
                 }
             }
         },
-        modifier = modifier.fillMaxWidth(),
+        // Once text is entered the placeholder is gone and the field has no accessible name, and
+        // every other field in the app gets one from `FormField`'s label (F10). A `label` here would
+        // be a new string, so the ratified placeholder is reused rather than a fifth sentence added.
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = "Search assets and components" },
     )
 }
 
