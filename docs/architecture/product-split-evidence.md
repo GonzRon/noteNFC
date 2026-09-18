@@ -1025,3 +1025,28 @@ note carried from Phase G: the Task 12 reviewer's read-only breach (contained) i
 | C.10 | do both final products coexist? | C.9 | install NoteTag | both installed with distinct ids and labels; each launches; neither sees the other's data | true | PASS |
 
 **Suites at the physical-gate builds, on the emulator.** ServiceTag `7390e44`: `:app:connectedDebugAndroidTest` **69 in 15 classes** (Phase G's 68 plus the Settings entry test), 0 failures; NoteTag `01d001f`: **19 in 5**, 0 failures. **No instrumented suite ran on the phone.** The live attachment folder was never deleted, relocated or rewritten. Rollback artefacts stayed in place throughout: the release-signed 2.4 / vc6 APK and the verified set.
+
+## §D/§E (simplified by owner ruling) and the first releases, 2026-09-18
+
+**The physical gate, as ruled on 2026-09-18.** The owner reduced the release-blocking physical gate to: one real tag written and read by each product, each product handling its own tag and refusing the sibling's with both installed, and the migrated data intact. Waived as blockers and recorded here as **unperformed, non-blocking** evidence items: a physically unformatted tag for the format-first branch (the owner's NTAG213 stock arrives factory NDEF-formatted, whose capability container is one-time programmable; the branch stays proven by the JVM and emulator tests); a third-party capacity measurement of `Ndef.maxSize` (the 95-byte ServiceTag record and the 49-byte NoteTag record both wrote and verified, which is the capacity evidence this release rests on); exact transcription of every tap's sentence; and the second-workstation clone proof (GitHub's clean runners already cloned recursively, resolved the exact pin, built and passed).
+
+| id | question | precondition | action | expected | observed | verdict |
+|---|---|---|---|---|---|---|
+| T1 | does ServiceTag write, verify and lock a real tag? | ServiceTag 7390e44 debug, lock armed | hold a blank NTAG213 | write → read-back → lock | one activation; the row provisioned on the first activation (the tag was factory NDEF-formatted, so the Writable route, not Format); written after the lock's own re-read; no warning, no crash; the owner reports success | PASS |
+| P1 | does NoteTag write a real tag? | NoteTag 01d001f debug | share a Joplin external link; hold T4 | written and verified | pass (owner) | PASS |
+| P2 | does NoteTag's tag resolve ambiently? | both apps closed | hold T4 from the lock screen | NoteTag resolves; Joplin opens the note; no chooser | `NfcDispatcher: matched NDEF` → `com.loosecannon.notetag` → `ACTION_VIEW joplin://…`; no chooser | PASS |
+| P3 | does ServiceTag write a second real tag? | a different asset | hold T2 | written and verified | a second `nfc_tag` row today on a second asset, written | PASS |
+| P4 | does ServiceTag's tag resolve ambiently? | both apps closed | hold T2 | ServiceTag opens the asset; no chooser | `matched AAR to NDEF` → `NfcDispatchActivity` → `MainActivity`; no chooser | PASS |
+| P5 | does each product refuse the sibling's tag? | both installed | T2 in NoteTag's writer; T4 in ServiceTag's inspect | a refusal naming the other product; Write over it / Cancel only; nothing written | both refusals as designed (owner); **observation:** ServiceTag's inspect screen released reader mode ~200 ms after its read with the tag still in the field, so the platform re-discovered the tag and dispatched it — correctly — to NoteTag, which opened the note. Not a wrong claim; a ServiceTag inspect-screen defect, filed as issue #37, non-blocking by ruling | PASS |
+| P6 | is the migrated data intact after the tag work? | after P1–P5 | read the database and the tree | 5 / 26 / 68 / 8 / 1; 8 files; the grant held | true; `nfc_tag` now 3 rows, all written | PASS |
+
+**The releases.** Tags cut at the exact green commits after the repository gate held (both masters equal to their remotes and green, both submodules at `nfc-tag-core-v0.1.0`, no prior product tag, both `release` environments complete and protected, both dry runs PASS against the GitHub fingerprint variables). Each `release.yml` run waited for the owner's environment review, then completed:
+
+| product | tag → commit | run | asset | APK SHA-256 | signer SHA-256 (public) |
+|---|---|---|---|---|---|
+| ServiceTag 2.5 | `servicetag-v2.5` → `92d4123` | 35346929008, success | `ServiceTag-2.5.apk` 9,659,057 B + `.sha256` | `ce08aac0b5657880ba92a07be42aa8351235ddd7a67961d994208f484f72f7a0` | `894AFA766433B7DF28EAE3242694327EA21F24639A39EBCBE1C88A96EBF2F73C` |
+| NoteTag 2.0 | `notetag-v2.0` → `01d001f` | 35346930915, success | `NoteTag-2.0.apk` 8,547,362 B + `.sha256` | `34ab847e52db61b1708ef4fdda5827def90a70a11d1a1549961cbf6354defda4` | `0902D3B0F826381905C6D8254FDAF36756924D80DA7C19B90A08930B33277A9F` |
+
+Verified from a fresh download of each release: `apksigner verify` ok; **exactly one signer**; the signer's certificate equals the repository's public `RELEASE_CERT_SHA256`; `versionName` equals the tag; the published checksum equals the download; the ServiceTag signer is the new ServiceTag key, generated by the owner on 2026-09-18 and never the noteNFC key; the NoteTag signer is the existing noteNFC key. The job logs carry only masked secret values, no base64 blob, no keystore path contents. The library is unchanged at `7e0377a`; the recovery refs stand at `ac523d7`. The published APKs were **not** installed on the phone: the phone carries the debug builds the physical gate was run on, and the release install is an optional follow-up, not part of this proof.
+
+**Both first product releases are published, cryptographically verified, and stand on a phone-proven migration and a phone-proven tag path.**
