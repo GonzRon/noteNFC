@@ -45,7 +45,7 @@ private const val SETTLE_MILLIS = 5_000L
 private const val TAG_KEY = "123e4567-e89b-12d3-a456-426614174000"
 
 /**
- * 2.8 (#41) — a deliberate inspect inspects, and the ambient tap still opens.
+ * 2.7.1 (#41) — a deliberate inspect inspects, and the ambient tap still opens.
  *
  * **How a real answer is produced without NFC.** `ScanViewModel`'s primary constructor already
  * takes a `TagIo` (`ScanViewModels.kt:87`); what has no seam is the path from `ScanScreen`, which

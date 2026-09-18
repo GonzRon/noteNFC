@@ -159,7 +159,7 @@ again — a new key means a new install for every user.
 
 ## Releases
 
-A release is a tag of the form `servicetag-v<versionName>` (e.g. `servicetag-v2.5`) pushed to GitHub.
+A release is a tag of the form `servicetag-v<versionName>` (e.g. `servicetag-v2.7.1`) pushed to GitHub. The version itself follows semantic `MAJOR.MINOR.PATCH` versioning, classified before the number is chosen — see `docs/versioning.md`.
 That tag alone triggers `.github/workflows/release.yml`, which checks out the exact commit under the
 `release` environment, runs the full test gate, builds the signed APK from that environment's four
 secrets (`RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`,

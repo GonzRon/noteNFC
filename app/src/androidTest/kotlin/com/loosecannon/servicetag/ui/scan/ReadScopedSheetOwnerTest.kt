@@ -34,7 +34,7 @@ import org.junit.runner.RunWith
  * the sheet resolves through, which is why this reaches the wiring and not just the helper. What it
  * cannot reach is the sheet itself: driving a real read needs a `TagIo` seam on the screen (it takes
  * only `AppGraph`, and `RealTagIo` refuses any handle reader mode did not deliver), and the emulator
- * has no NFC. `ScanViewModels.kt` is untouched; `TagResultSheet.kt` gains only 2.8's `inspecting`
+ * has no NFC. `ScanViewModels.kt` is untouched; `TagResultSheet.kt` gains only 2.7.1's `inspecting`
  * flag (#41), which this probe does not reach.
  *
  * Emulator only.

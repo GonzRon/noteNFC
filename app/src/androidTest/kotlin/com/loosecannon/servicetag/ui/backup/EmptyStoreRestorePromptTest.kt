@@ -31,7 +31,7 @@ import org.junit.runner.RunWith
 private const val SETTLE_MILLIS = 5_000L
 
 /**
- * 2.8 (#40) — a phone with no records is asked to confirm, and is never asked to type REPLACE.
+ * 2.7.1 (#40) — a phone with no records is asked to confirm, and is never asked to type REPLACE.
  *
  * **How the pick is driven without the SAF picker.** `rememberLauncherForActivityResult` resolves
  * its registry through `LocalActivityResultRegistryOwner`, which is the documented seam for exactly

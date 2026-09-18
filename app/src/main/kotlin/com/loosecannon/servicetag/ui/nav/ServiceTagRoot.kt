@@ -68,7 +68,7 @@ fun ServiceTagRoot(
     // is ratified, because holding it over the route an auto-open lands on reopens the spin
     // Decision 4 rejected. #37 as filed — an inspect of a foreign tag, which auto-opens nothing —
     // is the case this hold fixes; the inspect screen's bound tag is no longer an exception to it,
-    // because 2.8 (#41) has `Route.Scan`'s own sheet name that tag and wait for `Open asset`, so
+    // because 2.7.1 (#41) has `Route.Scan`'s own sheet name that tag and wait for `Open asset`, so
     // the answer stays on `Route.Scan`, the hold runs for the whole look, and it ends when the
     // owner leaves. The bound-tag row left for the runbook is the ambient tap, not an inspect.
     val readsTags = current is Route && current.readsTags()

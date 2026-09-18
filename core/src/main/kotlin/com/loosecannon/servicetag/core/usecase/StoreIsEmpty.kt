@@ -7,7 +7,7 @@ import com.loosecannon.servicetag.core.ports.LinkRepository
 import com.loosecannon.servicetag.core.ports.TagRepository
 
 /**
- * Whether this phone holds any records at all (2.8, issue #40).
+ * Whether this phone holds any records at all (2.7.1, issue #40).
  *
  * The one caller is the Backup screen, deciding which confirmation a picked data archive gets. The
  * typed `REPLACE` word exists to make the owner spell out that they accept losing what is here

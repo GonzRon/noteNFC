@@ -28,7 +28,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * 2.8 (#40) — "is there anything on this phone a restore would replace?"
+ * 2.7.1 (#40) — "is there anything on this phone a restore would replace?"
  *
  * One case per kind of record, each on its own, because the question the Backup screen asks is
  * whether *anything at all* is here: a phone holding one tombstone link row and nothing else has

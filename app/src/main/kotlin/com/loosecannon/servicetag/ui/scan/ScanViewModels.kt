@@ -147,7 +147,7 @@ sealed interface TagResult {
 
     /**
      * Known and bound: the ambient sheet says so and moves on without a tap; a deliberate
-     * inspect names the asset and waits for `Open asset` instead (G1 §1.4, 2.8 #41).
+     * inspect names the asset and waits for `Open asset` instead (G1 §1.4, 2.7.1 #41).
      */
     data class OpensAsset(val tag: TagBinding, val asset: Asset) : TagResult
 

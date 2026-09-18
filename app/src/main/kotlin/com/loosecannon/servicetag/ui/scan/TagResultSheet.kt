@@ -65,7 +65,7 @@ import com.loosecannon.servicetag.ui.theme.SheetSentence
  *   wrote. When [format] is [TagResultWire.FORMAT_NONE] there is no identifier to show and `key`
  *   carries a prose reason the tag could not be read, so nothing may present it as an id or look
  *   it up as one.
- * @param inspecting whether this sheet is answering a *deliberate* look at a tag (2.8, issue #41).
+ * @param inspecting whether this sheet is answering a *deliberate* look at a tag (2.7.1, issue #41).
  *   It changes one branch of seven: a tag already bound to an asset. The ambient trampoline exists
  *   to open the right place from one tap, so with the default `false` a bound tag navigates by
  *   itself, exactly as it always has. Read / inspect tag exists to *look* at a tag, so with `true`
@@ -106,7 +106,7 @@ fun TagResultSheet(
             TagResult.Loading -> NfcSheet(eyebrow = "Reading tag", sentence = "Looking this tag up…")
 
             is TagResult.OpensAsset -> if (inspecting) {
-                // 2.8 (#41) — a deliberate inspect inspects. The tag is named and opening the
+                // 2.7.1 (#41) — a deliberate inspect inspects. The tag is named and opening the
                 // asset is the owner's tap, so this screen stays on top: the activity's one
                 // reader-mode session is held for as long as a tag-reading route is the top entry,
                 // and auto-navigating away released it with the tag still in the field. "Open
