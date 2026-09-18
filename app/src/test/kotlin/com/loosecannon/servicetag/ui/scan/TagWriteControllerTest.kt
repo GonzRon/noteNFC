@@ -222,6 +222,17 @@ class TagWriteControllerTest {
         assertEquals(1, io.writeAttempts); assertIs<WriteState.Written>(controller.state.value); assertEquals(1, provision.begun); assertTrue(provision.completed)
     }
 
+    /** E1 — a failed format is one sentence; the library's reason is the log's business, not the user's. */
+    @Test fun aFailedFormatIsOneSentenceWithoutTheLibraryReason() = runTest(dispatcher) {
+        controller = controller()
+        io.inspection = TagInspection("04a1", TagRead.Readable(emptyList()), maxSize = -1, writable = true, needsFormat = true, canLock = true)
+        io.formatResult = WriteResult.Failed("format threw", cause = IOException("lost"), attempted = true)
+        controller.onTag(handle); advanceUntilIdle()
+        assertEquals(WriteState.Error("Could not format the tag. Hold it still and try again."), controller.state.value)
+        assertEquals(0, io.writeAttempts)
+        assertEquals(0, provision.begun)
+    }
+
     /** C1 — unreadable NDEF is never treated as an empty tag. */
     @Test fun anUnreadableTagAsksBeforeItIsOverwritten() = runTest(dispatcher) {
         controller = controller()

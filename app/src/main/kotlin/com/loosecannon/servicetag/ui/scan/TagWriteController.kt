@@ -176,8 +176,8 @@ class TagWriteController(
         when (val r = withContext(ioDispatcher) { io.format(tag) }) {
             WriteResult.Formatted -> _state.value = WriteState.Idle("Formatted. Lift the tag off and hold it again to write.")
             is WriteResult.Failed -> {
-                r.cause?.let { Log.w(TAG, "format failed: ${r.reason}", it) }
-                _state.value = WriteState.Error("Could not format the tag (${r.reason}). Hold it still and try again.")
+                Log.w(TAG, "format failed: ${r.reason}", r.cause)
+                _state.value = WriteState.Error("Could not format the tag. Hold it still and try again.")
             }
             WriteResult.Unsupported -> _state.value = WriteState.Error("This tag does not support NDEF.")
             is WriteResult.Written, is WriteResult.TooSmall, WriteResult.ReadOnly, is WriteResult.VerifyMismatch ->

@@ -114,8 +114,10 @@ class ScanViewModel(
                     else -> _events.tryEmit(ScanEvent.Show(resolution.asTagResult()))
                 }
             } catch (e: Exception) {
+                // The class name and the stack are the log's; the user gets one thing to do (E2).
+                Log.w(TAG, "read failed", e)
                 _state.update {
-                    it.copy(problem = "Couldn't read that tag (${e.javaClass.simpleName}). Hold it still and try again.")
+                    it.copy(problem = "Couldn't read that tag. Hold it still and try again.")
                 }
             } finally {
                 _state.update { it.copy(reading = false) }
