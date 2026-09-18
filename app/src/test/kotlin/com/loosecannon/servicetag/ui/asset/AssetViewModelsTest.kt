@@ -24,6 +24,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -47,11 +49,12 @@ import java.util.Locale
 @OptIn(ExperimentalCoroutinesApi::class)
 class AssetViewModelsTest {
 
+    private val scheduler = TestCoroutineScheduler()
     private lateinit var graph: FakeGraph
 
     @Before fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-        graph = FakeGraph()
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
     }
 
     @After fun tearDown() {

@@ -11,6 +11,8 @@ import com.loosecannon.servicetag.testing.FakeGraph
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -29,12 +31,13 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScanViewModelTest {
 
-    private val dispatcher = UnconfinedTestDispatcher()
+    private val scheduler = TestCoroutineScheduler()
+    private val dispatcher = UnconfinedTestDispatcher(scheduler)
     private lateinit var graph: FakeGraph
 
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
-        graph = FakeGraph()
+        graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
     }
 
     @After fun tearDown() {

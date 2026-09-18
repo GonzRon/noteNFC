@@ -53,7 +53,7 @@ class TagWriteControllerTest {
 
     @Before fun setUp() {
         graph = FakeGraph(
-            Room.inMemoryDatabaseBuilder<AppDatabase>()
+            db = Room.inMemoryDatabaseBuilder<AppDatabase>()
                 .setDriver(BundledSQLiteDriver())
                 .setQueryCoroutineContext(dispatcher)
                 .build(),

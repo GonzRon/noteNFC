@@ -13,6 +13,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -33,11 +35,12 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class DefinitionEditViewModelTest {
 
+    private val scheduler = TestCoroutineScheduler()
     private lateinit var graph: FakeGraph
 
     @Before fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-        graph = FakeGraph()
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        graph = FakeGraph(queryContext = StandardTestDispatcher(scheduler))
     }
 
     @After fun tearDown() {

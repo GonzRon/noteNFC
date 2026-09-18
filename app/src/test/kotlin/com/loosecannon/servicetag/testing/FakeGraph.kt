@@ -53,7 +53,9 @@ import com.loosecannon.servicetag.data.room.inMemoryDb
 import com.loosecannon.servicetag.prefs.AppPrefs
 import com.loosecannon.servicetag.prefs.KeyValueStore
 import java.io.File
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 
 /**
  * `AppGraph` without a `Context`: the same members, built on `inMemoryDb()` and the real Room
@@ -61,8 +63,18 @@ import kotlinx.coroutines.CompletableDeferred
  * production invalidation flow rather than a hand-written fake that agrees with itself.
  *
  * The clock is a `var` a test moves by hand and the ids count up, so an assertion can name both.
+ *
+ * [queryContext] only matters when [db] is left to its default: a ViewModel or controller fixture
+ * that put a test dispatcher on `Dispatchers.Main` should pass a `StandardTestDispatcher` on that
+ * fixture's own `TestCoroutineScheduler` here (see `inMemoryDb`'s KDoc), so Room settles on the
+ * same virtual clock the test drives rather than a real thread pool. A test that builds its own
+ * [db] — because it needs a file-backed database, say — wires the dispatcher straight into that
+ * builder instead and this parameter is moot.
  */
-class FakeGraph(val db: AppDatabase = inMemoryDb()) {
+class FakeGraph(
+    queryContext: CoroutineContext = Dispatchers.Default,
+    val db: AppDatabase = inMemoryDb(queryContext),
+) {
 
     /** Move this before a call to give the write a timestamp the test can assert on. */
     var now: Long = 1_000L
