@@ -457,6 +457,11 @@ git remote add origin https://github.com/GonzRon/NoteTag.git
 git push -u origin master
 ```
 
+*Executed 2026-09-18 with one factual correction: `GonzRon/NoteTag` had been reserved empty on 2026-09-17, so the
+`gh repo create` line was superseded by `git remote add origin` + `git push -u origin master`; GitHub had left the
+placeholder default branch `main`, patched to `master` and re-read, as §B.1 did for the library; the description,
+wiki-off and topics were applied with `gh repo edit` at the push.*
+
 **Verify.** `git log --oneline origin/master | tail -1` → `5fb6aed`, proving the 2023 root travelled;
 the repository carries **no** `docs/` directory and **no** `.apk`; the first `ci.yml` run is green (it
 is the first run this lineage has ever had — review correction 8); `release.yml` is present and has
@@ -485,6 +490,9 @@ gh issue comment <NEW#> --repo GonzRon/NoteTag \
   --body "Transferred from GonzRon/ServiceTag (formerly GonzRon/noteNFC), where this product's history lives."
 ```
 
+*Executed 2026-09-18: `gh issue transfer` worked (the capability is now exercised, not merely assessed): #6 → NoteTag #1,
+#36 → NoteTag #2, backlinks both ways, bodies intact, old URLs redirect; ServiceTag holds 34.*
+
 **Verify.** Both issues resolve in `GonzRon/NoteTag` with their bodies intact — in particular #36's
 ownership statement — and the old URLs redirect; `gh issue list --repo GonzRon/ServiceTag --state all`
 = 34. If transfer fails (the capability was assessed but never exercised — arch §4.3), fall back to
@@ -509,7 +517,10 @@ material in any source tree** (§26). The `release` environment exists in both a
 its four secrets and the `RELEASE_CERT_SHA256` variable set (owner manual step; values never printed;
 target §8), and it is **protected** — required reviewers or an equivalent protection rule — so GitHub
 withholds its secrets until the rule passes; a tag-protection rule on `servicetag-v*` / `notetag-v*`
-limits who can push a release tag (owner ruling 2026-09-17). **Only then**, and not before, may anyone consider the recovery refs
+limits who can push a release tag (owner ruling 2026-09-17). *Executed 2026-09-18 from this machine: the three URL clean clones built with `--no-build-cache` (evidence file, K/L
+section); the `release` environments exist and are protected in both app repositories, NoteTag's with its four secrets
+and the public variable, ServiceTag's awaiting the ServiceTag key; the second-workstation proof for the two apps is the
+owner's, on another machine, and is the one §B item still open.* **Only then**, and not before, may anyone consider the recovery refs
 `pre-split-checkpoint` and `pre-split-master` retired — and this runbook does not retire them (§27
 step 12, §35). **Rollback.** Disable Actions on the affected repository; no code change.
 

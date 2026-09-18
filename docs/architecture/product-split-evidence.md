@@ -933,3 +933,72 @@ these three commits were ServiceTag `:core:test :app:testDebugUnitTest :app:asse
 :app:assembleDebug`, both green with 0 failures, 0 errors and 0 skipped.
 
 **Phase G local consumption complete; both apps green on nfc-tag-core-v0.1.0; K/L pending owner authorization**
+
+## K/L — remote transition (§B), 2026-09-18
+
+**Pre-flight (the rename gate), all held before any remote mutation.** ServiceTag `product-split` clean at
+`cd6de14` (last code commit `2a19226`); NoteTag `master` clean at `01d001f` — one commit after Phase G's
+FINAL, the owner-ordered logging-consistency fix (both apps log the format-failure reason unconditionally;
+plan `7796f67`, file == block, `NoteTagWriteControllerTest` 20/0); both gitlinks `7e0377a` =
+`nfc-tag-core-v0.1.0`; recovery refs on the remote — the annotated tag `pre-split-checkpoint` and the branch
+`pre-split-master` — both resolving to `ac523d7`, which was also the remote `master`; no product release tag
+anywhere; the pre-rename snapshot of `GonzRon/noteNFC`: public, not a fork, issues on, default `master`,
+36 issues, one untagged draft release, no webhooks, one workflow, last run green.
+
+**§B.2 rename.** `GonzRon/noteNFC` → `GonzRon/ServiceTag`. Preserved and verified under the new name:
+visibility, not-a-fork, issues, default branch, all 36 issues, the one tag, the draft release, 33 CI runs,
+both recovery refs at `ac523d7`; the old path redirects on the web and through the API. The About became the
+owner's sentence for the product ("…turns NFC tags into durable handles for the physical things you
+maintain…"), topics gained `asset-management` and lost the three note-product names.
+
+**§B.3/§B.3a.** Local origins repointed; `product-split` merged into `master` with `--no-ff` as `ed83fb5`
+(parents `ac523d7` and `cd6de14`) and pushed. **The first run on the runner was red, and is kept as
+evidence:** run 35333943779 checked the submodule out recursively, asserted the exact pin (`submodule pin ok:
+nfc-tag-core-v0.1.0`), set up the build, and did not run `release.yml`; one unit test of 237 failed with
+`UncompletedCoroutinesError` after its 60 s budget — a Phase D-era ViewModel test whose Room instance ran its
+queries on real `Dispatchers.Default` threads while Main was an unconfined test dispatcher. The fix was
+test-side only, in four rounds on `master`: `dfcffd1` (the ordering test saves once; the double-save guard is
+its own case, `aSecondSaveWhileTheFirstIsStillInFlightIsDropped`, `save(); save()` with no scheduler
+advancement between them, gated so the second provably lands in flight, proving one persisted profile and one
+emission — the +1 that makes 238), `080fd80` (the shared test database takes the test's context: Main stays
+`UnconfinedTestDispatcher(scheduler)`, Room runs on `StandardTestDispatcher(scheduler)` on the **same**
+`TestCoroutineScheduler`, so a launched save runs eagerly to its first database hop, suspends there
+deterministically, and completes only while the test awaits; Room 3.0.3's query context governs suspend DAO
+calls and both transaction helpers), `4aace2c` (the last fixture seeds its asset inside the test scope
+instead of a `runBlocking` in setup). Nine of nine Main-setting fixtures share the model; 238/0 three times
+under one CPU; no production code changed; an independent review verdicted the owner's ten criteria. With
+the approved README rewrite (`b8aa26f`, the product as it is now, the note links carried over and named as
+NoteTag's future, Signing and Releases unchanged) the tip `4aace2c` was pushed once: run 35339701578
+**green**.
+
+**§B.4 NoteTag.** The reserved repository received `master` at `01d001f` (root `5fb6aed`); the placeholder
+default `main` was patched to `master`; description, wiki off and topics set at the push. Run 35339904692 —
+the first this lineage has ever had — **green** on a cold runner (2 m 44 s), pin assertion passing.
+
+**Steps 9–11.** The `release` environment exists in both repositories: NoteTag's holds
+`RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` and the
+public repository variable `RELEASE_CERT_SHA256` (all piped from the local signing material; no value was
+printed or recorded anywhere); ServiceTag's holds no secret, because no ServiceTag key exists (owner manual
+task 1). Both environments require the owner's review and limit deployments to the product tag pattern;
+both repositories carry an active ruleset restricting creation, update and deletion of `servicetag-v*` /
+`notetag-v*` to repository admins. Verified on the remotes: each `ci.yml` is the pushed blob, names no
+`secrets.*` and no environment; `release.yml` has run **zero** times in either repository; no product tag
+exists.
+
+**§B.5 issues.** `gh issue transfer` worked: #6 → NoteTag #1 (retitled "Generalize external note/deep-link
+support beyond Joplin"), #36 → NoteTag #2 (retitled under the NoteTag name), backlinks both ways, bodies
+intact, old URLs redirecting; ServiceTag holds 34.
+
+**§B.6 clean clones, from the URLs, `--no-build-cache`, on this machine.** `nfc-tag-core` at `7e0377a`:
+scan clean, self-test 8/8, `build` 73/73 executed, 50 + 10 tests. ServiceTag at `4aace2c`: pin ok, 78/78
+executed, 50 / 10 / 349 / 238. NoteTag at `01d001f`: pin ok, 76/76 executed, 50 / 10 / 70 / 30. Nothing
+served from cache; no absolute home path in any clone; the only device identifier in code is
+`emulator-5554` inside NoteTag's smoke-test guard, which exists to keep the suite off the phone. **Open:**
+the second-workstation proof for the two apps is the owner's, on another machine.
+
+**What did not happen.** No `servicetag-v2.5`, no `notetag-v2.0`, no release workflow run, no phone
+install, no physical NFC write, no uninstall of `com.loosecannon.notenfc`, no change to
+`nfc-tag-core-v0.1.0`, no deletion of a recovery ref, no secret value in any file or report. One process
+note carried from Phase G: the Task 12 reviewer's read-only breach (contained) is on record.
+
+**K/L remote transition complete; ordinary CI green on all three repositories from GitHub; release workflows dormant; the second-workstation proof and the ServiceTag key are the owner's; next is the phone/data migration (§C).**
