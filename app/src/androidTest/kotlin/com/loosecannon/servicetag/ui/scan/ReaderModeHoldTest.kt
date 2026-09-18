@@ -1,7 +1,12 @@
 package com.loosecannon.servicetag.ui.scan
 
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.loosecannon.nfc.tagcore.android.TagHandle
 import com.loosecannon.servicetag.ui.app
 import com.loosecannon.servicetag.ui.awaitText
 import com.loosecannon.servicetag.ui.clearInstall
@@ -81,6 +86,55 @@ class ReaderModeHoldTest {
         rule.waitUntil(SETTLE_MILLIS) { readerMode.sinkCount == 0 }
         assertEquals(1, control.stops)
         assertEquals(1, control.starts)
+    }
+
+    /**
+     * 2.7 (#37) — a completed read keeps reader mode, because it no longer moves the back stack.
+     *
+     * This is the transition the issue is named for and the one the hold test above walks past: the
+     * scan screen used to hand its answer to `backStack.add(...)`, which took the screen — and with
+     * it the session — out from under a tag still against the phone. Re-introducing that push makes
+     * the scan entry leave composition, so the sink count falls to 0, `readsTags` goes false and
+     * `stops` becomes 1; all three assertions below fail on exactly that regression.
+     *
+     * The emulator has no NFC, so the handle is synthetic and `RealTagIo` refuses it — the screen
+     * shows its "couldn't read" line rather than a result sheet. What is proved here is the half
+     * that regressed: a delivery does not move the back stack and does not release reader mode.
+     * Proving the sheet itself needs a `TagIo` seam reachable from the screen, which this release
+     * does not add.
+     */
+    @Test fun aReadDoesNotMoveTheBackStackAndDoesNotReleaseTheHold() {
+        rule.setContent {
+            ServiceTagTheme {
+                ServiceTagRoot(
+                    graph = app.graph,
+                    deepLinks = deepLinks,
+                    snackbars = snackbars,
+                    readerMode = readerMode,
+                )
+            }
+        }
+
+        rule.runOnIdle { deepLinks.tryEmit(Route.Scan) }
+        rule.awaitText("READY TO SCAN")
+        rule.waitUntil(SETTLE_MILLIS) { readerMode.sinkCount == 1 }
+        assertEquals(1, control.starts)
+
+        rule.runOnIdle { readerMode.deliver(FakeHandle) }
+        rule.waitForIdle()
+
+        // The scan screen is still the entry on top: nothing was pushed, so its sink is still the
+        // one installed and the session was never handed back.
+        rule.onNodeWithText("READY TO SCAN").assertIsDisplayed()
+        rule.onAllNodesWithText("Read / inspect tag").assertCountEquals(1)
+        assertEquals("a read is not a navigation", 1, readerMode.sinkCount)
+        assertEquals("and never a stop", 0, control.stops)
+        assertEquals(1, control.starts)
+    }
+
+    /** Not an `NfcTagHandle`, so `RealTagIo` refuses it — which is all the emulator can offer. */
+    private object FakeHandle : TagHandle {
+        override val uid: String = "04a1"
     }
 
     private class CountingControl : ReaderModeControl {

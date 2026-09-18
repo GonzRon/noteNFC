@@ -59,6 +59,14 @@ fun ServiceTagRoot(
     // the tag still against the phone: the platform re-discovered that tag, dispatched it under
     // normal dispatch, and an inspect inside ServiceTag opened another app. A move between the two
     // tag screens is now no hand-over at all, which is runbook R1.
+    //
+    // What this does *not* cover, and deliberately: a tag already bound to an asset auto-opens it
+    // from the result sheet, and `AssetDetail` reads no tags — so the hold is released one frame
+    // after that read and the platform may re-dispatch a tag still in the field to this app's own
+    // trampoline, exactly as it did before 2.7. Only tag-reading routes hold reader mode; that is
+    // ratified, because holding it over the route an auto-open lands on reopens the spin Decision 4
+    // rejected. #37 as filed — an inspect of a foreign tag, which auto-opens nothing — is the case
+    // this hold fixes, and the bound-tag case is a physical row for the runbook, not a code change.
     val readsTags = current is Route && current.readsTags()
     LifecycleResumeEffect(readerMode, readsTags) {
         readerMode.hold(readsTags)

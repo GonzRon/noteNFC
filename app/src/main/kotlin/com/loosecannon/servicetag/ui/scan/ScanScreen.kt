@@ -25,6 +25,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +40,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.loosecannon.servicetag.di.AppGraph
 import com.loosecannon.servicetag.ui.components.ServiceTagIcons
@@ -82,14 +87,23 @@ fun ScanScreen(
     TagSinkEffect(readerMode) { tag -> model.onTag(tag) }
 
     // The answer, as the two strings the route used to carry — which is all it ever carried, and
-    // which `rememberSaveable` can keep through process death without a `Saver` of its own.
+    // which `rememberSaveable` can keep through process death without a `Saver` of its own. The
+    // counter is what tells one delivery from the next: the pair cannot, because reading the same
+    // tag twice produces the same pair, and the sheet must not answer the second read with the
+    // model the first one resolved.
     var format by rememberSaveable { mutableStateOf<String?>(null) }
     var key by rememberSaveable { mutableStateOf("") }
+    var readId by rememberSaveable { mutableStateOf(0) }
+    val clearAnswer = { format = null; key = "" }
 
     LaunchedEffect(model) {
         model.events.collect { event ->
             when (event) {
-                is ScanEvent.Show -> { format = event.route.format; key = event.route.key }
+                is ScanEvent.Show -> {
+                    format = event.route.format
+                    key = event.route.key
+                    readId++
+                }
             }
         }
     }
@@ -118,17 +132,48 @@ fun ScanScreen(
 
     // Over this screen, not on top of it. Each way out clears the answer first, so coming back to
     // the inspector shows READY TO SCAN and not the answer to a tag that is long gone.
+    //
+    // The sheet resolves its own view model, and resolves it once. Drawn inside this entry it would
+    // resolve against the entry's store, which lives until the entry is popped — so binding a tag,
+    // coming back and reading it again would be answered by the first read's model, which still
+    // thinks the tag is unassigned. One store per read is what the pushed result entry used to give.
     format?.let { shown ->
-        TagResultSheet(
-            graph = graph,
-            format = shown,
-            key = key,
-            onDismiss = { format = null },
-            onWriteTag = { route -> format = null; onWriteTag(route) },
-            onOpenAsset = { id -> format = null; onOpenAsset(id) },
-            onNewAsset = { format = null; onNewAsset() },
-        )
+        val owner = rememberReadScopedOwner(readId)
+        CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+            TagResultSheet(
+                graph = graph,
+                format = shown,
+                key = key,
+                onDismiss = clearAnswer,
+                onWriteTag = { route -> clearAnswer(); onWriteTag(route) },
+                onOpenAsset = { id -> clearAnswer(); onOpenAsset(id) },
+                onNewAsset = { clearAnswer(); onNewAsset() },
+            )
+        }
     }
+}
+
+/**
+ * A [ViewModelStoreOwner] that lives exactly as long as one read (2.7, #37).
+ *
+ * `TagResultSheet` is reused verbatim and resolves its own view model in `init`, which is fine when
+ * each read is its own nav entry with its own store and wrong when every read shares the scan
+ * screen's. A fresh store per [readId], cleared the moment that read is replaced or dismissed,
+ * restores the old behaviour: `onCleared` runs, its `observeAll` subscription goes with it, and the
+ * next read resolves the tag again instead of re-showing the previous answer.
+ *
+ * `internal` rather than private so the wiring is provable on a device with no NFC, which is the
+ * only part of this a test can reach — see `ReadScopedSheetOwnerTest`.
+ */
+@Composable
+internal fun rememberReadScopedOwner(readId: Int): ViewModelStoreOwner {
+    val owner = remember(readId) { ReadScopedOwner() }
+    DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
+    return owner
+}
+
+private class ReadScopedOwner : ViewModelStoreOwner {
+    override val viewModelStore = ViewModelStore()
 }
 
 /** "READY TO SCAN": `tertiaryContainer`, the contactless glyph in a breathing halo, one sentence. */

@@ -48,7 +48,8 @@ import com.loosecannon.servicetag.ui.theme.PlateShape
  * and lock — if the user armed it — only once the read-back has proved what is on the tag.
  *
  * The screen is hosted by the nav shell, which owns the activity's one reader-mode session as of
- * 2.7 (#37), so it owns nothing at all; every decision belongs to [TagWriteController].
+ * 2.7 (#37), so this screen owns no reader-mode session of its own; every decision about a tag
+ * belongs to [TagWriteController].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

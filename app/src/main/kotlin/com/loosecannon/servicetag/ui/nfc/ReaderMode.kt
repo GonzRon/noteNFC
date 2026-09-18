@@ -1,16 +1,17 @@
 package com.loosecannon.servicetag.ui.nfc
 
 import android.app.Activity
+import android.util.Log
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.loosecannon.nfc.tagcore.android.NfcReaderModeSession
 import com.loosecannon.nfc.tagcore.android.NfcTagHandle
 import com.loosecannon.nfc.tagcore.android.TagHandle
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The reader-mode switch this app needs, as an interface, so the policy below can be proved without
@@ -50,8 +51,10 @@ class ReaderMode(controlFor: ((TagHandle) -> Unit) -> ReaderModeControl?) {
 
     /**
      * Declared before [control], because the lambda handed to [controlFor] reads it. The callback
-     * arrives on a binder thread — the library's own documented contract — so this is copy-on-write
-     * and [deliver] never takes a lock.
+     * arrives on a binder thread — the library's own documented contract — so this is
+     * copy-on-write: [deliver] reads the list without locking it, and what it then calls reads an
+     * `AtomicReference` ([TagSinkEffect]) rather than a Compose snapshot state, which is a
+     * main-thread object.
      */
     private val sinks = CopyOnWriteArrayList<(TagHandle) -> Unit>()
 
@@ -91,8 +94,23 @@ class ReaderMode(controlFor: ((TagHandle) -> Unit) -> ReaderModeControl?) {
      * Hands [tag] to the newest installed sink — the screen on top. With none installed the tag is
      * dropped, which is the safe answer: dropping it costs the user one more hold, while handing
      * reader mode back to the platform is the dispatch #37 is about.
+     *
+     * The drop is logged. It is the one lossy path in the design, it lasts a few frames of a nav
+     * transition, and a hold that produced nothing is otherwise indistinguishable from a tag the
+     * phone never saw — which is the hardest thing to tell apart during a physical run.
      */
-    fun deliver(tag: TagHandle) { sinks.lastOrNull()?.invoke(tag) }
+    fun deliver(tag: TagHandle) {
+        val sink = sinks.lastOrNull()
+        if (sink == null) {
+            Log.w(TAG, "a tag arrived with no screen listening; dropped")
+            return
+        }
+        sink(tag)
+    }
+
+    private companion object {
+        const val TAG = "ReaderMode"
+    }
 }
 
 /**
@@ -100,7 +118,7 @@ class ReaderMode(controlFor: ((TagHandle) -> Unit) -> ReaderModeControl?) {
  * and unchanged: it takes its callback at construction, which is exactly why the app builds one
  * session per activity and routes tags itself.
  */
-class SessionControl(activity: Activity, onTag: (TagHandle) -> Unit) : ReaderModeControl {
+internal class SessionControl(activity: Activity, onTag: (TagHandle) -> Unit) : ReaderModeControl {
 
     private val session = NfcReaderModeSession(activity) { tag -> onTag(NfcTagHandle(tag)) }
 
@@ -126,9 +144,15 @@ fun rememberReaderMode(): ReaderMode {
  */
 @Composable
 fun TagSinkEffect(readerMode: ReaderMode, onTag: (TagHandle) -> Unit) {
-    val current by rememberUpdatedState(onTag)
+    // The sink is invoked on a platform binder thread, so the callback it reads is an
+    // `AtomicReference` written from a `SideEffect` — not a `rememberUpdatedState` delegate.
+    // Reading a Compose snapshot state resolves against the global snapshot and can take the
+    // snapshot lock; those objects are documented for the main thread, and a sink that is
+    // installed for as long as the screen is resumed can be called at any moment in between.
+    val latest = remember { AtomicReference(onTag) }
+    SideEffect { latest.set(onTag) }
     LifecycleResumeEffect(readerMode) {
-        val sink: (TagHandle) -> Unit = { tag -> current(tag) }
+        val sink: (TagHandle) -> Unit = { tag -> latest.get()(tag) }
         readerMode.install(sink)
         onPauseOrDispose { readerMode.uninstall(sink) }
     }

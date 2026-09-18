@@ -75,8 +75,13 @@ internal fun Route.WriteTag.isSupported(): Boolean = targetKind in SupportedWrit
  * its result is drawn on the screen the user is already on. Adding it here would hold reader mode
  * over an ambient result and release it again the instant the sheet opened its asset — with the tag
  * still on the phone, which is the re-dispatch this release removed.
+ *
+ * An unsupported write route reads nothing either: the nav shell draws no screen for one and pops
+ * it a frame later, so holding reader mode over it would be two binder calls to `NfcService` with
+ * no sink ever installed.
  */
 internal fun Route.readsTags(): Boolean = when (this) {
-    Route.Scan, is Route.WriteTag -> true
+    Route.Scan -> true
+    is Route.WriteTag -> isSupported()
     else -> false
 }

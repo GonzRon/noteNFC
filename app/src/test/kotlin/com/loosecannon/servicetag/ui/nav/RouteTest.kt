@@ -34,11 +34,16 @@ class RouteTest {
      * trampoline lands, and the inspect screen no longer pushes it. Adding it here would put
      * reader mode on over an ambient result and release it again the moment the sheet opened its
      * asset — with the tag still on the phone, which is the dispatch this release removed.
+     *
+     * A "link" write route is not one of them either: the shell draws no screen for one and pops it
+     * a frame later, so a hold over it would turn reader mode on and off with no sink ever
+     * installed.
      */
     @Test fun onlyTheTagScreensHoldReaderMode() {
         assertTrue(Route.Scan.readsTags())
         assertTrue(Route.WriteTag("asset", "a1", null).readsTags())
         assertTrue(Route.WriteTag("none", null, null).readsTags())
+        assertFalse(Route.WriteTag("link", "l1", null).readsTags())
         assertFalse(Route.TagResult("V1", "k").readsTags())
         assertFalse(Route.Dashboard.readsTags())
         assertFalse(Route.Assets.readsTags())
