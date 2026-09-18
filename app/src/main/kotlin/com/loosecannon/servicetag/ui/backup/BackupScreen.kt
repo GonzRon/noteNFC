@@ -47,6 +47,7 @@ import com.loosecannon.servicetag.ui.theme.ControlShape
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** The word the user has to type before an import runs (R-9). Not localised: it is a password. */
@@ -115,7 +116,20 @@ fun BackupScreen(
             confirming = null
         } else {
             scope.launch {
-                emptyStore = model.isStoreEmpty()
+                // Ask more, never less. `BackupViewModel`'s own storage calls all go through
+                // `runCatching { … }.rethrowCancellation()`, and that helper is file-private to it,
+                // so the same rule is written out here: a cancelled coroutine still cancels, and a
+                // read that cannot answer gets the typed word rather than the gentler dialog. The
+                // alternative — letting it escape a `rememberCoroutineScope()` job that carries no
+                // exception handler — is a crash on the one screen an owner reaches *because*
+                // something is wrong with their phone.
+                emptyStore = try {
+                    model.isStoreEmpty()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    false
+                }
                 confirming = uri
             }
         }
