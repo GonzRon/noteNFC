@@ -580,18 +580,19 @@ exit codes alone, which is all either script prints about signing identity by de
 **base** of this phase, not one of its commits, so it is counted from and never counted in.
 ServiceTag stands on `product-split` in `~/Documents/Projects/AndroidStudioProjects/ServiceTag-split`
 at **the fix round's closing evidence commit** — the one carrying this paragraph, which is the tip
-and so cannot name its own sha — **twenty-three commits after the base**; its **last code commit is
-`2a19226`**, and only plan and evidence text follows it, so every suite below stands for `2a19226`
+and so cannot name its own sha — **twenty-five commits after the base**; its **last code commit is
+`2a19226`**, and only plan, design and evidence text follows it, so every suite below stands for `2a19226`
 as well. NoteTag stands at **`6749d0a`** on `master` in
 `~/Documents/Projects/AndroidStudioProjects/NoteTag` — **eight commits after Phase E's FINAL
 (`9ff1d65`)**, all implementation. ServiceTag's eleven implementation commits are `773e356`
 (wiring), `490e72e` (`:core`), `556b859` + `a9afc32` (`:app` and its review fix round), `1d5c27e`
 (CI and the pin script), `b7ca574` + `b596254` + `6896562` (the release workflow, its dry-run
 hardening, the action pins), `836f1b3` (WS-1, the consent-wording pin), `dee0ee5` (the whole-branch
-fix round) and `2a19226` (the owner's wording rulings); its twelve docs commits are six plan
+fix round) and `2a19226` (the owner's wording rulings); its fourteen docs commits are six plan
 amendments (`1e5a6a9`, `82b059f`, `01f75e7`, `2064b19`, `4872f1c`, `9fe1756`), four design/runbook
 amendments (`753550b`, `1fc423f`, `08447d6`, `63f8d46` — the last also carrying the fix round's
-evidence) and two evidence commits (`5a0998a` and this one). NoteTag's eight are `b055028`
+evidence), one plan-and-design catch-up after the fix round (`677e9f1`) and three evidence commits
+(`5a0998a`, `13af50a` and this one). NoteTag's eight are `b055028`
 (wiring), `7458229` (`:core`), `804f560` + `32eaec1` (`:app` and its fix round), `62f6e37` (CI),
 `fb68a4c` (the release workflow), `0928422` (the whole-branch fix round) and `6749d0a` (the
 UNREADABLE wording ruling). ServiceTag's `origin` is
@@ -897,7 +898,10 @@ ServiceTag's `:app:testDebugUnitTest` **235 → 237** in **34 → 35** classes �
 (E3 rewrote an existing assertion rather than adding one). The connected suites were re-run on
 `emulator-5554` only, serial, ServiceTag first: ServiceTag **68 tests in 14 classes**
 (2026-09-18T09:39–09:40Z) and NoteTag **19 tests in 5 classes** (2026-09-18T09:43Z), both 0/0/0 and
-both equal to the figures above. The two dry runs are unchanged in verdict: ServiceTag exit **3**,
+both equal to the figures above. Because those runs preceded the three wording commits, both suites
+were run once more at the final code commits (ServiceTag `2a19226`, NoteTag `6749d0a`): ServiceTag
+**68 in 14** at 2026-09-18T10:00:32Z and NoteTag **19 in 5** at 10:00:49Z, both 0/0/0, `emulator-5554`
+only, both trees and submodules clean afterwards. The two dry runs are unchanged in verdict: ServiceTag exit **3**,
 `BLOCKED: no signing material (target §8)`; NoteTag exit **0**, `version: 2.0 matches 2.0` and
 `RELEASE DRY RUN: PARTIAL — signing identity not independently checked`. ServiceTag's new one-signer
 assertion was additionally exercised through the script's self-test hook against the debug APK,
