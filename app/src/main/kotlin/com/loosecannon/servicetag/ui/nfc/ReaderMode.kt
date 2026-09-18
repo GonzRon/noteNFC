@@ -69,7 +69,11 @@ class ReaderMode(controlFor: ((TagHandle) -> Unit) -> ReaderModeControl?) {
     val available: Boolean get() = control?.available == true
     val enabled: Boolean get() = control?.enabled == true
 
-    /** Whether reader mode is on right now. Read by the tests, and by nothing else. */
+    /**
+     * Whether the app is *holding* reader mode — it has asked for it and has not given it back.
+     * Not the same as the radio being on: on a phone with no NFC hardware `start()` reaches an
+     * adapter that is null and this is still true. Read by the tests, and by nothing else.
+     */
     val holding: Boolean get() = on
 
     /** How many screens are asking for tags: one normally, two for the length of a transition. */

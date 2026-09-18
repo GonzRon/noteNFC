@@ -976,9 +976,10 @@ physical gate is the only place that can see it:
 
 **Total: 12 owner actions, in two sessions — and 12 is the *tag and coexistence* budget, not the
 whole of the owner's involvement.** The pre-existing ServiceTag reader-mode rows **R1** and **R2**
-above are two further taps and are deliberately outside this budget: they prove nothing about the
-split, only that ServiceTag's own reader mode survives a nav transition (R1) and holds a tag through
-an inspect (R2 — issue #37, fixed in 2.7). §C's data migration needs **four** further on-phone UI actions
+above are two further rows, **three further taps** (R1 one, R2 two), and are deliberately outside
+this budget: they prove nothing about the split, only that ServiceTag's own reader mode survives a
+nav transition (R1) and holds a tag through an inspect (R2 — issue #37, fixed in 2.7). §C's data
+migration needs **four** further on-phone UI actions
 (Export set; pick the SAF folder; Import data; Restore files), named and counted in §C's intro, which
 sit outside this budget because they belong to a different phase and a different gate. The two
 first-use NFC permission confirmations are **folded into checks 2 and 3** and are not counted

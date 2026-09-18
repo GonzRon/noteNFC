@@ -1,8 +1,9 @@
 package com.loosecannon.servicetag.ui.scan
 
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -39,7 +40,9 @@ private const val SETTLE_MILLIS = 5_000L
 @RunWith(AndroidJUnit4::class)
 class ReaderModeHoldTest {
 
-    @get:Rule val rule = createComposeRule()
+    // The plain host, plus its `OnBackPressedDispatcher` — the back case below drives that directly
+    // rather than sending a key event, so what is under test is the dispatcher's own ordering.
+    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val control = CountingControl()
     private val readerMode = ReaderMode { _ -> control }
@@ -133,6 +136,43 @@ class ReaderModeHoldTest {
         rule.onAllNodesWithText("Read / inspect tag").assertCountEquals(1)
         assertEquals("a delivery is not a navigation", 1, readerMode.sinkCount)
         assertEquals("and never a stop", 0, control.stops)
+        assertEquals(1, control.starts)
+    }
+
+    /**
+     * 2.7 (W1) — with no answer showing, back is still the nav shell's, and it still ends the hold.
+     *
+     * The inspect screen took a `BackHandler` in this release so that back dismisses a read's answer
+     * instead of popping the screen out from under a tag. This is the other half of that: the
+     * handler is `enabled = format != null`, so with nothing showing the press must fall straight
+     * through to `NavDisplay(onBack = …)`, pop `Route.Scan`, and release reader mode exactly as
+     * leaving the flow always did. A handler left permanently enabled would strand the user on the
+     * inspect screen and keep NFC held; both assertions below fail on that.
+     */
+    @Test fun backWithNoAnswerShowingStillLeavesTheInspectScreen() {
+        rule.setContent {
+            ServiceTagTheme {
+                ServiceTagRoot(
+                    graph = app.graph,
+                    deepLinks = deepLinks,
+                    snackbars = snackbars,
+                    readerMode = readerMode,
+                )
+            }
+        }
+
+        rule.runOnIdle { deepLinks.tryEmit(Route.Scan) }
+        rule.awaitText("READY TO SCAN")
+        rule.waitUntil(SETTLE_MILLIS) { readerMode.sinkCount == 1 }
+        assertEquals(1, control.starts)
+
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+
+        rule.waitUntil(SETTLE_MILLIS) {
+            rule.onAllNodesWithText("READY TO SCAN").fetchSemanticsNodes().isEmpty()
+        }
+        rule.waitUntil(SETTLE_MILLIS) { readerMode.sinkCount == 0 }
+        assertEquals("the screen was popped, so the hold ended", 1, control.stops)
         assertEquals(1, control.starts)
     }
 

@@ -191,9 +191,11 @@ fun TagResultSheet(
 }
 
 /**
- * The sheets are destinations rather than overlays (the trampoline can land on one with nothing
- * behind it), so the panel is anchored to the bottom of the canvas instead of floating over a
- * scrim. Tapping the canvas above it dismisses, exactly as a scrim would.
+ * The panel is anchored to the bottom of the canvas instead of floating over a scrim, because a
+ * sheet has to work in both of the roles it is put in: a destination, when the ambient trampoline
+ * lands on one with nothing behind it, and an overlay, when the inspect screen draws one over
+ * itself (2.7, #37). The bottom anchor and the absent scrim are what make one composable do both.
+ * Tapping the canvas above it dismisses, exactly as a scrim would.
  */
 @Composable
 private fun SheetHost(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {

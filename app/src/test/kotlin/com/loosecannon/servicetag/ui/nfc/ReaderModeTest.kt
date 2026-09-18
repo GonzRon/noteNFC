@@ -82,6 +82,7 @@ class ReaderModeTest {
      */
     @Test fun aTagWithNoSinkIsDroppedAndReaderModeStaysOn() {
         readerMode.hold(true)
+        assertEquals("the precondition: held, with nobody listening", 0, readerMode.sinkCount)
         readerMode.deliver(Handle)
         assertTrue(readerMode.holding)
         assertEquals(0, control.stops)

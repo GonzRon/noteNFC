@@ -19,7 +19,8 @@ A single-screen Compose app — Dashboard and Assets along the bottom, everythin
 around the one-tap flow that is still the spine: tap a tag anywhere and the phone opens the right
 place. Read / inspect tag, for the rare deliberate look, lives under Settings, and it keeps NFC for
 as long as you are on it: what a tag turns out to be is shown on the screen you are already on, so a
-tag left against the phone is never handed back to the system halfway through a look.
+tag left against the phone is not handed back to the system mid-look. A tag already bound to an
+asset opens that asset, and leaving the screen is what hands NFC back.
 
 - **Dashboard** — the assets in service, and, until the first export succeeds, a card that says
   there is no backup yet and offers to take one. The list is the systems themselves: a component of

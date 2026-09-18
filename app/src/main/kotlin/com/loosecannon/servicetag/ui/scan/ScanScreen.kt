@@ -1,6 +1,7 @@
 package com.loosecannon.servicetag.ui.scan
 
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -92,16 +93,24 @@ fun ScanScreen(
     // tag twice produces the same pair, and the sheet must not answer the second read with the
     // model the first one resolved.
     var format by rememberSaveable { mutableStateOf<String?>(null) }
-    var key by rememberSaveable { mutableStateOf("") }
+    var answerKey by rememberSaveable { mutableStateOf("") }
     var readId by rememberSaveable { mutableStateOf(0) }
-    val clearAnswer = { format = null; key = "" }
+    val clearAnswer = { format = null; answerKey = "" }
+
+    // Back dismisses the answer and leaves the user on READY TO SCAN, which is what one back press
+    // did at 2.6 when the answer was its own entry and back popped it. The answer is composed here
+    // now, so without this the nav shell's `onBack` would pop the inspect screen itself — a gesture
+    // nobody ratified, and one that hands NFC back mid-look. Registered inside the entry's content,
+    // so it is added to the dispatcher after the shell's callback and wins while it is enabled; it
+    // disables itself the moment the answer is gone, leaving this screen's own back alone.
+    BackHandler(enabled = format != null) { clearAnswer() }
 
     LaunchedEffect(model) {
         model.events.collect { event ->
             when (event) {
                 is ScanEvent.Show -> {
                     format = event.route.format
-                    key = event.route.key
+                    answerKey = event.route.key
                     readId++
                 }
             }
@@ -143,7 +152,7 @@ fun ScanScreen(
             TagResultSheet(
                 graph = graph,
                 format = shown,
-                key = key,
+                key = answerKey,
                 onDismiss = clearAnswer,
                 onWriteTag = { route -> clearAnswer(); onWriteTag(route) },
                 onOpenAsset = { id -> clearAnswer(); onOpenAsset(id) },
